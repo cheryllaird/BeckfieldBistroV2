@@ -37,6 +37,7 @@ Beckfield Bistro is an AI-powered culinary companion designed to streamline the 
     2. **File Upload**: Upload existing images of recipes.
     3. **URL Import**: Paste a link from any major recipe website. AI extracts the title, ingredients, steps, and representative photography.
 - **Review & Edit**: A robust form where users can refine the AI-extracted data, add a cover image (via camera, file, or URL), and select or add a new Source.
+- **Note**: AI extraction (URL and photo modes) is currently stubbed with placeholder data. Integration with a real AI API (e.g. Claude Vision for photos, Claude for URL parsing) is the next step.
 
 ---
 
@@ -57,7 +58,7 @@ Beckfield Bistro is an AI-powered culinary companion designed to streamline the 
 - **Generation**: Users select one or multiple entries from their meal plan to generate a list.
 - **Intelligent Consolidation**: The app scales ingredients based on the planned servings and merges duplicates (e.g., combining 200g of flour from a cake and 300g from bread into a single "500g Flour" entry).
 - **Dual Modes**:
-    - **Edit Mode**: Add manual items, remove items, or reorder the list via drag-and-drop.
+    - **Edit Mode**: Add manual items, remove items, or reorder the list. (Drag-and-drop reordering is a planned enhancement — not yet implemented.)
     - **Shop Mode**: A focused mode for the supermarket. Large hit-areas for checking off items, with items sliding out of view as they are completed.
 - **Auto-Sort**: One-tap organization that categorizes items by supermarket department (Produce, Bakery, Meat, etc.).
 - **Persistence**: Undo/Redo support for accidental check-offs while shopping.
@@ -73,6 +74,26 @@ Beckfield Bistro is an AI-powered culinary companion designed to streamline the 
 
 ## 9. Tech Stack
 
-## Tech stack
-Typescript, React Query, database storage and APIs. Suitable for cross-platform mobile.
+| Layer | Technology |
+|---|---|
+| Framework | React 19 + TypeScript 5.9 |
+| Build tool | Vite 8 |
+| Styling | Tailwind CSS v4 (via `@tailwindcss/vite`) |
+| State / persistence | Zustand v5 with `persist` middleware (localStorage) |
+| Server state | TanStack React Query v5 |
+| Routing | React Router v7 |
+| Icons | Lucide React |
+| PWA / offline | `vite-plugin-pwa` + Workbox (service worker, asset caching) |
+| Deployment | Vercel (auto-deploys on push to `main`) |
+
+---
+
+## 10. PWA & Deployment
+
+- **Live URL**: https://beckfield-bistro.vercel.app
+- The app is a **Progressive Web App** — installable directly from the browser, no app store required.
+- **iOS**: Open in Safari → Share → "Add to Home Screen"
+- **Android**: Open in Chrome → "Install app" banner or three-dot menu → "Add to Home Screen"
+- Once installed, the app launches in standalone mode (no browser chrome) with the amber theme colour in the status bar.
+- Vercel auto-deploys every push to `main`. The service worker handles updates silently in the background.
 
