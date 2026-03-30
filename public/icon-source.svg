@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <!-- Amber background with rounded corners -->
+  <rect width="512" height="512" rx="96" ry="96" fill="#f59e0b"/>
+
+  <!-- White ChefHat icon, centred and scaled up (Lucide ChefHat paths, scaled to ~280px at centre) -->
+  <g transform="translate(116, 100) scale(11.67)" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none">
+    <path d="M17 21a1 1 0 0 0 1-1v-5.35c.928-.18 1.82-.58 2.6-1.19.8-.6 1.4-1.41 1.76-2.26A8 8 0 0 0 13 2a8 8 0 0 0-9.36 10.2c.36.85.96 1.66 1.76 2.26.8.61 1.67 1.01 2.6 1.19V20a1 1 0 0 0 1 1Z"/>
+    <path d="M10 21v-1.01c.14.03.29.01.41-.05.5-.27.78-.81.69-1.35L11 18v-1.4c-.43.15-.9.25-1.37.3"/>
+  </g>
+</svg>
