@@ -146,7 +146,12 @@ export const useStore = create<Store>()(
       },
 
       signIn: async (firebaseUser) => {
-        const data = await loadUserData(firebaseUser.uid);
+        let data = { recipes: [], mealEntries: [], shoppingItems: [], knownSources: [] } as Awaited<ReturnType<typeof loadUserData>>;
+        try {
+          data = await loadUserData(firebaseUser.uid);
+        } catch (e) {
+          console.error('Failed to load user data from Firestore:', e);
+        }
         set({
           isAuthenticated: true,
           user: {

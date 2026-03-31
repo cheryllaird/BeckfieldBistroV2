@@ -36,12 +36,17 @@ function AuthenticatedApp() {
     getRedirectResult(auth!).catch(() => {/* redirect errors are surfaced via onAuthStateChanged */});
 
     const unsubscribe = onAuthStateChanged(auth!, async (firebaseUser) => {
-      if (firebaseUser) {
-        await signIn(firebaseUser);
-      } else if (useStore.getState().isAuthenticated) {
-        await signOut();
+      try {
+        if (firebaseUser) {
+          await signIn(firebaseUser);
+        } else if (useStore.getState().isAuthenticated) {
+          await signOut();
+        }
+      } catch (e) {
+        console.error('Auth state change error:', e);
+      } finally {
+        setAuthChecked(true);
       }
-      setAuthChecked(true);
     });
     return unsubscribe;
   }, []);
