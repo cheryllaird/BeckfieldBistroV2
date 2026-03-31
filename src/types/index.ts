@@ -57,6 +57,6 @@ export interface AppState {
   shoppingItems: ShoppingItem[];
   knownSources: string[];
   isAuthenticated: boolean;
-  user: { name: string; email: string; avatar?: string } | null;
+  user: { uid: string; name: string; email: string; avatar?: string } | null;
   splashDone: boolean;
 }

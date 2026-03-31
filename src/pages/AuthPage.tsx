@@ -1,16 +1,22 @@
+import { useState } from 'react';
 import { ChefHat } from 'lucide-react';
-import { useStore } from '../store';
+import { signInWithPopup } from 'firebase/auth';
+import { auth, googleProvider } from '../lib/firebase';
 
 export function AuthPage() {
-  const signIn = useStore((s) => s.signIn);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  const handleGoogleSignIn = () => {
-    // Mock sign-in — replace with real Firebase/Google OAuth integration
-    signIn({
-      name: 'Cheryl',
-      email: 'cheryl@example.com',
-      avatar: undefined,
-    });
+  const handleGoogleSignIn = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      await signInWithPopup(auth!, googleProvider);
+      // App.tsx onAuthStateChanged handles loading user data and updating the store
+    } catch (e) {
+      setError('Sign-in failed. Please try again.');
+      setLoading(false);
+    }
   };
 
   return (
@@ -32,11 +38,19 @@ export function AuthPage() {
           </p>
           <button
             onClick={handleGoogleSignIn}
-            className="w-full flex items-center justify-center gap-3 px-4 py-3 bg-white border border-slate-200 rounded-xl shadow-sm text-sm font-medium text-slate-700 hover:bg-slate-50 active:bg-slate-100 transition-colors cursor-pointer"
+            disabled={loading}
+            className="w-full flex items-center justify-center gap-3 px-4 py-3 bg-white border border-slate-200 rounded-xl shadow-sm text-sm font-medium text-slate-700 hover:bg-slate-50 active:bg-slate-100 transition-colors cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
           >
-            <GoogleIcon />
-            Continue with Google
+            {loading ? (
+              <span className="w-[18px] h-[18px] border-2 border-slate-300 border-t-amber-500 rounded-full animate-spin" />
+            ) : (
+              <GoogleIcon />
+            )}
+            {loading ? 'Signing in…' : 'Continue with Google'}
           </button>
+          {error && (
+            <p className="text-xs text-red-500 text-center">{error}</p>
+          )}
         </div>
 
         <p className="text-xs text-slate-400 text-center leading-relaxed">
