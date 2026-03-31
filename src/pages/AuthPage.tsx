@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { ChefHat } from 'lucide-react';
-import { signInWithPopup } from 'firebase/auth';
+import { signInWithRedirect } from 'firebase/auth';
 import { auth, googleProvider } from '../lib/firebase';
 
 export function AuthPage() {
@@ -11,7 +11,7 @@ export function AuthPage() {
     setLoading(true);
     setError(null);
     try {
-      await signInWithPopup(auth!, googleProvider);
+      await signInWithRedirect(auth!, googleProvider);
       // App.tsx onAuthStateChanged handles loading user data and updating the store
     } catch (e) {
       setError('Sign-in failed. Please try again.');
