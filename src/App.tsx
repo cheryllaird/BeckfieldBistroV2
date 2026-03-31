@@ -1,4 +1,7 @@
+import { useEffect, useState } from 'react';
 import { Navigate, Route, Routes } from 'react-router-dom';
+import { onAuthStateChanged } from 'firebase/auth';
+import { auth, firebaseConfigured } from './lib/firebase';
 import { useStore } from './store';
 import { SplashScreen } from './pages/SplashScreen';
 import { AuthPage } from './pages/AuthPage';
@@ -9,10 +12,39 @@ import { NewRecipePage } from './pages/NewRecipe/index';
 import { PlanPage } from './pages/Plan/index';
 import { ShoppingListPage } from './pages/ShoppingList/index';
 
-export default function App() {
-  const { splashDone, isAuthenticated } = useStore();
+function FirebaseSetupScreen() {
+  return (
+    <div className="fixed inset-0 bg-slate-50 flex flex-col items-center justify-center px-6 text-center gap-4">
+      <div className="text-4xl">🔥</div>
+      <h1 className="text-xl font-bold text-slate-800">Firebase not configured</h1>
+      <p className="text-sm text-slate-500 max-w-sm">
+        Copy <code className="bg-slate-100 px-1 rounded">.env.example</code> to{' '}
+        <code className="bg-slate-100 px-1 rounded">.env.local</code> and fill in your Firebase
+        project credentials, then restart the dev server.
+      </p>
+    </div>
+  );
+}
 
-  if (!splashDone) return <SplashScreen />;
+// Separated so hooks are always called in the same order (Rules of Hooks).
+function AuthenticatedApp() {
+  const { splashDone, isAuthenticated, signIn, signOut } = useStore();
+  const [authChecked, setAuthChecked] = useState(false);
+
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth!, async (firebaseUser) => {
+      if (firebaseUser) {
+        await signIn(firebaseUser);
+      } else if (useStore.getState().isAuthenticated) {
+        await signOut();
+      }
+      setAuthChecked(true);
+    });
+    return unsubscribe;
+  }, []);
+
+  // Keep splash up until both the timer fires AND the auth check resolves
+  if (!splashDone || !authChecked) return <SplashScreen />;
   if (!isAuthenticated) return <AuthPage />;
 
   return (
@@ -29,4 +61,9 @@ export default function App() {
       </Route>
     </Routes>
   );
+}
+
+export default function App() {
+  if (!firebaseConfigured) return <FirebaseSetupScreen />;
+  return <AuthenticatedApp />;
 }
