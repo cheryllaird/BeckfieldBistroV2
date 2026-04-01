@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Navigate, Route, Routes } from 'react-router-dom';
-import { onAuthStateChanged } from 'firebase/auth';
+import { onAuthStateChanged, getRedirectResult } from 'firebase/auth';
 import { auth, firebaseConfigured } from './lib/firebase';
 import { useStore } from './store';
 import { SplashScreen } from './pages/SplashScreen';
@@ -32,20 +32,32 @@ function AuthenticatedApp() {
   const [authChecked, setAuthChecked] = useState(false);
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth!, async (firebaseUser) => {
-      try {
-        if (firebaseUser) {
-          await signIn(firebaseUser);
-        } else if (useStore.getState().isAuthenticated) {
-          await signOut();
+    const unsubRef = { current: null as (() => void) | null };
+
+    // Await getRedirectResult BEFORE subscribing to onAuthStateChanged.
+    // This ensures any pending redirect sign-in is fully processed by Firebase
+    // before we read auth state, preventing the race that left users on the
+    // login page.
+    const init = async () => {
+      try { await getRedirectResult(auth!); } catch { /* errors surfaced via onAuthStateChanged */ }
+
+      unsubRef.current = onAuthStateChanged(auth!, async (firebaseUser) => {
+        try {
+          if (firebaseUser) {
+            await signIn(firebaseUser);
+          } else if (useStore.getState().isAuthenticated) {
+            await signOut();
+          }
+        } catch (e) {
+          console.error('Auth state change error:', e);
+        } finally {
+          setAuthChecked(true);
         }
-      } catch (e) {
-        console.error('Auth state change error:', e);
-      } finally {
-        setAuthChecked(true);
-      }
-    });
-    return unsubscribe;
+      });
+    };
+
+    init();
+    return () => unsubRef.current?.();
   }, []);
 
   // Keep splash up until both the timer fires AND the auth check resolves
