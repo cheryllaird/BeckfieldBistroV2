@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Navigate, Route, Routes } from 'react-router-dom';
-import { onAuthStateChanged, getRedirectResult } from 'firebase/auth';
+import { onAuthStateChanged } from 'firebase/auth';
 import { auth, firebaseConfigured } from './lib/firebase';
 import { useStore } from './store';
 import { SplashScreen } from './pages/SplashScreen';
@@ -32,9 +32,6 @@ function AuthenticatedApp() {
   const [authChecked, setAuthChecked] = useState(false);
 
   useEffect(() => {
-    // Process any pending redirect result first, then listen for auth state.
-    getRedirectResult(auth!).catch(() => {/* redirect errors are surfaced via onAuthStateChanged */});
-
     const unsubscribe = onAuthStateChanged(auth!, async (firebaseUser) => {
       try {
         if (firebaseUser) {
