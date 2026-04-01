@@ -44,7 +44,7 @@ function AuthenticatedApp() {
       unsubRef.current = onAuthStateChanged(auth!, async (firebaseUser) => {
         try {
           if (firebaseUser) {
-            await signIn(firebaseUser);
+            signIn(firebaseUser);
           } else if (useStore.getState().isAuthenticated) {
             await signOut();
           }
