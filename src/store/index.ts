@@ -36,7 +36,7 @@ interface Store extends AppState {
   clearCheckedItems: () => void;
 
   // Auth actions
-  signIn: (firebaseUser: FirebaseUser) => Promise<void>;
+  signIn: (firebaseUser: FirebaseUser) => void;
   signOut: () => Promise<void>;
   setSplashDone: () => void;
 
@@ -145,13 +145,10 @@ export const useStore = create<Store>()(
         if (uid) removed.forEach((i) => deleteShoppingItemDoc(uid, i.id));
       },
 
-      signIn: async (firebaseUser) => {
-        let data = { recipes: [], mealEntries: [], shoppingItems: [], knownSources: [] } as Awaited<ReturnType<typeof loadUserData>>;
-        try {
-          data = await loadUserData(firebaseUser.uid);
-        } catch (e) {
-          console.error('Failed to load user data from Firestore:', e);
-        }
+      signIn: (firebaseUser) => {
+        // Authenticate immediately so the app opens at once — data loads in the background.
+        // Awaiting Firestore before setting isAuthenticated caused the app to stay on the
+        // login page whenever Firestore was slow or unavailable.
         set({
           isAuthenticated: true,
           user: {
@@ -160,11 +157,19 @@ export const useStore = create<Store>()(
             email: firebaseUser.email ?? '',
             avatar: firebaseUser.photoURL ?? undefined,
           },
-          recipes: data.recipes,
-          mealEntries: data.mealEntries,
-          shoppingItems: data.shoppingItems,
-          knownSources: data.knownSources,
+          recipes: [],
+          mealEntries: [],
+          shoppingItems: [],
+          knownSources: [],
         });
+        loadUserData(firebaseUser.uid)
+          .then((data) => set({
+            recipes: data.recipes,
+            mealEntries: data.mealEntries,
+            shoppingItems: data.shoppingItems,
+            knownSources: data.knownSources,
+          }))
+          .catch((e) => console.error('Failed to load user data from Firestore:', e));
       },
 
       signOut: async () => {
