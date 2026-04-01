@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { ChefHat } from 'lucide-react';
-import { signInWithPopup } from 'firebase/auth';
+import { signInWithPopup, signInWithRedirect } from 'firebase/auth';
 import { auth, googleProvider } from '../lib/firebase';
 
 export function AuthPage() {
@@ -13,7 +13,23 @@ export function AuthPage() {
     try {
       await signInWithPopup(auth!, googleProvider);
       // App.tsx onAuthStateChanged handles loading user data and updating the store
-    } catch (e) {
+    } catch (e: any) {
+      const code = e?.code ?? '';
+      if (code === 'auth/popup-closed-by-user' || code === 'auth/cancelled-popup-request') {
+        // User dismissed — not an error
+        setLoading(false);
+        return;
+      }
+      if (code === 'auth/popup-blocked') {
+        // Popup blocked (e.g. PWA standalone mode) — fall back to redirect
+        try {
+          await signInWithRedirect(auth!, googleProvider);
+          return; // page will navigate away
+        } catch {
+          // fall through to show error
+        }
+      }
+      console.error('Sign-in error:', e);
       setError('Sign-in failed. Please try again.');
       setLoading(false);
     }
