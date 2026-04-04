@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Navigate, Route, Routes } from 'react-router-dom';
 import { onAuthStateChanged, getRedirectResult } from 'firebase/auth';
 import { auth, firebaseConfigured } from './lib/firebase';
+import { authErrorMessage } from './lib/authErrors';
 import { useStore } from './store';
 import { SplashScreen } from './pages/SplashScreen';
 import { AuthPage } from './pages/AuthPage';
@@ -30,6 +31,7 @@ function FirebaseSetupScreen() {
 function AuthenticatedApp() {
   const { splashDone, isAuthenticated, signIn, signOut } = useStore();
   const [authChecked, setAuthChecked] = useState(false);
+  const [redirectError, setRedirectError] = useState<string | null>(null);
 
   useEffect(() => {
     const unsubRef = { current: null as (() => void) | null };
@@ -39,7 +41,11 @@ function AuthenticatedApp() {
     // before we read auth state, preventing the race that left users on the
     // login page.
     const init = async () => {
-      try { await getRedirectResult(auth!); } catch { /* errors surfaced via onAuthStateChanged */ }
+      try { await getRedirectResult(auth!); } catch (e: any) {
+        const code = e?.code ?? '';
+        console.error('Redirect result error:', e);
+        setRedirectError(authErrorMessage(code));
+      }
 
       unsubRef.current = onAuthStateChanged(auth!, async (firebaseUser) => {
         try {
@@ -62,7 +68,7 @@ function AuthenticatedApp() {
 
   // Keep splash up until both the timer fires AND the auth check resolves
   if (!splashDone || !authChecked) return <SplashScreen />;
-  if (!isAuthenticated) return <AuthPage />;
+  if (!isAuthenticated) return <AuthPage initialError={redirectError} />;
 
   return (
     <Routes>

@@ -2,27 +2,11 @@ import { useState } from 'react';
 import { ChefHat } from 'lucide-react';
 import { signInWithPopup, signInWithRedirect } from 'firebase/auth';
 import { auth, googleProvider } from '../lib/firebase';
+import { authErrorMessage } from '../lib/authErrors';
 
-function errorMessage(code: string): string {
-  switch (code) {
-    case 'auth/unauthorized-domain':
-      return 'Sign-in is not enabled for this domain. Ask the site owner to add it to Firebase Authorized Domains.';
-    case 'auth/operation-not-allowed':
-      return 'Google sign-in is not enabled for this project. Please contact support.';
-    case 'auth/network-request-failed':
-      return 'Network error. Please check your connection and try again.';
-    case 'auth/too-many-requests':
-      return 'Too many sign-in attempts. Please wait a moment and try again.';
-    default:
-      return code
-        ? `Sign-in failed (${code}). Please try again.`
-        : 'Sign-in failed. Please try again.';
-  }
-}
-
-export function AuthPage() {
+export function AuthPage({ initialError }: { initialError?: string | null }) {
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(initialError ?? null);
 
   const handleGoogleSignIn = async () => {
     setLoading(true);
@@ -45,13 +29,13 @@ export function AuthPage() {
         } catch (redirectErr: any) {
           const redirectCode = redirectErr?.code ?? '';
           console.error('Redirect sign-in error:', redirectErr);
-          setError(errorMessage(redirectCode));
+          setError(authErrorMessage(redirectCode));
           setLoading(false);
           return;
         }
       }
       console.error('Sign-in error:', e);
-      setError(errorMessage(code));
+      setError(authErrorMessage(code));
       setLoading(false);
     }
   };

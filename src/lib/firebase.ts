@@ -14,6 +14,7 @@ const firebaseConfig = {
 /** True when all required env vars are present. */
 export const firebaseConfigured =
   !!firebaseConfig.apiKey &&
+  !!firebaseConfig.authDomain &&
   !!firebaseConfig.projectId &&
   !!firebaseConfig.appId;
 
