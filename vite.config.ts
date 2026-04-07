@@ -14,8 +14,8 @@ export default defineConfig({
         globPatterns: ['**/*.{js,css,html,svg,png,ico,woff2}'],
       },
       manifest: {
-        name: 'Beckfield Bistro',
-        short_name: 'Bistro',
+        name: 'BeckfieldBistro',
+        short_name: 'BeckfieldBistro',
         description: 'Your AI-powered culinary companion',
         theme_color: '#111111',
         background_color: '#ffffff',
