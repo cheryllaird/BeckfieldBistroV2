@@ -9,12 +9,7 @@ export function Header() {
   return (
     <header className="sticky top-0 z-40 bg-ink-950 border-b border-white/10">
       <div className="max-w-md mx-auto px-4 h-14 flex items-center justify-between">
-        <div className="flex items-center gap-2.5">
-          <img src="/logo-icon.svg" alt="BB" className="h-9 w-9 rounded-full" />
-          <span className="text-base font-bold text-white tracking-tight">
-            Beckfield Bistro
-          </span>
-        </div>
+        <img src="/logo-wordmark.png" alt="Beckfield Bistro" className="h-8 w-auto" />
 
         {user && (
           <div className="relative">

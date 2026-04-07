@@ -26,7 +26,7 @@ export function Input({ label, error, icon, hint, className = '', ...props }: Pr
           className={[
             'w-full rounded-xl border bg-white px-4 py-2.5 text-sm text-slate-800 placeholder-slate-400',
             'transition-colors outline-none',
-            'focus:border-amber-400 focus:ring-2 focus:ring-amber-100',
+            'focus:border-amber-500 focus:ring-2 focus:ring-amber-soft',
             error ? 'border-red-300' : 'border-slate-200',
             icon ? 'pl-9' : '',
             className,

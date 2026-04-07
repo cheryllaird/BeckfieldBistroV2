@@ -12,7 +12,7 @@ export function SplashScreen() {
   return (
     <div className="fixed inset-0 bg-ink-950 flex flex-col items-center justify-center gap-5 z-50 animate-fade">
       <div className="flex flex-col items-center gap-5">
-        <img src="/logo-icon.svg" alt="Beckfield Bistro" className="w-28 h-28" />
+        <img src="/logo-icon.png" alt="Beckfield Bistro" className="w-28 h-28" />
         <div className="text-center">
           <h1 className="text-2xl font-bold text-white tracking-tight">Beckfield Bistro</h1>
           <p className="text-sm text-amber-400 mt-1">Entering the Bistro...</p>
