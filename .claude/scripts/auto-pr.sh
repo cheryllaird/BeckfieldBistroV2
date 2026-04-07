@@ -40,6 +40,6 @@ fi
 
 # Enable auto-merge (squash) — merges automatically after approval
 echo "[auto-pr] Enabling auto-merge..."
-gh pr merge --head "$CURRENT_BRANCH" --auto --squash
+gh pr merge "$CURRENT_BRANCH" --auto --squash
 
 echo "[auto-pr] Done. PR queued for auto-merge after approval."
