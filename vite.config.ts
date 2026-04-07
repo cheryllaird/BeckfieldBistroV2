@@ -17,7 +17,7 @@ export default defineConfig({
         name: 'Beckfield Bistro',
         short_name: 'Bistro',
         description: 'Your AI-powered culinary companion',
-        theme_color: '#f59e0b',
+        theme_color: '#111111',
         background_color: '#ffffff',
         display: 'standalone',
         start_url: '/',

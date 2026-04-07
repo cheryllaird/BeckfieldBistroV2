@@ -1,5 +1,4 @@
 import { useState } from 'react';
-import { ChefHat } from 'lucide-react';
 import { signInWithPopup, signInWithRedirect } from 'firebase/auth';
 import { auth, googleProvider } from '../lib/firebase';
 import { authErrorMessage } from '../lib/authErrors';
@@ -41,26 +40,24 @@ export function AuthPage({ initialError }: { initialError?: string | null }) {
   };
 
   return (
-    <div className="fixed inset-0 bg-gradient-to-br from-slate-50 via-white to-amber-50 flex flex-col items-center justify-center px-6">
+    <div className="fixed inset-0 bg-ink-950 flex flex-col items-center justify-center px-6">
       <div className="w-full max-w-sm flex flex-col items-center gap-8 animate-slide-up">
-        <div className="flex flex-col items-center gap-4">
-          <div className="w-20 h-20 rounded-3xl bg-amber-50 border border-amber-100 flex items-center justify-center shadow-sm">
-            <ChefHat size={40} className="text-amber-500" />
-          </div>
+        <div className="flex flex-col items-center gap-5">
+          <img src="/logo-icon.svg" alt="Beckfield Bistro" className="w-28 h-28" />
           <div className="text-center">
-            <h1 className="text-2xl font-bold text-slate-800 tracking-tight">Beckfield Bistro</h1>
-            <p className="text-sm text-slate-500 mt-1">Your AI culinary companion</p>
+            <h1 className="text-2xl font-bold text-white tracking-tight">Beckfield Bistro</h1>
+            <p className="text-sm text-amber-400 mt-1">Your AI culinary companion</p>
           </div>
         </div>
 
         <div className="w-full flex flex-col gap-3">
-          <p className="text-xs text-slate-400 text-center uppercase tracking-wider font-medium">
+          <p className="text-xs text-white/40 text-center uppercase tracking-wider font-medium">
             Sign in to continue
           </p>
           <button
             onClick={handleGoogleSignIn}
             disabled={loading}
-            className="w-full flex items-center justify-center gap-3 px-4 py-3 bg-white border border-slate-200 rounded-xl shadow-sm text-sm font-medium text-slate-700 hover:bg-slate-50 active:bg-slate-100 transition-colors cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
+            className="w-full flex items-center justify-center gap-3 px-4 py-3 bg-white border border-white/20 rounded-xl shadow-sm text-sm font-medium text-slate-700 hover:bg-slate-50 active:bg-slate-100 transition-colors cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
           >
             {loading ? (
               <span className="w-[18px] h-[18px] border-2 border-slate-300 border-t-amber-500 rounded-full animate-spin" />
@@ -70,11 +67,11 @@ export function AuthPage({ initialError }: { initialError?: string | null }) {
             {loading ? 'Signing in…' : 'Continue with Google'}
           </button>
           {error && (
-            <p className="text-xs text-red-500 text-center">{error}</p>
+            <p className="text-xs text-red-400 text-center">{error}</p>
           )}
         </div>
 
-        <p className="text-xs text-slate-400 text-center leading-relaxed">
+        <p className="text-xs text-white/30 text-center leading-relaxed">
           By continuing, you agree to our Terms of Service<br />and Privacy Policy.
         </p>
       </div>
