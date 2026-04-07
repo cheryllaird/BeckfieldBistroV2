@@ -1,47 +1,52 @@
 # Beckfield Bistro - Product Specification
 
-## 1. Introduction
-Beckfield Bistro is an AI-powered culinary companion designed to streamline the workflow of home cooks. The app digitizes physical recipes, organizes weekly meal plans, and intelligently generates shopping lists.
+## Introduction
+Beckfield Bistro is an AI-powered culinary companion designed to streamline the workflow of home cooks. The app digitises physical recipes, organises weekly meal plans, and intelligently generates shopping lists.
 
----
-
-## 2. Brand & Visual Identity
-- **Aesthetic**: Elegant, professional, and tranquil. Uses a palette of whites, soft slates, and amber accents.
-- **Typography**: Uses the 'Inter' font family with a carefully tuned "rhythm"—tight line heights and balanced heading sizes optimized for mobile legibility.
-- **Motion**: Subtle "animate-in" transitions for pages and a branded "fade in/out" splash screen during data synchronization.
-
----
-
-## 3. User Journey & Onboarding
+## User Journey & Onboarding
 - **Splash Screen**: Upon opening, users see the Beckfield Bistro logo with a "Entering the Bistro..." loading message.
 - **Authentication**: Secured by Google Sign-in.
 - **Offline-First**: The app persists data locally. Subsequent launches are instant, showing cached data while auth and server updates happen in the background.
 
----
+## App Layout
+- **Top Header**: Beckfield Bistro branding with a user profile menu for logging out.
+    - Hides as the page is scrolled down, but reappears as the page is scrolled back up.
+- **Bottom Navigation**: Persistent floating bar providing instant access to "Recipes", "Plan", and "List".
+- **Contextual Actions**: "Back" buttons are consistently placed at the bottom of sub-pages for ergonomic mobile use.
+- **Page header**: Title of the page, with a description. Plus as page actions, such as "Add Recipe".
 
-## 4. Recipe Management (The Library)
-- **Library View**: A grid of recipe cards showing high-quality cover images, serving sizes, and total cooking times.
-- **Search**: Real-time search by title, ingredients, or recipe source.
-- **Source Tracking**: The app remembers where recipes come from (e.g., "NYT Cooking", "Family Notes") and suggests these sources when adding new recipes.
-- **Quick Planning**: From the library view, recipes can be quickly added to the next empty day on the meal plan.
-- **Detail View**:
-    - **Tabbed Interface**: Focused views for "Ingredients" (clean list) and "Method" (numbered steps).
-    - **Ingredient Scaling**: Users can adjust the serving size, and the app automatically recalculates ingredient quantities.
-    - **Quick Planning**: One-tap ability to schedule the recipe for a specific date.
+## App Features
 
----
+### Recipe Library (Your Recipes)
+- The library view displays a grid of recipe cards showing high-quality cover images, serving sizes, and total cooking times.
+- The library can be searched by title, ingredients, or recipe source.
+- New recipes can be added from the main CTA on this view.
+- Recipe cards can be clicked to open the deatil view of the recipe.
+- Recipe cards have an clickable icon (add to calendar) to allow the recipe to be allow for it to be quickly added to the next empty day on the meal plan.
 
-## 5. Recipe Capture (AI Digitization)
+### Recipe Detail
+- Cover image with overlay detail.
+    - Detail aligned bottom: recipe title, source, hands-on time, total time and number of servings.
+    - Kebab menu aligned top-right with options for Edit and Delete.
+- Below the cover image is a tabbed interface displaying "Ingredients" and "Method".
+- **Contextual Actions**: Back, Add To Plan
+- Add to Plan will display a confirmation modal for:
+    - Assign day: defaulted to the next available day in the meal plan
+    - Servings: adjust the serving size, and the app automatically recalculates ingredient quantities.
+
+
+### Recipe Capture (AI Digitization)
 - **Capture Modes**:
     1. **Photo/Camera**: Users can snap a photo of a physical cookbook or handwritten note, crop the relevant area, and let AI extract structured data.
     2. **File Upload**: Upload existing images of recipes.
     3. **URL Import**: Paste a link from any major recipe website. AI extracts the title, ingredients, steps, and representative photography.
 - **Review & Edit**: A robust form where users can refine the AI-extracted data, add a cover image (via camera, file, or URL), and select or add a new Source.
-- **Note**: AI extraction (URL and photo modes) is currently stubbed with placeholder data. Integration with a real AI API (e.g. Claude Vision for photos, Claude for URL parsing) is the next step.
+- Recipe data structure:
+{
+    
+}
 
----
-
-## 6. Meal Planning
+### Meal Planning
 - **Weekly Schedule**: A vertical timeline showing "This Week" and "Next Week".
 - **Entry Types**:
     - **Recipe Meals**: Linked directly to the library.
@@ -52,9 +57,7 @@ Beckfield Bistro is an AI-powered culinary companion designed to streamline the 
 - **Servings Management**: Adjust servings for specific days directly from the planner.
 - **History**: A full-screen calendar view to browse past meal choices.
 
----
-
-## 7. Shopping List
+### Shopping List
 - **Generation**: Users select one or multiple entries from their meal plan to generate a list.
 - **Intelligent Consolidation**: The app scales ingredients based on the planned servings and merges duplicates (e.g., combining 200g of flour from a cake and 300g from bread into a single "500g Flour" entry).
 - **Dual Modes**:
@@ -64,6 +67,13 @@ Beckfield Bistro is an AI-powered culinary companion designed to streamline the 
 - **Persistence**: Undo/Redo support for accidental check-offs while shopping.
 
 ---
+
+
+
+## Brand & Visual Identity
+- **Aesthetic**: Elegant, professional, and tranquil. Uses a palette of whites, soft slates, and amber accents.
+- **Typography**: Uses the 'Inter' font family with a carefully tuned "rhythm"—tight line heights and balanced heading sizes optimized for mobile legibility.
+- **Motion**: Subtle "animate-in" transitions for pages and a branded "fade in/out" splash screen during data synchronization.
 
 ## 8. Navigation
 - **Top Header**: Minimalist branding with a user profile menu for logging out.
