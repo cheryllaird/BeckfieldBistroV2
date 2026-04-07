@@ -1,0 +1,51 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm create:*)",
+      "Bash(cp -r temp_scaffold/. .)",
+      "Bash(rm -rf temp_scaffold)",
+      "Bash(npm install:*)",
+      "Bash(npm run:*)",
+      "mcp__Claude_Preview__preview_start",
+      "Bash(git --version)",
+      "Bash(where gh:*)",
+      "Read(//c/Program Files/**)",
+      "Read(//c/Users/Cheryl/AppData/Local/Programs/**)",
+      "Bash(gh auth:*)",
+      "Bash(export PATH=\"$PATH:/c/Program Files/GitHub CLI:/c/Users/Cheryl/AppData/Local/Programs/GitHub CLI\")",
+      "Bash(gh repo:*)",
+      "Bash(gh pr:*)",
+      "Bash(npm view:*)",
+      "Bash(vercel --version)",
+      "Bash(npx vercel:*)",
+      "Bash(npx tsc:*)",
+      "Bash(curl -s \"http://localhost:5173/src/lib/firebase.ts\")",
+      "Bash(node -e \"const { initializeApp } = require\\(''./node_modules/firebase/app''\\); try { initializeApp\\({ apiKey: undefined, projectId: undefined }\\); console.log\\(''no throw''\\); } catch\\(e\\) { console.log\\(''threw:'', e.message\\); }\")",
+      "Bash(node -e \":*)",
+      "mcp__57feed2f-9561-49db-82b5-6e99eecb8e89__deploy_to_vercel",
+      "mcp__57feed2f-9561-49db-82b5-6e99eecb8e89__get_deployment_build_logs",
+      "Bash(git checkout:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git push:*)",
+      "Bash(ls C:/Users/Cheryl/Desktop/dev/Bistro/public/logo*.png)",
+      "Bash(gh api:*)",
+      "Bash(MSYS_NO_PATHCONV=1 gh api -X PATCH /repos/cheryllaird/BeckfieldBistroV2 -f allow_auto_merge=true -f delete_branch_on_merge=true --jq '{allow_auto_merge, delete_branch_on_merge}')",
+      "Bash(MSYS_NO_PATHCONV=1 gh api /repos/cheryllaird/BeckfieldBistroV2 --jq '{allow_auto_merge, delete_branch_on_merge}')",
+      "Bash(MSYS_NO_PATHCONV=1 gh api /repos/cheryllaird/BeckfieldBistroV2/branches/main/protection --jq '.required_pull_request_reviews.required_approving_review_count')",
+      "Bash(bash .claude/scripts/auto-pr.sh)"
+    ]
+  },
+  "hooks": {
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash C:/Users/Cheryl/Desktop/dev/Bistro/.claude/scripts/auto-pr.sh"
+          }
+        ]
+      }
+    ]
+  }
+}
