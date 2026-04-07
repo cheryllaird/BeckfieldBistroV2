@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Runs after every Claude Code session via Stop hook.
-# Pushes the current branch, creates a PR if needed, enables auto-merge.
+# - If the current branch's PR has been merged: switch to main and delete the local branch.
+# - Otherwise: push the branch and create a PR if one doesn't exist.
 
 set -euo pipefail
 
@@ -11,6 +12,17 @@ export MSYS_NO_PATHCONV=1
 CURRENT_BRANCH=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "")
 if [[ -z "$CURRENT_BRANCH" || "$CURRENT_BRANCH" == "main" || "$CURRENT_BRANCH" == "master" ]]; then
   echo "[auto-pr] On protected branch '$CURRENT_BRANCH' — skipping."
+  exit 0
+fi
+
+# Check if the PR for this branch has already been merged
+PR_STATE=$(gh pr view "$CURRENT_BRANCH" --json state --jq '.state' 2>/dev/null || echo "")
+if [[ "$PR_STATE" == "MERGED" ]]; then
+  echo "[auto-pr] PR for '$CURRENT_BRANCH' was merged — switching to main and cleaning up."
+  git checkout main
+  git pull origin main
+  git branch -d "$CURRENT_BRANCH" 2>/dev/null || git branch -D "$CURRENT_BRANCH"
+  echo "[auto-pr] Done. Now on main."
   exit 0
 fi
 
@@ -34,12 +46,7 @@ EXISTING_PR=$(gh pr list --head "$CURRENT_BRANCH" --base main --state open --jso
 if [[ -z "$EXISTING_PR" ]]; then
   echo "[auto-pr] Creating PR..."
   gh pr create --base main --head "$CURRENT_BRANCH" --fill
+  echo "[auto-pr] PR created. Merge it on GitHub when ready."
 else
-  echo "[auto-pr] PR #${EXISTING_PR} already exists."
+  echo "[auto-pr] PR #${EXISTING_PR} already exists for '$CURRENT_BRANCH'."
 fi
-
-# Enable auto-merge (squash) — merges automatically after approval
-echo "[auto-pr] Enabling auto-merge..."
-gh pr merge "$CURRENT_BRANCH" --auto --squash
-
-echo "[auto-pr] Done. PR queued for auto-merge after approval."
