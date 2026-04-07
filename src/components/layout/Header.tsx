@@ -7,7 +7,7 @@ export function Header() {
   const [menuOpen, setMenuOpen] = useState(false);
 
   return (
-    <header className="sticky top-0 z-40 bg-ink-950 border-b border-white/10">
+    <header className="sticky top-0 z-40 bg-white border-b border-slate-200">
       <div className="max-w-md mx-auto px-4 h-14 flex items-center justify-between">
         <img src="/logo-wordmark.png" alt="Beckfield Bistro" className="h-8 w-auto" />
 
@@ -15,7 +15,7 @@ export function Header() {
           <div className="relative">
             <button
               onClick={() => setMenuOpen((v) => !v)}
-              className="flex items-center gap-2 px-2 py-1.5 rounded-xl hover:bg-ink-800 transition-colors"
+              className="flex items-center gap-2 px-2 py-1.5 rounded-xl hover:bg-slate-100 transition-colors"
               aria-label="Profile menu"
             >
               {user.avatar ? (
@@ -25,11 +25,11 @@ export function Header() {
                   className="w-7 h-7 rounded-full object-cover"
                 />
               ) : (
-                <div className="w-7 h-7 rounded-full bg-amber-500/20 flex items-center justify-center">
-                  <User size={14} className="text-amber-400" />
+                <div className="w-7 h-7 rounded-full bg-amber-soft flex items-center justify-center">
+                  <User size={14} className="text-amber-500" />
                 </div>
               )}
-              <span className="text-sm font-medium text-white/80 hidden sm:block">
+              <span className="text-sm font-medium text-slate-700 hidden sm:block">
                 {user.name.split(' ')[0]}
               </span>
             </button>
