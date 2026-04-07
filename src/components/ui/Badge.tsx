@@ -8,7 +8,7 @@ interface Props {
 
 const variantClasses: Record<NonNullable<Props['variant']>, string> = {
   default: 'bg-slate-100 text-slate-600',
-  amber: 'bg-amber-100 text-amber-700',
+  amber: 'bg-amber-soft text-amber-700',
   slate: 'bg-slate-800 text-white',
   green: 'bg-green-100 text-green-700',
 };

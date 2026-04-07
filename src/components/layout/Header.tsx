@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { LogOut, User, ChefHat } from 'lucide-react';
+import { LogOut, User } from 'lucide-react';
 import { useStore } from '../../store';
 
 export function Header() {
@@ -7,20 +7,15 @@ export function Header() {
   const [menuOpen, setMenuOpen] = useState(false);
 
   return (
-    <header className="sticky top-0 z-40 bg-white/90 backdrop-blur border-b border-slate-100">
+    <header className="sticky top-0 z-40 bg-white border-b border-slate-200">
       <div className="max-w-md mx-auto px-4 h-14 flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <ChefHat size={20} className="text-amber-500" />
-          <span className="text-base font-semibold text-slate-800 tracking-tight">
-            Beckfield Bistro
-          </span>
-        </div>
+        <img src="/logo-wordmark.png" alt="Beckfield Bistro" className="h-8 w-auto" />
 
         {user && (
           <div className="relative">
             <button
               onClick={() => setMenuOpen((v) => !v)}
-              className="flex items-center gap-2 px-2 py-1.5 rounded-xl hover:bg-slate-50 transition-colors"
+              className="flex items-center gap-2 px-2 py-1.5 rounded-xl hover:bg-slate-100 transition-colors"
               aria-label="Profile menu"
             >
               {user.avatar ? (
@@ -30,8 +25,8 @@ export function Header() {
                   className="w-7 h-7 rounded-full object-cover"
                 />
               ) : (
-                <div className="w-7 h-7 rounded-full bg-amber-100 flex items-center justify-center">
-                  <User size={14} className="text-amber-600" />
+                <div className="w-7 h-7 rounded-full bg-amber-soft flex items-center justify-center">
+                  <User size={14} className="text-amber-500" />
                 </div>
               )}
               <span className="text-sm font-medium text-slate-700 hidden sm:block">

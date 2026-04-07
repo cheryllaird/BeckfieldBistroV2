@@ -4,36 +4,49 @@
 @theme {
   --font-sans: 'Inter', ui-sans-serif, system-ui, sans-serif;
 
-  --color-amber-50: #fffbeb;
-  --color-amber-100: #fef3c7;
-  --color-amber-200: #fde68a;
-  --color-amber-400: #fbbf24;
-  --color-amber-500: #f59e0b;
-  --color-amber-600: #d97706;
-  --color-amber-700: #b45309;
+  /* Primary amber — hsl(43 100% 50%) base */
+  --color-amber-50:   hsl(43 100% 97%);
+  --color-amber-100:  hsl(43 100% 93%);
+  --color-amber-200:  hsl(43 100% 85%);
+  --color-amber-300:  hsl(43 100% 70%);
+  --color-amber-400:  hsl(43 100% 60%);
+  --color-amber-500:  hsl(43 100% 50%);   /* Primary action colour */
+  --color-amber-600:  hsl(43 100% 40%);
+  --color-amber-700:  hsl(43 100% 30%);
 
-  --color-slate-50: #f8fafc;
+  /* Amber Soft — selected-item / accent backgrounds */
+  --color-amber-soft: hsl(43 100% 95%);
+
+  /* Ink (header, bottom nav, splash, auth backgrounds) */
+  --color-ink-950: #111111;
+  --color-ink-900: #1a1a1a;
+  --color-ink-800: #2a2a2a;
+
+  /* Slate — text hierarchy and UI surfaces */
+  --color-slate-50:  #f8fafc;   /* App background */
   --color-slate-100: #f1f5f9;
   --color-slate-200: #e2e8f0;
   --color-slate-300: #cbd5e1;
   --color-slate-400: #94a3b8;
-  --color-slate-500: #64748b;
+  --color-slate-500: #64748b;   /* Secondary text */
   --color-slate-600: #475569;
   --color-slate-700: #334155;
   --color-slate-800: #1e293b;
-  --color-slate-900: #0f172a;
+  --color-slate-900: #0f172a;   /* Heading text */
 }
 
-* {
-  box-sizing: border-box;
-  margin: 0;
-  padding: 0;
+@layer base {
+  * {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+  }
 }
 
 body {
   font-family: var(--font-sans);
   background-color: var(--color-slate-50);
-  color: var(--color-slate-800);
+  color: var(--color-slate-900);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   line-height: 1.4;
