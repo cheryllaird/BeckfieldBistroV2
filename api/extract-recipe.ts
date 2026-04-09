@@ -88,7 +88,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   let rawText: string;
   try {
     const response = await client.messages.create({
-      model: 'claude-haiku-4-5-20251001',
+      model: 'claude-sonnet-4-6',
       max_tokens: 2048,
       system: SYSTEM_PROMPT,
       messages: [
@@ -112,7 +112,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     const status = (err as { status?: number }).status;
-    console.error(`Anthropic API error [status=${status}]:`, message);
+    console.error(`Anthropic error status=${status} message=${message}`);
     return res.status(502).json({ error: 'AI service error. Please try again.' });
   }
 
