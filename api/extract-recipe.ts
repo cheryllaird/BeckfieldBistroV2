@@ -110,7 +110,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       .map((block) => (block as { type: 'text'; text: string }).text)
       .join('');
   } catch (err) {
-    console.error('Anthropic API error:', err);
+    const message = err instanceof Error ? err.message : String(err);
+    const status = (err as { status?: number }).status;
+    console.error(`Anthropic API error [status=${status}]:`, message);
     return res.status(502).json({ error: 'AI service error. Please try again.' });
   }
 
