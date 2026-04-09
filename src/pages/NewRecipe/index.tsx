@@ -5,6 +5,7 @@ import { useStore } from '../../store';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
 import { generateId } from '../../lib/utils';
+import { extractRecipeFromImage, RecipeExtractionError } from '../../lib/recipeExtraction';
 import type { Recipe } from '../../types';
 import { RecipeForm } from './RecipeForm';
 
@@ -67,23 +68,23 @@ export function NewRecipePage() {
     const file = e.target.files?.[0];
     if (!file) return;
     const reader = new FileReader();
-    reader.onload = () => {
+    reader.onload = async () => {
       const dataUrl = reader.result as string;
-      // Stub: In production, send image to AI vision API
-      setDraft({
-        title: 'Recipe from Image',
-        source: 'Photo Upload',
-        servings: 4,
-        prepTime: '',
-        totalTime: '45 mins',
-        ingredients: [
-          { name: 'Ingredient from photo', quantity: 2, unit: 'tbsp', originalText: '2 tbsp Ingredient from photo' },
-        ],
-        steps: ['Step extracted from photo.'],
-        coverImage: dataUrl,
-        originalImage: dataUrl,
-      });
-      setMode('manual');
+      setIsExtracting(true);
+      setExtractError('');
+      try {
+        const extracted = await extractRecipeFromImage(dataUrl);
+        setDraft({ ...extracted, coverImage: dataUrl, originalImage: dataUrl });
+        setMode('manual');
+      } catch (err) {
+        setExtractError(
+          err instanceof RecipeExtractionError
+            ? err.message
+            : 'Failed to extract recipe. Please check your API key and try again.'
+        );
+      } finally {
+        setIsExtracting(false);
+      }
     };
     reader.readAsDataURL(file);
   };
@@ -162,20 +163,39 @@ export function NewRecipePage() {
       {/* Upload mode */}
       {mode === 'upload' && (
         <div className="flex flex-col gap-3 animate-in">
-          <label className="flex flex-col items-center gap-3 border-2 border-dashed border-slate-200 rounded-2xl p-8 cursor-pointer hover:border-amber-300 hover:bg-amber-50 transition-colors">
-            <Camera size={32} className="text-slate-400" />
-            <div className="text-center">
-              <p className="text-sm font-medium text-slate-700">Snap or upload a photo</p>
-              <p className="text-xs text-slate-400 mt-0.5">AI will extract the recipe details</p>
-            </div>
+          <label className={[
+            'flex flex-col items-center gap-3 border-2 border-dashed rounded-2xl p-8 transition-colors',
+            isExtracting
+              ? 'border-amber-300 bg-amber-50 cursor-not-allowed'
+              : 'border-slate-200 cursor-pointer hover:border-amber-300 hover:bg-amber-50',
+          ].join(' ')}>
+            {isExtracting ? (
+              <>
+                <Loader size={32} className="text-amber-500 animate-spin" />
+                <div className="text-center">
+                  <p className="text-sm font-medium text-slate-700">Analysing photo…</p>
+                  <p className="text-xs text-slate-400 mt-0.5">This may take a few seconds</p>
+                </div>
+              </>
+            ) : (
+              <>
+                <Camera size={32} className="text-slate-400" />
+                <div className="text-center">
+                  <p className="text-sm font-medium text-slate-700">Snap or upload a photo</p>
+                  <p className="text-xs text-slate-400 mt-0.5">AI will extract the recipe details</p>
+                </div>
+              </>
+            )}
             <input
               type="file"
               accept="image/*"
               capture="environment"
               className="hidden"
+              disabled={isExtracting}
               onChange={handleFileUpload}
             />
           </label>
+          {extractError && <p className="text-xs text-red-500">{extractError}</p>}
         </div>
       )}
 
