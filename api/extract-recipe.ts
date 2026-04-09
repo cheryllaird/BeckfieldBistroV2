@@ -76,6 +76,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const resolvedMediaType: SupportedMediaType = SUPPORTED_MEDIA_TYPES.includes(mediaType)
     ? mediaType
     : 'image/jpeg';
+  console.log(`extract-recipe: base64Length=${base64.length} mediaType=${resolvedMediaType}`);
 
   // Call Anthropic
   const apiKey = process.env.ANTHROPIC_API_KEY;
@@ -112,7 +113,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     const status = (err as { status?: number }).status;
-    console.error(`Anthropic error status=${status} message=${message}`);
+    console.error(`Anthropic error status=${status}`);
+    console.error(`Anthropic error message=${message}`);
     return res.status(502).json({ error: 'AI service error. Please try again.' });
   }
 
