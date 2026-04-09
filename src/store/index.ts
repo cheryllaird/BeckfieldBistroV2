@@ -18,7 +18,7 @@ import type { Recipe, MealEntry, ShoppingItem, AppState } from '../types';
 
 interface Store extends AppState {
   // Recipe actions
-  addRecipe: (recipe: Recipe) => void;
+  addRecipe: (recipe: Omit<Recipe, 'userId'>) => void;
   updateRecipe: (recipe: Recipe) => void;
   deleteRecipe: (id: string) => void;
 
@@ -56,15 +56,16 @@ export const useStore = create<Store>()(
       splashDone: false,
 
       addRecipe: (recipe) => {
+        const uid = get().user?.uid ?? '';
+        const recipeWithUser: Recipe = { ...recipe, userId: uid };
         set((s) => ({
-          recipes: [recipe, ...s.recipes],
-          knownSources: s.knownSources.includes(recipe.source)
+          recipes: [recipeWithUser, ...s.recipes],
+          knownSources: s.knownSources.includes(recipeWithUser.source)
             ? s.knownSources
-            : [...s.knownSources, recipe.source],
+            : [...s.knownSources, recipeWithUser.source],
         }));
-        const uid = get().user?.uid;
         if (uid) {
-          saveRecipe(uid, recipe);
+          saveRecipe(uid, recipeWithUser);
           saveKnownSources(uid, get().knownSources);
         }
       },

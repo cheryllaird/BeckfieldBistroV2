@@ -3,12 +3,11 @@ import { Plus, Trash2 } from 'lucide-react';
 import type { Recipe, Ingredient } from '../../types';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
-import { generateId } from '../../lib/utils';
 
 interface Props {
   initial: Partial<Recipe>;
   knownSources: string[];
-  onSave: (recipe: Omit<Recipe, 'id' | 'createdAt' | 'updatedAt'>) => void;
+  onSave: (recipe: Omit<Recipe, 'id' | 'createdAt' | 'updatedAt' | 'userId'>) => void;
   onCancel: () => void;
 }
 
@@ -16,12 +15,13 @@ export function RecipeForm({ initial, knownSources, onSave, onCancel }: Props) {
   const [title, setTitle] = useState(initial.title ?? '');
   const [source, setSource] = useState(initial.source ?? '');
   const [servings, setServings] = useState(initial.servings ?? 4);
-  const [totalTime, setTotalTime] = useState(initial.totalTimeMinutes ?? '');
+  const [prepTime, setPrepTime] = useState(initial.prepTime ?? '');
+  const [totalTime, setTotalTime] = useState(initial.totalTime ?? '');
   const [coverImage, setCoverImage] = useState(initial.coverImage ?? '');
   const [ingredients, setIngredients] = useState<Ingredient[]>(
     initial.ingredients?.length
       ? initial.ingredients
-      : [{ id: generateId(), name: '', quantity: 0, unit: '' }]
+      : [{ name: '', quantity: 0, unit: '', originalText: '' }]
   );
   const [steps, setSteps] = useState<string[]>(
     initial.steps?.length ? initial.steps : ['']
@@ -38,13 +38,21 @@ export function RecipeForm({ initial, knownSources, onSave, onCancel }: Props) {
   const handleSave = () => {
     const errs = validate();
     if (Object.keys(errs).length) { setErrors(errs); return; }
+    const filledIngredients = ingredients
+      .filter((i) => i.name.trim())
+      .map((i) => ({
+        ...i,
+        originalText: i.originalText.trim() || `${i.quantity}${i.unit} ${i.name}`.trim(),
+      }));
     onSave({
       title: title.trim(),
       source: source.trim() || 'Unknown',
       servings,
-      totalTimeMinutes: totalTime ? Number(totalTime) : undefined,
+      prepTime: prepTime.trim(),
+      totalTime: totalTime.trim(),
       coverImage: coverImage.trim() || undefined,
-      ingredients: ingredients.filter((i) => i.name.trim()),
+      originalImage: initial.originalImage,
+      ingredients: filledIngredients,
       steps: steps.filter((s) => s.trim()),
     });
   };
@@ -52,16 +60,16 @@ export function RecipeForm({ initial, knownSources, onSave, onCancel }: Props) {
   const addIngredient = () =>
     setIngredients((prev) => [
       ...prev,
-      { id: generateId(), name: '', quantity: 0, unit: '' },
+      { name: '', quantity: 0, unit: '', originalText: '' },
     ]);
 
-  const updateIngredient = (id: string, field: keyof Ingredient, value: string | number) =>
+  const updateIngredient = (index: number, field: keyof Ingredient, value: string | number) =>
     setIngredients((prev) =>
-      prev.map((i) => (i.id === id ? { ...i, [field]: value } : i))
+      prev.map((ing, i) => (i === index ? { ...ing, [field]: value } : ing))
     );
 
-  const removeIngredient = (id: string) =>
-    setIngredients((prev) => prev.filter((i) => i.id !== id));
+  const removeIngredient = (index: number) =>
+    setIngredients((prev) => prev.filter((_, i) => i !== index));
 
   const addStep = () => setSteps((prev) => [...prev, '']);
   const updateStep = (idx: number, value: string) =>
@@ -97,7 +105,7 @@ export function RecipeForm({ initial, knownSources, onSave, onCancel }: Props) {
           </datalist>
         </div>
 
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-3 gap-3">
           <Input
             label="Servings *"
             type="number"
@@ -107,10 +115,16 @@ export function RecipeForm({ initial, knownSources, onSave, onCancel }: Props) {
             error={errors.servings}
           />
           <Input
-            label="Total Time (min)"
-            type="number"
-            min={0}
-            placeholder="e.g. 45"
+            label="Prep Time"
+            type="text"
+            placeholder="e.g. 15 mins"
+            value={prepTime}
+            onChange={(e) => setPrepTime(e.target.value)}
+          />
+          <Input
+            label="Total Time"
+            type="text"
+            placeholder="e.g. 45 mins"
             value={totalTime}
             onChange={(e) => setTotalTime(e.target.value)}
           />
@@ -137,13 +151,13 @@ export function RecipeForm({ initial, knownSources, onSave, onCancel }: Props) {
       {/* Ingredients */}
       <section className="flex flex-col gap-3">
         <h3 className="text-sm font-semibold text-slate-700 uppercase tracking-wide">Ingredients</h3>
-        {ingredients.map((ing) => (
-          <div key={ing.id} className="flex gap-2 items-start">
+        {ingredients.map((ing, index) => (
+          <div key={index} className="flex gap-2 items-start">
             <div className="grid grid-cols-[1fr_70px_60px] gap-1.5 flex-1">
               <Input
                 placeholder="Ingredient"
                 value={ing.name}
-                onChange={(e) => updateIngredient(ing.id, 'name', e.target.value)}
+                onChange={(e) => updateIngredient(index, 'name', e.target.value)}
               />
               <Input
                 placeholder="Qty"
@@ -151,16 +165,16 @@ export function RecipeForm({ initial, knownSources, onSave, onCancel }: Props) {
                 min={0}
                 step={0.1}
                 value={ing.quantity || ''}
-                onChange={(e) => updateIngredient(ing.id, 'quantity', parseFloat(e.target.value) || 0)}
+                onChange={(e) => updateIngredient(index, 'quantity', parseFloat(e.target.value) || 0)}
               />
               <Input
                 placeholder="Unit"
                 value={ing.unit}
-                onChange={(e) => updateIngredient(ing.id, 'unit', e.target.value)}
+                onChange={(e) => updateIngredient(index, 'unit', e.target.value)}
               />
             </div>
             <button
-              onClick={() => removeIngredient(ing.id)}
+              onClick={() => removeIngredient(index)}
               className="mt-2 text-slate-300 hover:text-red-400 transition-colors shrink-0"
               aria-label="Remove ingredient"
             >

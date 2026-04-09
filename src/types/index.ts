@@ -1,18 +1,20 @@
 export interface Ingredient {
-  id: string;
   name: string;
   quantity: number;
   unit: string;
-  notes?: string;
+  originalText: string;
 }
 
 export interface Recipe {
   id: string;
+  userId: string;
   title: string;
   source: string;
   coverImage?: string;
+  originalImage?: string;
   servings: number;
-  totalTimeMinutes?: number;
+  prepTime: string;
+  totalTime: string;
   ingredients: Ingredient[];
   steps: string[];
   createdAt: string;
