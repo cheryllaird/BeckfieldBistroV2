@@ -13,7 +13,7 @@ import {
 import { useStore } from '../../store';
 import { Button } from '../../components/ui/Button';
 import { Badge } from '../../components/ui/Badge';
-import { formatTime, scaleIngredient, formatQuantity } from '../../lib/utils';
+import { scaleIngredient, formatQuantity } from '../../lib/utils';
 import { PlanDateModal } from './PlanDateModal';
 
 type Tab = 'ingredients' | 'method';
@@ -79,9 +79,14 @@ export function RecipeDetailPage() {
         <Badge variant="default">
           <Users size={11} /> {recipe.servings} servings (original)
         </Badge>
-        {recipe.totalTimeMinutes && (
+        {recipe.prepTime && (
           <Badge variant="amber">
-            <Clock size={11} /> {formatTime(recipe.totalTimeMinutes)}
+            <Clock size={11} /> Prep: {recipe.prepTime}
+          </Badge>
+        )}
+        {recipe.totalTime && (
+          <Badge variant="amber">
+            <Clock size={11} /> {recipe.totalTime}
           </Badge>
         )}
       </div>
@@ -150,15 +155,12 @@ export function RecipeDetailPage() {
 
           {/* Ingredient list */}
           <ul className="flex flex-col divide-y divide-slate-100">
-            {scaledIngredients.map((ing) => (
-              <li key={ing.id} className="flex items-baseline justify-between py-2.5">
+            {scaledIngredients.map((ing, index) => (
+              <li key={index} className="flex items-baseline justify-between py-2.5">
                 <span className="text-sm text-slate-700">{ing.name}</span>
                 <span className="text-sm font-medium text-slate-900 ml-4 shrink-0">
                   {ing.quantity > 0 ? formatQuantity(ing.quantity) : ''}{' '}
                   {ing.unit}
-                  {ing.notes && (
-                    <span className="text-xs text-slate-400 font-normal"> ({ing.notes})</span>
-                  )}
                 </span>
               </li>
             ))}

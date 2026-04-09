@@ -25,7 +25,8 @@ export function NewRecipePage() {
     title: prefillTitle,
     source: '',
     servings: 4,
-    totalTimeMinutes: undefined,
+    prepTime: '',
+    totalTime: '',
     ingredients: [],
     steps: [],
     coverImage: '',
@@ -42,10 +43,11 @@ export function NewRecipePage() {
         title: 'Extracted Recipe Title',
         source: new URL(urlInput).hostname.replace('www.', ''),
         servings: 4,
-        totalTimeMinutes: 30,
+        prepTime: '10 mins',
+        totalTime: '30 mins',
         ingredients: [
-          { id: generateId(), name: 'Ingredient 1', quantity: 1, unit: 'cup' },
-          { id: generateId(), name: 'Ingredient 2', quantity: 200, unit: 'g' },
+          { name: 'Ingredient 1', quantity: 1, unit: 'cup', originalText: '1 cup Ingredient 1' },
+          { name: 'Ingredient 2', quantity: 200, unit: 'g', originalText: '200g Ingredient 2' },
         ],
         steps: [
           'First step of the recipe.',
@@ -64,22 +66,29 @@ export function NewRecipePage() {
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    // Stub: In production, send image to AI vision API
-    setDraft({
-      title: 'Recipe from Image',
-      source: 'Photo Upload',
-      servings: 4,
-      totalTimeMinutes: 45,
-      ingredients: [
-        { id: generateId(), name: 'Ingredient from photo', quantity: 2, unit: 'tbsp' },
-      ],
-      steps: ['Step extracted from photo.'],
-      coverImage: URL.createObjectURL(file),
-    });
-    setMode('manual');
+    const reader = new FileReader();
+    reader.onload = () => {
+      const dataUrl = reader.result as string;
+      // Stub: In production, send image to AI vision API
+      setDraft({
+        title: 'Recipe from Image',
+        source: 'Photo Upload',
+        servings: 4,
+        prepTime: '',
+        totalTime: '45 mins',
+        ingredients: [
+          { name: 'Ingredient from photo', quantity: 2, unit: 'tbsp', originalText: '2 tbsp Ingredient from photo' },
+        ],
+        steps: ['Step extracted from photo.'],
+        coverImage: dataUrl,
+        originalImage: dataUrl,
+      });
+      setMode('manual');
+    };
+    reader.readAsDataURL(file);
   };
 
-  const handleSave = (recipe: Omit<Recipe, 'id' | 'createdAt' | 'updatedAt'>) => {
+  const handleSave = (recipe: Omit<Recipe, 'id' | 'createdAt' | 'updatedAt' | 'userId'>) => {
     const now = new Date().toISOString();
     addRecipe({ ...recipe, id: generateId(), createdAt: now, updatedAt: now });
     navigate('/recipes');

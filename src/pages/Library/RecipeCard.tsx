@@ -1,7 +1,6 @@
 import { Clock, Users, Plus } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import type { Recipe } from '../../types';
-import { formatTime } from '../../lib/utils';
 import { useStore } from '../../store';
 import { generateId, isoDate, getWeekDays } from '../../lib/utils';
 
@@ -71,10 +70,10 @@ export function RecipeCard({ recipe }: Props) {
             <Users size={12} />
             {recipe.servings}
           </span>
-          {recipe.totalTimeMinutes && (
+          {recipe.totalTime && (
             <span className="flex items-center gap-1 text-xs text-slate-500">
               <Clock size={12} />
-              {formatTime(recipe.totalTimeMinutes)}
+              {recipe.totalTime}
             </span>
           )}
         </div>
