@@ -1,5 +1,5 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import Anthropic from '@anthropic-ai/sdk';
+import OpenAI from 'openai';
 import { initializeApp, cert, getApps } from 'firebase-admin/app';
 import { getAuth } from 'firebase-admin/auth';
 
@@ -78,27 +78,27 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     : 'image/jpeg';
   console.log(`extract-recipe: base64Length=${base64.length} mediaType=${resolvedMediaType}`);
 
-  // Call Anthropic
-  const apiKey = process.env.ANTHROPIC_API_KEY;
+  // Call OpenAI
+  const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) {
     return res.status(500).json({ error: 'Server is not configured for AI extraction' });
   }
 
-  const client = new Anthropic({ apiKey });
+  const client = new OpenAI({ apiKey });
 
   let rawText: string;
   try {
-    const response = await client.messages.create({
-      model: 'claude-sonnet-4-6',
+    const response = await client.chat.completions.create({
+      model: 'gpt-4o-mini',
       max_tokens: 2048,
-      system: SYSTEM_PROMPT,
       messages: [
+        { role: 'system', content: SYSTEM_PROMPT },
         {
           role: 'user',
           content: [
             {
-              type: 'image',
-              source: { type: 'base64', media_type: resolvedMediaType, data: base64 },
+              type: 'image_url',
+              image_url: { url: `data:${resolvedMediaType};base64,${base64}` },
             },
             { type: 'text', text: USER_PROMPT },
           ],
@@ -106,15 +106,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       ],
     });
 
-    rawText = response.content
-      .filter((block) => block.type === 'text')
-      .map((block) => (block as { type: 'text'; text: string }).text)
-      .join('');
+    rawText = response.choices[0]?.message?.content ?? '';
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     const status = (err as { status?: number }).status;
-    console.error(`Anthropic error status=${status}`);
-    console.error(`Anthropic error message=${message}`);
+    console.error(`OpenAI error status=${status}`);
+    console.error(`OpenAI error message=${message}`);
     return res.status(502).json({ error: 'AI service error. Please try again.' });
   }
 
