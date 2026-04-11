@@ -1,10 +1,11 @@
 import {
   collection,
   doc,
-  getDocs,
+  onSnapshot,
   setDoc,
   deleteDoc,
   writeBatch,
+  getDocs,
 } from 'firebase/firestore';
 import { db } from './firebase';
 import type { Recipe, MealEntry, ShoppingItem } from '../types';
@@ -16,29 +17,58 @@ const mealEntriesCol = (uid: string) => collection(db!, 'users', uid, 'mealEntri
 const shoppingItemsCol = (uid: string) => collection(db!, 'users', uid, 'shoppingItems');
 const profileDoc = (uid: string) => doc(db!, 'users', uid, 'meta', 'profile');
 
-// ── load all user data at sign-in ─────────────────────────────────────────────
+// ── real-time subscription ────────────────────────────────────────────────────
 
-export async function loadUserData(uid: string): Promise<{
-  recipes: Recipe[];
-  mealEntries: MealEntry[];
-  shoppingItems: ShoppingItem[];
-  knownSources: string[];
-}> {
-  const [recipesSnap, mealEntriesSnap, shoppingItemsSnap, profileSnap] = await Promise.all([
-    getDocs(recipesCol(uid)),
-    getDocs(mealEntriesCol(uid)),
-    getDocs(shoppingItemsCol(uid)),
-    getDocs(collection(db!, 'users', uid, 'meta')),
-  ]);
+export interface UserDataCallbacks {
+  onRecipes: (recipes: Recipe[]) => void;
+  onMealEntries: (entries: MealEntry[]) => void;
+  onShoppingItems: (items: ShoppingItem[]) => void;
+  onKnownSources: (sources: string[]) => void;
+  onError?: (err: Error) => void;
+}
 
-  const recipes = recipesSnap.docs.map((d) => d.data() as Recipe);
-  const mealEntries = mealEntriesSnap.docs.map((d) => d.data() as MealEntry);
-  const shoppingItems = shoppingItemsSnap.docs.map((d) => d.data() as ShoppingItem);
+/**
+ * Subscribes to all user data collections in real-time.
+ * The first emission populates the store; subsequent emissions keep it live
+ * across tabs and devices.
+ * Returns an unsubscribe function that tears down all four listeners.
+ */
+export function subscribeToUserData(uid: string, callbacks: UserDataCallbacks): () => void {
+  const handleError = (err: Error) => {
+    console.error('Firestore subscription error:', err);
+    callbacks.onError?.(err);
+  };
 
-  const profileData = profileSnap.docs.find((d) => d.id === 'profile')?.data();
-  const knownSources: string[] = profileData?.knownSources ?? [];
+  const unsubRecipes = onSnapshot(
+    recipesCol(uid),
+    (snap) => callbacks.onRecipes(snap.docs.map((d) => d.data() as Recipe)),
+    handleError
+  );
 
-  return { recipes, mealEntries, shoppingItems, knownSources };
+  const unsubMealEntries = onSnapshot(
+    mealEntriesCol(uid),
+    (snap) => callbacks.onMealEntries(snap.docs.map((d) => d.data() as MealEntry)),
+    handleError
+  );
+
+  const unsubShoppingItems = onSnapshot(
+    shoppingItemsCol(uid),
+    (snap) => callbacks.onShoppingItems(snap.docs.map((d) => d.data() as ShoppingItem)),
+    handleError
+  );
+
+  const unsubProfile = onSnapshot(
+    profileDoc(uid),
+    (snap) => callbacks.onKnownSources((snap.data()?.knownSources as string[]) ?? []),
+    handleError
+  );
+
+  return () => {
+    unsubRecipes();
+    unsubMealEntries();
+    unsubShoppingItems();
+    unsubProfile();
+  };
 }
 
 // ── recipes ───────────────────────────────────────────────────────────────────

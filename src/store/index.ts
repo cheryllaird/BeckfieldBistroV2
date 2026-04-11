@@ -4,7 +4,7 @@ import { signOut as firebaseSignOut } from 'firebase/auth';
 import type { User as FirebaseUser } from 'firebase/auth';
 import { auth } from '../lib/firebase';
 import {
-  loadUserData,
+  subscribeToUserData,
   saveRecipe,
   deleteRecipeDoc,
   saveMealEntry,
@@ -15,6 +15,9 @@ import {
   saveKnownSources,
 } from '../lib/firestore';
 import type { Recipe, MealEntry, ShoppingItem, AppState } from '../types';
+
+// Module-level ref so it's never serialized into Zustand state or localStorage
+let _unsubscribeUserData: (() => void) | null = null;
 
 interface Store extends AppState {
   // Recipe actions
@@ -147,9 +150,10 @@ export const useStore = create<Store>()(
       },
 
       signIn: (firebaseUser) => {
-        // Authenticate immediately so the app opens at once — data loads in the background.
-        // Awaiting Firestore before setting isAuthenticated caused the app to stay on the
-        // login page whenever Firestore was slow or unavailable.
+        // Tear down any previous listener (e.g. if signIn is called twice)
+        _unsubscribeUserData?.();
+
+        // Authenticate immediately so the app opens at once — data streams in via onSnapshot.
         set({
           isAuthenticated: true,
           user: {
@@ -163,17 +167,21 @@ export const useStore = create<Store>()(
           shoppingItems: [],
           knownSources: [],
         });
-        loadUserData(firebaseUser.uid)
-          .then((data) => set({
-            recipes: data.recipes,
-            mealEntries: data.mealEntries,
-            shoppingItems: data.shoppingItems,
-            knownSources: data.knownSources,
-          }))
-          .catch((e) => console.error('Failed to load user data from Firestore:', e));
+
+        // Subscribe to real-time updates. First emission loads initial data;
+        // subsequent emissions reflect changes from any device or tab.
+        _unsubscribeUserData = subscribeToUserData(firebaseUser.uid, {
+          onRecipes: (recipes) => set({ recipes }),
+          onMealEntries: (mealEntries) => set({ mealEntries }),
+          onShoppingItems: (shoppingItems) => set({ shoppingItems }),
+          onKnownSources: (knownSources) => set({ knownSources }),
+        });
       },
 
       signOut: async () => {
+        // Tear down listeners before clearing state so no orphaned callbacks fire
+        _unsubscribeUserData?.();
+        _unsubscribeUserData = null;
         if (auth) await firebaseSignOut(auth);
         set({
           isAuthenticated: false,
