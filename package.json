@@ -11,7 +11,7 @@
     "generate-pwa-assets": "pwa-assets-generator --config pwa-assets.config.ts"
   },
   "dependencies": {
-    "openai": "^4.0.0",
+    "@google/generative-ai": "^0.24.0",
     "@tanstack/react-query": "^5.95.2",
     "firebase": "^12.11.0",
     "firebase-admin": "^13.7.0",
