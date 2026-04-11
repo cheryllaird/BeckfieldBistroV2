@@ -8,7 +8,7 @@ export class RecipeExtractionError extends Error {
   }
 }
 
-// Anthropic's recommended max dimension for vision — keeps images under the 5MB decoded limit.
+// Max dimension for vision — keeps images under API size limits.
 const MAX_DIMENSION = 1568;
 
 /**
