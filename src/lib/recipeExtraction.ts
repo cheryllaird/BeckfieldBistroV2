@@ -77,7 +77,7 @@ export async function extractRecipeFromUrl(url: string): Promise<Partial<Recipe>
 
   const token = await auth.currentUser.getIdToken();
 
-  const response = await fetch('/api/extract-recipe-url', {
+  const response = await fetch('/api/extract-recipe', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -87,8 +87,10 @@ export async function extractRecipeFromUrl(url: string): Promise<Partial<Recipe>
   });
 
   if (!response.ok) {
-    const body = await response.json().catch(() => ({})) as { error?: string };
-    throw new RecipeExtractionError(body.error ?? 'Failed to extract recipe. Please try again.');
+    const body = await response.json().catch(() => ({}));
+    throw new RecipeExtractionError(
+      body.error ?? 'Failed to extract recipe. Please try again.'
+    );
   }
 
   return response.json() as Promise<Partial<Recipe>>;
