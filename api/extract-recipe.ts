@@ -1,5 +1,5 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import OpenAI from 'openai';
+import { GoogleGenerativeAI } from '@google/generative-ai';
 import { initializeApp, cert, getApps } from 'firebase-admin/app';
 import { getAuth } from 'firebase-admin/auth';
 
@@ -78,40 +78,31 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     : 'image/jpeg';
   console.log(`extract-recipe: base64Length=${base64.length} mediaType=${resolvedMediaType}`);
 
-  // Call OpenAI
-  const apiKey = process.env.OPENAI_API_KEY;
+  // Call Gemini
+  const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) {
     return res.status(500).json({ error: 'Server is not configured for AI extraction' });
   }
 
-  const client = new OpenAI({ apiKey });
+  const genAI = new GoogleGenerativeAI(apiKey);
+  const model = genAI.getGenerativeModel({
+    model: 'gemini-2.0-flash',
+    systemInstruction: SYSTEM_PROMPT,
+  });
 
   let rawText: string;
   try {
-    const response = await client.chat.completions.create({
-      model: 'gpt-4o-mini',
-      max_tokens: 2048,
-      messages: [
-        { role: 'system', content: SYSTEM_PROMPT },
-        {
-          role: 'user',
-          content: [
-            {
-              type: 'image_url',
-              image_url: { url: `data:${resolvedMediaType};base64,${base64}` },
-            },
-            { type: 'text', text: USER_PROMPT },
-          ],
-        },
-      ],
-    });
+    const result = await model.generateContent([
+      { inlineData: { mimeType: resolvedMediaType, data: base64 } },
+      USER_PROMPT,
+    ]);
 
-    rawText = response.choices[0]?.message?.content ?? '';
+    rawText = result.response.text();
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     const status = (err as { status?: number }).status;
-    console.error(`OpenAI error status=${status}`);
-    console.error(`OpenAI error message=${message}`);
+    console.error(`Gemini error status=${status}`);
+    console.error(`Gemini error message=${message}`);
     return res.status(502).json({ error: 'AI service error. Please try again.' });
   }
 
