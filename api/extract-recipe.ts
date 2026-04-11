@@ -47,7 +47,7 @@ Rules:
 - Return ONLY the JSON object. No markdown. No explanation.
 - If a field cannot be determined, use sensible defaults: empty string for strings, 4 for servings, empty arrays for arrays.
 - Keep "originalText" as faithful to the source as possible.
-- Split steps so each array entry is one discrete instruction.`;
+- Split steps so each array entry is one paragraph of instruction.`;
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'POST') {
