@@ -1,5 +1,5 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { GoogleGenerativeAI } from '@google/generative-ai';
+import { GoogleGenerativeAI, type Part } from '@google/generative-ai';
 import { initializeApp, cert, getApps } from 'firebase-admin/app';
 import { getAuth } from 'firebase-admin/auth';
 
@@ -22,9 +22,9 @@ function initFirebaseAdmin() {
 }
 
 const SYSTEM_PROMPT =
-  'You are a recipe extraction assistant. When given an image of a recipe (from a cookbook, handwritten card, screenshot, or printed page), extract the recipe details and return ONLY a valid JSON object — no markdown, no explanation, no code fences.';
+  'You are a recipe extraction assistant. When given a recipe — either as an image (from a cookbook, handwritten card, screenshot, or printed page) or as text scraped from a webpage — extract the recipe details and return ONLY a valid JSON object — no markdown, no explanation, no code fences.';
 
-const USER_PROMPT = `Extract the recipe from this image and return a JSON object with exactly these fields:
+const USER_PROMPT = `Extract the recipe and return a JSON object with exactly these fields:
 
 {
   "title": "string — the recipe name",
@@ -49,6 +49,20 @@ Rules:
 - Keep "originalText" as faithful to the source as possible.
 - Split steps so each array entry is one paragraph of instruction.`;
 
+function stripHtml(html: string): string {
+  return html
+    .replace(/<(script|style|noscript|head)[^>]*>[\s\S]*?<\/\1>/gi, ' ')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/\s{2,}/g, ' ')
+    .trim()
+    .slice(0, 15000);
+}
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
@@ -69,14 +83,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   // Validate request body
-  const { base64, mediaType } = req.body ?? {};
-  if (typeof base64 !== 'string' || !base64) {
-    return res.status(400).json({ error: 'Missing base64 image data' });
+  const { base64, mediaType, url } = req.body ?? {};
+  const hasImage = typeof base64 === 'string' && base64.length > 0;
+  const hasUrl = typeof url === 'string' && url.length > 0;
+
+  if (!hasImage && !hasUrl) {
+    return res.status(400).json({ error: 'Provide either base64 image data or a url' });
   }
-  const resolvedMediaType: SupportedMediaType = SUPPORTED_MEDIA_TYPES.includes(mediaType)
-    ? mediaType
-    : 'image/jpeg';
-  console.log(`extract-recipe: base64Length=${base64.length} mediaType=${resolvedMediaType}`);
 
   // Call Gemini
   const apiKey = process.env.GEMINI_API_KEY;
@@ -90,13 +103,49 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     systemInstruction: SYSTEM_PROMPT,
   });
 
-  let rawText: string;
-  try {
-    const result = await model.generateContent([
+  // Build content parts based on input type
+  let parts: (string | Part)[];
+
+  if (hasImage) {
+    const resolvedMediaType: SupportedMediaType = SUPPORTED_MEDIA_TYPES.includes(mediaType)
+      ? mediaType
+      : 'image/jpeg';
+    console.log(`extract-recipe: base64Length=${base64.length} mediaType=${resolvedMediaType}`);
+    parts = [
       { inlineData: { mimeType: resolvedMediaType, data: base64 } },
       USER_PROMPT,
-    ]);
+    ];
+  } else {
+    // URL path — fetch page and strip to plain text
+    let pageText: string;
+    try {
+      const resp = await fetch(url, {
+        headers: { 'User-Agent': 'Mozilla/5.0 (compatible; BistroBot/1.0)' },
+        signal: AbortSignal.timeout(5000),
+      });
+      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+      const contentType = resp.headers.get('content-type') ?? '';
+      if (!contentType.includes('text/html')) {
+        return res.status(400).json({ error: 'URL does not point to an HTML page' });
+      }
+      const html = await resp.text();
+      pageText = stripHtml(html);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.error(`URL fetch error: ${msg}`);
+      return res.status(400).json({
+        error: 'Could not fetch the recipe page. Check the URL and try again.',
+      });
+    }
 
+    const hostname = new URL(url).hostname.replace('www.', '');
+    console.log(`extract-recipe: url=${hostname} textLength=${pageText.length}`);
+    parts = [`The following is text extracted from ${hostname}.\n\n${pageText}\n\n${USER_PROMPT}`];
+  }
+
+  let rawText: string;
+  try {
+    const result = await model.generateContent(parts);
     rawText = result.response.text();
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
@@ -119,21 +168,21 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   } catch {
     console.error('JSON parse failure. Raw response:', rawText);
     return res.status(422).json({
-      error: 'Could not read the recipe from the photo. Please try again or enter it manually.',
+      error: 'Could not read the recipe. Please try again or enter it manually.',
     });
   }
 
   if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
     return res.status(422).json({
-      error: 'The AI returned an unexpected response. Please try a clearer photo.',
+      error: 'The AI returned an unexpected response. Please try again or enter the recipe manually.',
     });
   }
 
   const data = parsed as Record<string, unknown>;
 
   return res.status(200).json({
-    title: String(data.title ?? 'Recipe from Photo'),
-    source: String(data.source ?? 'Photo Upload'),
+    title: String(data.title ?? 'Extracted Recipe'),
+    source: String(data.source ?? (hasUrl ? new URL(url).hostname.replace('www.', '') : 'Photo Upload')),
     servings: Number(data.servings) || 4,
     prepTime: String(data.prepTime ?? ''),
     totalTime: String(data.totalTime ?? ''),

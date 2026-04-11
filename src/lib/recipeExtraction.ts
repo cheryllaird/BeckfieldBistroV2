@@ -69,3 +69,29 @@ export async function extractRecipeFromImage(dataUrl: string): Promise<Partial<R
 
   return response.json() as Promise<Partial<Recipe>>;
 }
+
+export async function extractRecipeFromUrl(url: string): Promise<Partial<Recipe>> {
+  if (!auth?.currentUser) {
+    throw new RecipeExtractionError('You must be signed in to extract recipes from URLs.');
+  }
+
+  const token = await auth.currentUser.getIdToken();
+
+  const response = await fetch('/api/extract-recipe', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${token}`,
+    },
+    body: JSON.stringify({ url }),
+  });
+
+  if (!response.ok) {
+    const body = await response.json().catch(() => ({}));
+    throw new RecipeExtractionError(
+      body.error ?? 'Failed to extract recipe. Please try again.'
+    );
+  }
+
+  return response.json() as Promise<Partial<Recipe>>;
+}
