@@ -5,7 +5,7 @@ import { useStore } from '../../store';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
 import { generateId } from '../../lib/utils';
-import { extractRecipeFromImage, RecipeExtractionError } from '../../lib/recipeExtraction';
+import { extractRecipeFromImage, extractRecipeFromUrl, RecipeExtractionError } from '../../lib/recipeExtraction';
 import type { Recipe } from '../../types';
 import { RecipeForm } from './RecipeForm';
 
@@ -38,27 +38,15 @@ export function NewRecipePage() {
     setIsExtracting(true);
     setExtractError('');
     try {
-      // Stub: simulate AI extraction delay then fill with placeholder data
-      await new Promise((r) => setTimeout(r, 1500));
-      setDraft({
-        title: 'Extracted Recipe Title',
-        source: new URL(urlInput).hostname.replace('www.', ''),
-        servings: 4,
-        prepTime: '10 mins',
-        totalTime: '30 mins',
-        ingredients: [
-          { name: 'Ingredient 1', quantity: 1, unit: 'cup', originalText: '1 cup Ingredient 1' },
-          { name: 'Ingredient 2', quantity: 200, unit: 'g', originalText: '200g Ingredient 2' },
-        ],
-        steps: [
-          'First step of the recipe.',
-          'Second step of the recipe.',
-        ],
-        coverImage: '',
-      });
+      const extracted = await extractRecipeFromUrl(urlInput.trim());
+      setDraft((prev) => ({ ...prev, ...extracted }));
       setMode('manual');
-    } catch {
-      setExtractError('Could not extract recipe. Please check the URL and try again.');
+    } catch (err) {
+      setExtractError(
+        err instanceof RecipeExtractionError
+          ? err.message
+          : 'Could not extract recipe. Please check the URL and try again.'
+      );
     } finally {
       setIsExtracting(false);
     }
