@@ -12,6 +12,11 @@ import type { Recipe, MealEntry, ShoppingItem } from '../types';
 
 // ── helpers ──────────────────────────────────────────────────────────────────
 
+/** Firestore rejects documents with `undefined` field values. Strip them out. */
+function stripUndefined<T extends object>(obj: T): T {
+  return JSON.parse(JSON.stringify(obj));
+}
+
 const recipesCol = (uid: string) => collection(db!, 'users', uid, 'recipes');
 const mealEntriesCol = (uid: string) => collection(db!, 'users', uid, 'mealEntries');
 const shoppingItemsCol = (uid: string) => collection(db!, 'users', uid, 'shoppingItems');
@@ -74,7 +79,7 @@ export function subscribeToUserData(uid: string, callbacks: UserDataCallbacks): 
 // ── recipes ───────────────────────────────────────────────────────────────────
 
 export function saveRecipe(uid: string, recipe: Recipe): void {
-  setDoc(doc(recipesCol(uid), recipe.id), recipe).catch(console.error);
+  setDoc(doc(recipesCol(uid), recipe.id), stripUndefined(recipe)).catch(console.error);
 }
 
 export function deleteRecipeDoc(uid: string, id: string): void {
@@ -84,7 +89,7 @@ export function deleteRecipeDoc(uid: string, id: string): void {
 // ── meal entries ──────────────────────────────────────────────────────────────
 
 export function saveMealEntry(uid: string, entry: MealEntry): void {
-  setDoc(doc(mealEntriesCol(uid), entry.id), entry).catch(console.error);
+  setDoc(doc(mealEntriesCol(uid), entry.id), stripUndefined(entry)).catch(console.error);
 }
 
 export function deleteMealEntryDoc(uid: string, id: string): void {
@@ -94,7 +99,7 @@ export function deleteMealEntryDoc(uid: string, id: string): void {
 // ── shopping items ────────────────────────────────────────────────────────────
 
 export function saveShoppingItem(uid: string, item: ShoppingItem): void {
-  setDoc(doc(shoppingItemsCol(uid), item.id), item).catch(console.error);
+  setDoc(doc(shoppingItemsCol(uid), item.id), stripUndefined(item)).catch(console.error);
 }
 
 export function deleteShoppingItemDoc(uid: string, id: string): void {
@@ -109,7 +114,7 @@ export async function saveShoppingItems(uid: string, items: ShoppingItem[]): Pro
   const existing = await getDocs(col);
   const batch = writeBatch(db!);
   existing.docs.forEach((d) => batch.delete(d.ref));
-  items.forEach((item) => batch.set(doc(col, item.id), item));
+  items.forEach((item) => batch.set(doc(col, item.id), stripUndefined(item)));
   batch.commit().catch(console.error);
 }
 
