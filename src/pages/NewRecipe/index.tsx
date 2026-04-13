@@ -22,6 +22,9 @@ export function NewRecipePage() {
   const [isExtracting, setIsExtracting] = useState(false);
   const [extractError, setExtractError] = useState('');
 
+  const [isSaving, setIsSaving] = useState(false);
+  const [saveError, setSaveError] = useState('');
+
   const [draft, setDraft] = useState<Partial<Recipe>>({
     title: prefillTitle,
     source: '',
@@ -77,10 +80,19 @@ export function NewRecipePage() {
     reader.readAsDataURL(file);
   };
 
-  const handleSave = (recipe: Omit<Recipe, 'id' | 'createdAt' | 'updatedAt' | 'userId'>) => {
-    const now = new Date().toISOString();
-    addRecipe({ ...recipe, id: generateId(), createdAt: now, updatedAt: now });
-    navigate('/recipes');
+  const handleSave = async (recipe: Omit<Recipe, 'id' | 'createdAt' | 'updatedAt' | 'userId'>) => {
+    setIsSaving(true);
+    setSaveError('');
+    try {
+      const now = new Date().toISOString();
+      await addRecipe({ ...recipe, id: generateId(), createdAt: now, updatedAt: now });
+      navigate('/recipes');
+    } catch (err) {
+      console.error('Failed to save recipe:', err);
+      setSaveError('Failed to save recipe. Please try again.');
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   return (
@@ -189,12 +201,16 @@ export function NewRecipePage() {
 
       {/* Form (manual / after extraction) */}
       {mode === 'manual' && (
-        <RecipeForm
-          initial={draft}
-          knownSources={knownSources}
-          onSave={handleSave}
-          onCancel={() => navigate(-1)}
-        />
+        <>
+          <RecipeForm
+            initial={draft}
+            knownSources={knownSources}
+            onSave={handleSave}
+            onCancel={() => navigate(-1)}
+            isSaving={isSaving}
+          />
+          {saveError && <p className="text-xs text-red-500">{saveError}</p>}
+        </>
       )}
     </div>
   );

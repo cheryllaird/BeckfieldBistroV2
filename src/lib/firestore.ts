@@ -78,8 +78,8 @@ export function subscribeToUserData(uid: string, callbacks: UserDataCallbacks): 
 
 // ── recipes ───────────────────────────────────────────────────────────────────
 
-export function saveRecipe(uid: string, recipe: Recipe): void {
-  setDoc(doc(recipesCol(uid), recipe.id), stripUndefined(recipe)).catch(console.error);
+export function saveRecipe(uid: string, recipe: Recipe): Promise<void> {
+  return setDoc(doc(recipesCol(uid), recipe.id), stripUndefined(recipe));
 }
 
 export function deleteRecipeDoc(uid: string, id: string): void {

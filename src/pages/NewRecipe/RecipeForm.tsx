@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Plus, Trash2 } from 'lucide-react';
+import { Plus, Trash2, Loader } from 'lucide-react';
 import type { Recipe, Ingredient } from '../../types';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
@@ -9,9 +9,10 @@ interface Props {
   knownSources: string[];
   onSave: (recipe: Omit<Recipe, 'id' | 'createdAt' | 'updatedAt' | 'userId'>) => void;
   onCancel: () => void;
+  isSaving?: boolean;
 }
 
-export function RecipeForm({ initial, knownSources, onSave, onCancel }: Props) {
+export function RecipeForm({ initial, knownSources, onSave, onCancel, isSaving }: Props) {
   const [title, setTitle] = useState(initial.title ?? '');
   const [source, setSource] = useState(initial.source ?? '');
   const [servings, setServings] = useState(initial.servings ?? 4);
@@ -218,11 +219,15 @@ export function RecipeForm({ initial, knownSources, onSave, onCancel }: Props) {
 
       {/* Actions */}
       <div className="flex gap-2 pt-2">
-        <Button variant="secondary" fullWidth onClick={onCancel}>
+        <Button variant="secondary" fullWidth onClick={onCancel} disabled={isSaving}>
           Cancel
         </Button>
-        <Button fullWidth onClick={handleSave}>
-          Save Recipe
+        <Button fullWidth onClick={handleSave} disabled={isSaving}>
+          {isSaving ? (
+            <><Loader size={14} className="animate-spin" /> Saving…</>
+          ) : (
+            'Save Recipe'
+          )}
         </Button>
       </div>
     </div>
