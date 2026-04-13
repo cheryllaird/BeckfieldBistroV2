@@ -21,7 +21,7 @@ let _unsubscribeUserData: (() => void) | null = null;
 
 interface Store extends AppState {
   // Recipe actions
-  addRecipe: (recipe: Omit<Recipe, 'userId'>) => void;
+  addRecipe: (recipe: Omit<Recipe, 'userId'>) => Promise<void>;
   updateRecipe: (recipe: Recipe) => void;
   deleteRecipe: (id: string) => void;
 
@@ -58,7 +58,7 @@ export const useStore = create<Store>()(
       user: null,
       splashDone: false,
 
-      addRecipe: (recipe) => {
+      addRecipe: async (recipe) => {
         const uid = get().user?.uid ?? '';
         const recipeWithUser: Recipe = { ...recipe, userId: uid };
         set((s) => ({
@@ -68,7 +68,7 @@ export const useStore = create<Store>()(
             : [...s.knownSources, recipeWithUser.source],
         }));
         if (uid) {
-          saveRecipe(uid, recipeWithUser);
+          await saveRecipe(uid, recipeWithUser);
           saveKnownSources(uid, get().knownSources);
         }
       },
