@@ -80,17 +80,15 @@ export function subscribeToUserData(uid: string, callbacks: UserDataCallbacks): 
 // ── recipes ───────────────────────────────────────────────────────────────────
 
 export function saveRecipe(uid: string, recipe: Recipe): Promise<void> {
-  // Re-enable network in case the SDK got stuck in offline mode (common in PWA
-  // environments). Fire-and-forget — the write below will be sent once the
-  // connection is (re)established.
+  // Re-enable network in case the SDK got stuck in offline mode.
   enableNetwork(db!).catch(() => {});
 
   const writePromise = setDoc(doc(recipesCol(uid), recipe.id), stripUndefined(recipe));
+  // 5-second timeout: if the server hasn't acknowledged by then, the write is
+  // safely queued in IndexedDB (persistentSingleTabManager) and will sync when
+  // connectivity is restored. The caller should navigate away on this error.
   const timeout = new Promise<never>((_, reject) =>
-    setTimeout(
-      () => reject(new Error('Save timed out — check your internet connection and try again.')),
-      10_000
-    )
+    setTimeout(() => reject(new Error('SAVE_TIMEOUT')), 5_000)
   );
   return Promise.race([writePromise, timeout]);
 }

@@ -88,8 +88,14 @@ export function NewRecipePage() {
       await addRecipe({ ...recipe, id: generateId(), createdAt: now, updatedAt: now });
       navigate('/recipes');
     } catch (err) {
-      console.error('Failed to save recipe:', err);
-      setSaveError('Failed to save recipe. Please try again.');
+      if (err instanceof Error && err.message === 'SAVE_TIMEOUT') {
+        // Write is queued in IndexedDB and will sync to Firebase once the
+        // connection is restored — safe to navigate away.
+        navigate('/recipes');
+      } else {
+        console.error('Failed to save recipe:', err);
+        setSaveError('Failed to save recipe. Please try again.');
+      }
     } finally {
       setIsSaving(false);
     }

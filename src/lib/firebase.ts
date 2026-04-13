@@ -1,6 +1,10 @@
 import { initializeApp } from 'firebase/app';
 import { getAuth, GoogleAuthProvider } from 'firebase/auth';
-import { getFirestore } from 'firebase/firestore';
+import {
+  initializeFirestore,
+  persistentLocalCache,
+  persistentSingleTabManager,
+} from 'firebase/firestore';
 
 const firebaseConfig = {
   apiKey:            import.meta.env.VITE_FIREBASE_API_KEY,
@@ -24,4 +28,15 @@ const app = firebaseConfigured ? initializeApp(firebaseConfig) : null;
 
 export const auth           = app ? getAuth(app) : null;
 export const googleProvider = new GoogleAuthProvider();
-export const db             = app ? getFirestore(app) : null;
+// persistentSingleTabManager stores writes in IndexedDB immediately so they
+// survive page refreshes and sync to Firebase when the connection is restored.
+// This replaces the default in-memory-only mode (which caused setDoc to hang
+// forever when the SDK was offline in PWA production environments) without
+// the multi-tab leader-election issues of persistentMultipleTabManager.
+export const db = app
+  ? initializeFirestore(app, {
+      localCache: persistentLocalCache({
+        tabManager: persistentSingleTabManager(undefined),
+      }),
+    })
+  : null;
