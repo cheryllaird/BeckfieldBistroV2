@@ -1,6 +1,6 @@
 import { initializeApp } from 'firebase/app';
 import { getAuth, GoogleAuthProvider } from 'firebase/auth';
-import { initializeFirestore, persistentLocalCache, persistentMultipleTabManager } from 'firebase/firestore';
+import { getFirestore } from 'firebase/firestore';
 
 const firebaseConfig = {
   apiKey:            import.meta.env.VITE_FIREBASE_API_KEY,
@@ -22,12 +22,6 @@ export const firebaseConfigured =
 // crash (auth/invalid-api-key) when .env.local hasn't been created yet.
 const app = firebaseConfigured ? initializeApp(firebaseConfig) : null;
 
-export const auth        = app ? getAuth(app) : null;
+export const auth           = app ? getAuth(app) : null;
 export const googleProvider = new GoogleAuthProvider();
-export const db          = app
-  ? initializeFirestore(app, {
-      localCache: persistentLocalCache({
-        tabManager: persistentMultipleTabManager(),
-      }),
-    })
-  : null;
+export const db             = app ? getFirestore(app) : null;
