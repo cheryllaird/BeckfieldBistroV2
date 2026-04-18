@@ -63,6 +63,22 @@ function stripHtml(html: string): string {
     .slice(0, 15000);
 }
 
+async function callGeminiWithRetry(fn: () => Promise<string>): Promise<string> {
+  const delays = [1000, 2000];
+  for (let attempt = 0; attempt <= delays.length; attempt++) {
+    try {
+      return await fn();
+    } catch (err) {
+      const status = (err as { status?: number }).status;
+      const message = err instanceof Error ? err.message : String(err);
+      const isRateLimit = status === 429 || message.includes('429');
+      if (!isRateLimit || attempt === delays.length) throw err;
+      await new Promise((resolve) => setTimeout(resolve, delays[attempt]));
+    }
+  }
+  throw new Error('unreachable');
+}
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
@@ -145,13 +161,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   let rawText: string;
   try {
-    const result = await model.generateContent(parts);
-    rawText = result.response.text();
+    rawText = await callGeminiWithRetry(() =>
+      model.generateContent(parts).then((r) => r.response.text())
+    );
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     const status = (err as { status?: number }).status;
     console.error(`Gemini error status=${status}`);
     console.error(`Gemini error message=${message}`);
+    if (status === 429 || message.includes('429')) {
+      return res.status(429).json({ error: 'Too many requests. Please wait a moment and try again.' });
+    }
     return res.status(502).json({ error: 'AI service error. Please try again.' });
   }
 
