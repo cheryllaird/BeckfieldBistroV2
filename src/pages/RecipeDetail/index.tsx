@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
   ArrowLeft,
@@ -9,6 +9,9 @@ import {
   CalendarPlus,
   Trash2,
   Edit,
+  MoreVertical,
+  ExternalLink,
+  Image,
 } from 'lucide-react';
 import { useStore } from '../../store';
 import { Button } from '../../components/ui/Button';
@@ -27,6 +30,19 @@ export function RecipeDetailPage() {
   const [tab, setTab] = useState<Tab>('ingredients');
   const [servings, setServings] = useState(recipe?.servings ?? 2);
   const [planModalOpen, setPlanModalOpen] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!menuOpen) return;
+    const handleOutside = (e: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        setMenuOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleOutside);
+    return () => document.removeEventListener('mousedown', handleOutside);
+  }, [menuOpen]);
 
   if (!recipe) {
     return (
@@ -44,6 +60,7 @@ export function RecipeDetailPage() {
   );
 
   const handleDelete = () => {
+    setMenuOpen(false);
     if (confirm(`Delete "${recipe.title}"? This cannot be undone.`)) {
       deleteRecipe(recipe.id);
       navigate('/recipes');
@@ -66,6 +83,61 @@ export function RecipeDetailPage() {
           </div>
         )}
         <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-transparent" />
+
+        {/* Kebab menu — top right overlay */}
+        <div className="absolute top-3 right-3" ref={menuRef}>
+          <button
+            onClick={() => setMenuOpen((v) => !v)}
+            className="w-8 h-8 rounded-full bg-black/40 hover:bg-black/60 text-white flex items-center justify-center transition-colors"
+            aria-label="More options"
+          >
+            <MoreVertical size={16} />
+          </button>
+
+          {menuOpen && (
+            <div className="absolute right-0 top-10 bg-white rounded-xl shadow-lg border border-slate-100 py-1 min-w-[180px] z-50">
+              <button
+                onClick={() => { navigate(`/recipes/${recipe.id}/edit`); setMenuOpen(false); }}
+                className="flex items-center gap-2.5 w-full px-4 py-2.5 text-sm text-slate-700 hover:bg-slate-50 transition-colors"
+              >
+                <Edit size={14} /> Edit recipe
+              </button>
+
+              {recipe.originalImage && (
+                <a
+                  href={recipe.originalImage}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  onClick={() => setMenuOpen(false)}
+                  className="flex items-center gap-2.5 w-full px-4 py-2.5 text-sm text-slate-700 hover:bg-slate-50 transition-colors"
+                >
+                  <Image size={14} /> View original image
+                </a>
+              )}
+
+              {recipe.sourceUrl && (
+                <a
+                  href={recipe.sourceUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  onClick={() => setMenuOpen(false)}
+                  className="flex items-center gap-2.5 w-full px-4 py-2.5 text-sm text-slate-700 hover:bg-slate-50 transition-colors"
+                >
+                  <ExternalLink size={14} /> View original recipe
+                </a>
+              )}
+
+              <div className="my-1 border-t border-slate-100" />
+
+              <button
+                onClick={handleDelete}
+                className="flex items-center gap-2.5 w-full px-4 py-2.5 text-sm text-red-600 hover:bg-red-50 transition-colors"
+              >
+                <Trash2 size={14} /> Delete recipe
+              </button>
+            </div>
+          )}
+        </div>
 
         {/* Title overlay */}
         <div className="absolute bottom-0 left-0 right-0 p-4">
@@ -100,12 +172,6 @@ export function RecipeDetailPage() {
           className="flex-1"
         >
           <CalendarPlus size={14} /> Plan this meal
-        </Button>
-        <Button variant="secondary" size="sm" onClick={() => navigate(`/recipes/${recipe.id}/edit`)}>
-          <Edit size={14} />
-        </Button>
-        <Button variant="danger" size="sm" onClick={handleDelete}>
-          <Trash2 size={14} />
         </Button>
       </div>
 

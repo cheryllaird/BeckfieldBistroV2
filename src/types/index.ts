@@ -10,6 +10,7 @@ export interface Recipe {
   userId: string;
   title: string;
   source: string;
+  sourceUrl?: string;
   coverImage?: string;
   originalImage?: string;
   servings: number;

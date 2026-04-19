@@ -48,7 +48,7 @@ export function NewRecipePage() {
     setExtractError('');
     try {
       const extracted = await extractRecipeFromUrl(urlInput.trim());
-      setDraft((prev) => ({ ...prev, ...extracted }));
+      setDraft((prev) => ({ ...prev, ...extracted, sourceUrl: urlInput.trim() }));
       setMode('manual');
     } catch (err) {
       setExtractError(
