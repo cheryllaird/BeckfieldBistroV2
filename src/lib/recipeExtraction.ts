@@ -15,7 +15,7 @@ const MAX_DIMENSION = 1568;
  * Resizes an image DataURL using a canvas so the longest side is at most
  * MAX_DIMENSION pixels. Returns a JPEG DataURL (quality 0.85).
  */
-function resizeImage(dataUrl: string): Promise<string> {
+export function resizeImage(dataUrl: string): Promise<string> {
   return new Promise((resolve, reject) => {
     const img = new Image();
     img.onload = () => {
