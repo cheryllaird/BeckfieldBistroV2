@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useNavigate, useSearchParams, useParams } from 'react-router-dom';
 import { ArrowLeft, Camera, Upload, Link, Plus, Loader } from 'lucide-react';
 import { useStore } from '../../store';
 import { Button } from '../../components/ui/Button';
@@ -14,10 +14,14 @@ type CaptureMode = 'url' | 'upload' | 'manual';
 export function NewRecipePage() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const { addRecipe, knownSources } = useStore();
+  const { id: editId } = useParams<{ id: string }>();
+  const { addRecipe, updateRecipe, knownSources, recipes } = useStore();
+
+  const existingRecipe = editId ? recipes.find((r) => r.id === editId) : undefined;
+  const isEditMode = !!existingRecipe;
 
   const prefillTitle = searchParams.get('title') ?? '';
-  const [mode, setMode] = useState<CaptureMode>(prefillTitle ? 'manual' : 'url');
+  const [mode, setMode] = useState<CaptureMode>(prefillTitle || isEditMode ? 'manual' : 'url');
   const [urlInput, setUrlInput] = useState('');
   const [isExtracting, setIsExtracting] = useState(false);
   const [extractError, setExtractError] = useState('');
@@ -25,16 +29,18 @@ export function NewRecipePage() {
   const [isSaving, setIsSaving] = useState(false);
   const [saveError, setSaveError] = useState('');
 
-  const [draft, setDraft] = useState<Partial<Recipe>>({
-    title: prefillTitle,
-    source: '',
-    servings: 4,
-    prepTime: '',
-    totalTime: '',
-    ingredients: [],
-    steps: [],
-    coverImage: '',
-  });
+  const [draft, setDraft] = useState<Partial<Recipe>>(
+    existingRecipe ?? {
+      title: prefillTitle,
+      source: '',
+      servings: 4,
+      prepTime: '',
+      totalTime: '',
+      ingredients: [],
+      steps: [],
+      coverImage: '',
+    }
+  );
 
   const handleUrlExtract = async () => {
     if (!urlInput.trim()) return;
@@ -88,13 +94,16 @@ export function NewRecipePage() {
     setSaveError('');
     try {
       const now = new Date().toISOString();
-      await addRecipe({ ...recipe, id: generateId(), createdAt: now, updatedAt: now });
-      navigate('/recipes');
+      if (isEditMode && existingRecipe) {
+        await updateRecipe({ ...existingRecipe, ...recipe, updatedAt: now });
+        navigate(`/recipes/${existingRecipe.id}`);
+      } else {
+        await addRecipe({ ...recipe, id: generateId(), createdAt: now, updatedAt: now });
+        navigate('/recipes');
+      }
     } catch (err) {
       if (err instanceof Error && err.message === 'SAVE_TIMEOUT') {
-        // Write is queued in IndexedDB and will sync to Firebase once the
-        // connection is restored — safe to navigate away.
-        navigate('/recipes');
+        navigate(isEditMode && existingRecipe ? `/recipes/${existingRecipe.id}` : '/recipes');
       } else {
         console.error('Failed to save recipe:', err);
         setSaveError('Failed to save recipe. Please try again.');
@@ -115,12 +124,12 @@ export function NewRecipePage() {
           <ArrowLeft size={20} />
         </button>
         <h2 className="text-xl font-bold text-slate-800">
-          {prefillTitle ? 'Digitise Recipe' : 'Add Recipe'}
+          {isEditMode ? 'Edit Recipe' : prefillTitle ? 'Digitise Recipe' : 'Add Recipe'}
         </h2>
       </div>
 
-      {/* Capture mode selector (not shown if prefill from planner) */}
-      {!prefillTitle && (
+      {/* Capture mode selector (not shown if prefill from planner or in edit mode) */}
+      {!prefillTitle && !isEditMode && (
         <div className="flex bg-slate-100 rounded-xl p-1 gap-0">
           {[
             { key: 'url', label: 'URL', icon: Link },
