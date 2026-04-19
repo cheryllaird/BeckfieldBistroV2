@@ -5,7 +5,7 @@ import { useStore } from '../../store';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
 import { generateId } from '../../lib/utils';
-import { extractRecipeFromImage, extractRecipeFromUrl, RecipeExtractionError } from '../../lib/recipeExtraction';
+import { extractRecipeFromImage, extractRecipeFromUrl, resizeImage, RecipeExtractionError } from '../../lib/recipeExtraction';
 import type { Recipe } from '../../types';
 import { RecipeForm } from './RecipeForm';
 
@@ -64,8 +64,11 @@ export function NewRecipePage() {
       setIsExtracting(true);
       setExtractError('');
       try {
-        const extracted = await extractRecipeFromImage(dataUrl);
-        setDraft({ ...extracted, coverImage: dataUrl, originalImage: dataUrl });
+        const [extracted, resizedDataUrl] = await Promise.all([
+          extractRecipeFromImage(dataUrl),
+          resizeImage(dataUrl),
+        ]);
+        setDraft({ ...extracted, coverImage: resizedDataUrl, originalImage: resizedDataUrl });
         setMode('manual');
       } catch (err) {
         setExtractError(
