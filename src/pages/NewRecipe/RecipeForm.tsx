@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react';
-import { Plus, Trash2, Loader, Camera, X } from 'lucide-react';
+import { Plus, Trash2, Loader, Camera, X, Link } from 'lucide-react';
 import type { Recipe, Ingredient } from '../../types';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
@@ -30,6 +30,8 @@ export function RecipeForm({ initial, knownSources, onSave, onCancel, isSaving }
   );
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [coverPhotoLoading, setCoverPhotoLoading] = useState(false);
+  const [showCoverActions, setShowCoverActions] = useState(false);
+  const [showUrlEntry, setShowUrlEntry] = useState(false);
   const coverPhotoRef = useRef<HTMLInputElement>(null);
 
   const handleCoverPhotoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -42,6 +44,8 @@ export function RecipeForm({ initial, knownSources, onSave, onCancel, isSaving }
       try {
         const resized = await resizeImage(dataUrl);
         setCoverImage(resized);
+        setShowCoverActions(false);
+        setShowUrlEntry(false);
       } finally {
         setCoverPhotoLoading(false);
         if (coverPhotoRef.current) coverPhotoRef.current.value = '';
@@ -183,33 +187,84 @@ export function RecipeForm({ initial, knownSources, onSave, onCancel, isSaving }
             onChange={handleCoverPhotoChange}
           />
 
-          <Button
-            type="button"
-            variant="secondary"
-            size="sm"
-            onClick={() => coverPhotoRef.current?.click()}
-            disabled={coverPhotoLoading}
-          >
-            {coverPhotoLoading ? (
-              <><Loader size={13} className="animate-spin" /> Processing…</>
-            ) : (
-              <><Camera size={13} /> {coverImage.startsWith('data:') ? 'Replace Photo' : 'Take / Upload Photo'}</>
-            )}
-          </Button>
+          {/* Main action button — expands to two choices */}
+          {!showCoverActions && !showUrlEntry && (
+            <Button
+              type="button"
+              variant="secondary"
+              size="sm"
+              onClick={() => setShowCoverActions(true)}
+              disabled={coverPhotoLoading}
+            >
+              {coverPhotoLoading ? (
+                <><Loader size={13} className="animate-spin" /> Processing…</>
+              ) : (
+                coverImage ? 'Replace Photo / URL' : 'Add Cover Photo / URL'
+              )}
+            </Button>
+          )}
 
-          <div className="flex items-center gap-2">
-            <div className="h-px flex-1 bg-slate-200" />
-            <span className="text-xs text-slate-400">or</span>
-            <div className="h-px flex-1 bg-slate-200" />
-          </div>
+          {/* Two inline choices */}
+          {showCoverActions && (
+            <div className="flex gap-2">
+              <Button
+                type="button"
+                variant="secondary"
+                size="sm"
+                className="flex-1"
+                onClick={() => {
+                  setShowCoverActions(false);
+                  coverPhotoRef.current?.click();
+                }}
+              >
+                <Camera size={13} /> Take / Upload Photo
+              </Button>
+              <Button
+                type="button"
+                variant="secondary"
+                size="sm"
+                className="flex-1"
+                onClick={() => {
+                  setShowCoverActions(false);
+                  setShowUrlEntry(true);
+                }}
+              >
+                <Link size={13} /> Enter URL
+              </Button>
+              <button
+                type="button"
+                onClick={() => setShowCoverActions(false)}
+                className="text-slate-400 hover:text-slate-600 transition-colors px-1"
+                aria-label="Cancel"
+              >
+                <X size={15} />
+              </button>
+            </div>
+          )}
 
-          <Input
-            type="url"
-            placeholder="Paste an image URL…"
-            value={coverImage.startsWith('data:') ? '' : coverImage}
-            onChange={(e) => setCoverImage(e.target.value)}
-            hint={coverImage.startsWith('data:') ? 'Typing a URL will replace the photo' : 'Paste an image URL or leave blank'}
-          />
+          {/* URL entry */}
+          {showUrlEntry && (
+            <div className="flex gap-2 items-start">
+              <div className="flex-1">
+                <Input
+                  type="url"
+                  placeholder="Paste an image URL…"
+                  value={coverImage.startsWith('data:') ? '' : coverImage}
+                  onChange={(e) => setCoverImage(e.target.value)}
+                  // eslint-disable-next-line jsx-a11y/no-autofocus
+                  autoFocus
+                />
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowUrlEntry(false)}
+                className="mt-2.5 text-slate-400 hover:text-slate-600 transition-colors"
+                aria-label="Done"
+              >
+                <X size={15} />
+              </button>
+            </div>
+          )}
         </div>
       </section>
 
