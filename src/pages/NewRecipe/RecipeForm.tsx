@@ -78,6 +78,7 @@ export function RecipeForm({ initial, knownSources, onSave, onCancel, isSaving }
       totalTime: totalTime.trim(),
       coverImage: coverImage.trim() || undefined,
       originalImage: initial.originalImage,
+      sourceUrl: initial.sourceUrl,
       ingredients: filledIngredients,
       steps: steps.filter((s) => s.trim()),
     });
