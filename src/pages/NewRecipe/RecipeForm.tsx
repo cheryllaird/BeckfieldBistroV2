@@ -183,6 +183,7 @@ export function RecipeForm({ initial, knownSources, onSave, onCancel, isSaving }
             ref={coverPhotoRef}
             type="file"
             accept="image/*"
+            capture="environment"
             className="hidden"
             onChange={handleCoverPhotoChange}
           />
@@ -217,7 +218,7 @@ export function RecipeForm({ initial, knownSources, onSave, onCancel, isSaving }
                   coverPhotoRef.current?.click();
                 }}
               >
-                <Camera size={13} /> Take / Upload Photo
+                <Camera size={13} /> Take Photo
               </Button>
               <Button
                 type="button"
