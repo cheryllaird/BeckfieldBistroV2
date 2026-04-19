@@ -1,8 +1,9 @@
-import { useState } from 'react';
-import { Plus, Trash2, Loader } from 'lucide-react';
+import { useRef, useState } from 'react';
+import { Plus, Trash2, Loader, Camera, X } from 'lucide-react';
 import type { Recipe, Ingredient } from '../../types';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
+import { resizeImage } from '../../lib/recipeExtraction';
 
 interface Props {
   initial: Partial<Recipe>;
@@ -28,6 +29,26 @@ export function RecipeForm({ initial, knownSources, onSave, onCancel, isSaving }
     initial.steps?.length ? initial.steps : ['']
   );
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [coverPhotoLoading, setCoverPhotoLoading] = useState(false);
+  const coverPhotoRef = useRef<HTMLInputElement>(null);
+
+  const handleCoverPhotoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = async () => {
+      const dataUrl = reader.result as string;
+      setCoverPhotoLoading(true);
+      try {
+        const resized = await resizeImage(dataUrl);
+        setCoverImage(resized);
+      } finally {
+        setCoverPhotoLoading(false);
+        if (coverPhotoRef.current) coverPhotoRef.current.value = '';
+      }
+    };
+    reader.readAsDataURL(file);
+  };
 
   const validate = () => {
     const e: Record<string, string> = {};
@@ -131,22 +152,65 @@ export function RecipeForm({ initial, knownSources, onSave, onCancel, isSaving }
           />
         </div>
 
-        <Input
-          label="Cover Image URL"
-          type="url"
-          placeholder="https://…"
-          value={coverImage}
-          onChange={(e) => setCoverImage(e.target.value)}
-          hint="Paste an image URL or leave blank"
-        />
-        {coverImage && (
-          <img
-            src={coverImage}
-            alt="Cover preview"
-            className="w-full aspect-video object-cover rounded-xl"
-            onError={(e) => (e.currentTarget.style.display = 'none')}
+        {/* Cover Image */}
+        <div className="flex flex-col gap-2">
+          <span className="text-xs font-medium text-slate-600 uppercase tracking-wide">Cover Image</span>
+
+          {coverImage && (
+            <div className="relative">
+              <img
+                src={coverImage}
+                alt="Cover preview"
+                className="w-full aspect-video object-cover rounded-xl"
+                onError={(e) => (e.currentTarget.style.display = 'none')}
+              />
+              <button
+                type="button"
+                onClick={() => setCoverImage('')}
+                className="absolute top-2 right-2 bg-black/40 hover:bg-black/60 text-white rounded-full p-1.5 transition-colors"
+                aria-label="Remove cover image"
+              >
+                <X size={13} />
+              </button>
+            </div>
+          )}
+
+          <input
+            ref={coverPhotoRef}
+            type="file"
+            accept="image/*"
+            className="hidden"
+            onChange={handleCoverPhotoChange}
           />
-        )}
+
+          <Button
+            type="button"
+            variant="secondary"
+            size="sm"
+            onClick={() => coverPhotoRef.current?.click()}
+            disabled={coverPhotoLoading}
+          >
+            {coverPhotoLoading ? (
+              <><Loader size={13} className="animate-spin" /> Processing…</>
+            ) : (
+              <><Camera size={13} /> {coverImage.startsWith('data:') ? 'Replace Photo' : 'Take / Upload Photo'}</>
+            )}
+          </Button>
+
+          <div className="flex items-center gap-2">
+            <div className="h-px flex-1 bg-slate-200" />
+            <span className="text-xs text-slate-400">or</span>
+            <div className="h-px flex-1 bg-slate-200" />
+          </div>
+
+          <Input
+            type="url"
+            placeholder="Paste an image URL…"
+            value={coverImage.startsWith('data:') ? '' : coverImage}
+            onChange={(e) => setCoverImage(e.target.value)}
+            hint={coverImage.startsWith('data:') ? 'Typing a URL will replace the photo' : 'Paste an image URL or leave blank'}
+          />
+        </div>
       </section>
 
       {/* Ingredients */}
