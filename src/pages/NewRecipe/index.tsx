@@ -74,7 +74,7 @@ export function NewRecipePage() {
           extractRecipeFromImage(dataUrl),
           resizeImage(dataUrl),
         ]);
-        setDraft({ ...extracted, coverImage: resizedDataUrl, originalImage: resizedDataUrl });
+        setDraft({ ...extracted, coverImage: resizedDataUrl });
         setMode('manual');
       } catch (err) {
         setExtractError(

@@ -103,7 +103,7 @@ export function RecipeDetailPage() {
                 <Edit size={14} /> Edit recipe
               </button>
 
-              {recipe.originalImage && (
+              {recipe.originalImage && !recipe.originalImage.startsWith('data:') && (
                 <a
                   href={recipe.originalImage}
                   target="_blank"
