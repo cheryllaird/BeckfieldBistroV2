@@ -64,14 +64,20 @@ function stripHtml(html: string): string {
 }
 
 async function callGeminiWithRetry(fn: () => Promise<string>): Promise<string> {
-  const delays = [1000, 2000];
+  const delays = [8000, 20000];
   for (let attempt = 0; attempt <= delays.length; attempt++) {
     try {
       return await fn();
     } catch (err) {
-      const status = (err as { status?: number }).status;
+      const e = err as Record<string, unknown>;
+      const status = (e.status ?? e.httpStatus ?? e.statusCode) as number | undefined;
       const message = err instanceof Error ? err.message : String(err);
-      const isRateLimit = status === 429 || message.includes('429');
+      const isRateLimit =
+        status === 429 ||
+        message.includes('429') ||
+        message.includes('RESOURCE_EXHAUSTED') ||
+        message.toLowerCase().includes('too many requests') ||
+        message.toLowerCase().includes('quota exceeded');
       if (!isRateLimit || attempt === delays.length) throw err;
       await new Promise((resolve) => setTimeout(resolve, delays[attempt]));
     }
