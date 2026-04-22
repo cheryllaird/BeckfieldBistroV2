@@ -49,6 +49,51 @@ Rules:
 - Keep "originalText" as faithful to the source as possible.
 - Split steps so each array entry is one paragraph of instruction.`;
 
+function resolveUrl(imageUrl: string, pageUrl: string): string {
+  try {
+    return new URL(imageUrl, pageUrl).href;
+  } catch {
+    return imageUrl;
+  }
+}
+
+function extractPageImage(html: string, pageUrl: string): string {
+  // JSON-LD first (most reliable for recipe sites)
+  const scriptRe = /<script[^>]+type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi;
+  let match: RegExpExecArray | null;
+  while ((match = scriptRe.exec(html)) !== null) {
+    try {
+      const data = JSON.parse(match[1]) as Record<string, unknown>;
+      const items: unknown[] = Array.isArray(data['@graph']) ? (data['@graph'] as unknown[]) : [data];
+      for (const item of items) {
+        const rec = item as Record<string, unknown>;
+        if (rec['@type'] === 'Recipe') {
+          const img = rec.image;
+          let imgUrl = '';
+          if (typeof img === 'string') imgUrl = img;
+          else if (Array.isArray(img)) imgUrl = String(img[0] ?? '');
+          else if (img && typeof img === 'object') imgUrl = String((img as Record<string, unknown>).url ?? '');
+          if (imgUrl) return resolveUrl(imgUrl, pageUrl);
+        }
+      }
+    } catch { /* skip malformed JSON-LD */ }
+  }
+
+  // og:image fallback
+  const og =
+    html.match(/<meta[^>]+property=["']og:image["'][^>]+content=["']([^"']+)["']/i) ??
+    html.match(/<meta[^>]+content=["']([^"']+)["'][^>]+property=["']og:image["']/i);
+  if (og?.[1]) return resolveUrl(og[1], pageUrl);
+
+  // twitter:image fallback
+  const tw =
+    html.match(/<meta[^>]+(?:name|property)=["']twitter:image["'][^>]+content=["']([^"']+)["']/i) ??
+    html.match(/<meta[^>]+content=["']([^"']+)["'][^>]+(?:name|property)=["']twitter:image["']/i);
+  if (tw?.[1]) return resolveUrl(tw[1], pageUrl);
+
+  return '';
+}
+
 function stripHtml(html: string): string {
   return html
     .replace(/<(script|style|noscript|head)[^>]*>[\s\S]*?<\/\1>/gi, ' ')
@@ -127,6 +172,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   // Build content parts based on input type
   let parts: (string | Part)[];
+  let coverImage = '';
 
   if (hasImage) {
     const resolvedMediaType: SupportedMediaType = SUPPORTED_MEDIA_TYPES.includes(mediaType)
@@ -151,6 +197,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         return res.status(400).json({ error: 'URL does not point to an HTML page' });
       }
       const html = await resp.text();
+      coverImage = extractPageImage(html, url);
       pageText = stripHtml(html);
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
@@ -221,5 +268,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         }))
       : [],
     steps: Array.isArray(data.steps) ? data.steps.map(String) : [],
+    ...(coverImage && { coverImage }),
   });
 }
