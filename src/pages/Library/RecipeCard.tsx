@@ -1,4 +1,4 @@
-import { Clock, Users, Plus, CalendarPlus, UtensilsCrossed } from 'lucide-react';
+import { Clock, Users, CalendarPlus, UtensilsCrossed } from 'lucide-react';
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import type { Recipe } from '../../types';
