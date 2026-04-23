@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Plus, UtensilsCrossed, MapPin, FileText, Minus, Trash2, ShoppingCart, CalendarDays } from 'lucide-react';
+import { Plus, UtensilsCrossed, MapPin, FileText, Minus, Trash2, ShoppingCart, CalendarDays, ChevronDown } from 'lucide-react';
 import { useStore } from '../../store';
 import { formatDayLabel, isoDate, generateId } from '../../lib/utils';
 import type { MealEntry, MealTime } from '../../types';
@@ -18,7 +18,7 @@ const MEAL_TIME_ORDER: Record<MealTime, number> = {
   snack: 3,
 };
 
-const MEAL_TIME_ACTIVE: Record<MealTime, string> = {
+const MEAL_TIME_CHIP: Record<MealTime, string> = {
   breakfast: 'bg-amber-400 text-white',
   lunch: 'bg-green-500 text-white',
   dinner: 'bg-blue-500 text-white',
@@ -176,25 +176,31 @@ function MealChip({ entry, title, onClick, onDelete, onServingsChange, onMealTim
         </button>
       </div>
 
-      {/* Row 2: Meal time pills + Actions */}
+      {/* Row 2: Meal time chip + Actions */}
       <div className="flex items-center gap-1.5">
-        {/* Meal time toggle pills */}
-        <div className="flex gap-1">
-          {(['breakfast', 'lunch', 'dinner', 'snack'] as MealTime[]).map((mt) => (
-            <button
-              key={mt}
-              title={mt.charAt(0).toUpperCase() + mt.slice(1)}
-              onClick={() => onMealTimeChange(entry.mealTime === mt ? undefined : mt)}
-              className={[
-                'w-7 h-7 rounded-full text-[10px] font-bold flex items-center justify-center transition-colors',
-                entry.mealTime === mt
-                  ? MEAL_TIME_ACTIVE[mt]
-                  : 'bg-white/70 text-slate-300 hover:bg-slate-200 hover:text-slate-500',
-              ].join(' ')}
-            >
-              {mt[0].toUpperCase()}
-            </button>
-          ))}
+        {/* Meal time select chip */}
+        <div className="relative inline-flex items-center shrink-0">
+          <div className={[
+            'flex items-center gap-1 pl-2.5 pr-2 py-1 rounded-full text-[10px] font-semibold pointer-events-none',
+            entry.mealTime ? MEAL_TIME_CHIP[entry.mealTime] : 'bg-slate-100 text-slate-400',
+          ].join(' ')}>
+            {entry.mealTime
+              ? entry.mealTime.charAt(0).toUpperCase() + entry.mealTime.slice(1)
+              : 'Set time'}
+            <ChevronDown size={9} />
+          </div>
+          <select
+            value={entry.mealTime ?? ''}
+            onChange={(e) => onMealTimeChange((e.target.value as MealTime) || undefined)}
+            className="absolute inset-0 opacity-0 w-full h-full cursor-pointer"
+            aria-label="Meal time"
+          >
+            <option value="">No time set</option>
+            <option value="breakfast">Breakfast</option>
+            <option value="lunch">Lunch</option>
+            <option value="dinner">Dinner</option>
+            <option value="snack">Snack</option>
+          </select>
         </div>
 
         <div className="flex-1" />

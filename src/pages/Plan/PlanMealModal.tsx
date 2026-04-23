@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { X, Search, UtensilsCrossed, FileText, MapPin } from 'lucide-react';
+import { X, Search, UtensilsCrossed, FileText, MapPin, ChevronDown } from 'lucide-react';
 import { useStore } from '../../store';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
@@ -48,7 +48,7 @@ interface Props {
 export function PlanMealModal({ date, onClose }: Props) {
   const { recipes, addMealEntry } = useStore();
   const [tab, setTab] = useState<'recipe' | 'custom' | 'dining-out'>('recipe');
-  const [mealTime, setMealTime] = useState<MealTime | undefined>(undefined);
+  const [mealTime, setMealTime] = useState<MealTime | undefined>('dinner');
   const [query, setQuery] = useState('');
   const [customTitle, setCustomTitle] = useState('');
   const [location, setLocation] = useState('');
@@ -97,21 +97,28 @@ export function PlanMealModal({ date, onClose }: Props) {
         {/* Meal time selector */}
         <div className="px-4 pt-3 pb-2 shrink-0">
           <p className="text-[10px] font-medium text-slate-400 uppercase tracking-wide mb-2">Meal time</p>
-          <div className="flex gap-2">
-            {(['breakfast', 'lunch', 'dinner', 'snack'] as MealTime[]).map((mt) => (
-              <button
-                key={mt}
-                onClick={() => setMealTime(mealTime === mt ? undefined : mt)}
-                className={[
-                  'flex-1 py-1.5 rounded-lg text-[10px] font-semibold capitalize transition-colors',
-                  mealTime === mt
-                    ? MEAL_TIME_ACTIVE[mt]
-                    : 'bg-slate-100 text-slate-400 hover:bg-slate-200',
-                ].join(' ')}
-              >
-                {mt}
-              </button>
-            ))}
+          <div className="relative inline-flex items-center">
+            <div className={[
+              'flex items-center gap-1.5 pl-3 pr-2.5 py-1.5 rounded-full text-xs font-semibold pointer-events-none',
+              mealTime ? MEAL_TIME_ACTIVE[mealTime] : 'bg-slate-100 text-slate-400',
+            ].join(' ')}>
+              {mealTime
+                ? mealTime.charAt(0).toUpperCase() + mealTime.slice(1)
+                : 'Set time'}
+              <ChevronDown size={11} />
+            </div>
+            <select
+              value={mealTime ?? ''}
+              onChange={(e) => setMealTime((e.target.value as MealTime) || undefined)}
+              className="absolute inset-0 opacity-0 w-full h-full cursor-pointer"
+              aria-label="Meal time"
+            >
+              <option value="">No time set</option>
+              <option value="breakfast">Breakfast</option>
+              <option value="lunch">Lunch</option>
+              <option value="dinner">Dinner</option>
+              <option value="snack">Snack</option>
+            </select>
           </div>
         </div>
 
