@@ -170,7 +170,7 @@ export function RecipeDetailPage() {
       <div className="flex gap-2 mb-5">
         <Button
           variant="primary"
-          size="sm"
+          size="md"
           onClick={() => setPlanModalOpen(true)}
           className="flex-1"
         >
