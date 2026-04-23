@@ -59,7 +59,11 @@ export function subscribeToUserData(uid: string, callbacks: UserDataCallbacks): 
 
   const unsubShoppingItems = onSnapshot(
     shoppingItemsCol(uid),
-    (snap) => callbacks.onShoppingItems(snap.docs.map((d) => d.data() as ShoppingItem)),
+    (snap) => {
+      const items = snap.docs.map((d) => d.data() as ShoppingItem);
+      items.sort((a, b) => (a.order ?? Infinity) - (b.order ?? Infinity));
+      callbacks.onShoppingItems(items);
+    },
     handleError
   );
 
@@ -125,7 +129,7 @@ export async function saveShoppingItems(uid: string, items: ShoppingItem[]): Pro
   const existing = await getDocs(col);
   const batch = writeBatch(db!);
   existing.docs.forEach((d) => batch.delete(d.ref));
-  items.forEach((item) => batch.set(doc(col, item.id), stripUndefined(item)));
+  items.forEach((item, index) => batch.set(doc(col, item.id), stripUndefined({ ...item, order: index })));
   batch.commit().catch(console.error);
 }
 

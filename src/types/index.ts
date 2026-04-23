@@ -49,6 +49,7 @@ export interface ShoppingItem {
   name: string; // full plain text e.g. "2 cups flour" or "chicken breast"
   category: ShoppingCategory;
   checked: boolean;
+  order?: number;
   manual?: boolean;
   mealSources?: MealSource[];
   ingredientKey?: string; // normalizeIngredientName(name)__normalizeUnit(unit) for dedup
