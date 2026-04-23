@@ -111,12 +111,21 @@ function stripHtml(html: string): string {
 async function callGeminiWithRetry(fn: () => Promise<string>): Promise<string> {
   const delays = [8000, 20000];
   for (let attempt = 0; attempt <= delays.length; attempt++) {
+    console.log(`Gemini attempt ${attempt + 1}/${delays.length + 1}`);
     try {
       return await fn();
     } catch (err) {
       const e = err as Record<string, unknown>;
       const status = (e.status ?? e.httpStatus ?? e.statusCode) as number | undefined;
       const message = err instanceof Error ? err.message : String(err);
+      const errName = err instanceof Error ? err.constructor.name : typeof err;
+      // Log every property on the error object for Vercel log diagnostics
+      const errKeys = Object.getOwnPropertyNames(e).filter((k) => k !== 'stack');
+      const errProps: Record<string, unknown> = {};
+      for (const k of errKeys) errProps[k] = e[k];
+      console.error(`Gemini attempt ${attempt + 1} failed: ${errName} status=${status} keys=${errKeys.join(',')}`);
+      console.error(`Gemini error props: ${JSON.stringify(errProps)}`);
+      console.error(`Gemini error message: ${message}`);
       const isRateLimit =
         status === 429 ||
         message.includes('429') ||
@@ -124,6 +133,7 @@ async function callGeminiWithRetry(fn: () => Promise<string>): Promise<string> {
         message.toLowerCase().includes('too many requests') ||
         message.toLowerCase().includes('quota exceeded');
       if (!isRateLimit || attempt === delays.length) throw err;
+      console.log(`Rate limit detected — waiting ${delays[attempt]}ms before retry`);
       await new Promise((resolve) => setTimeout(resolve, delays[attempt]));
     }
   }
@@ -218,11 +228,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       model.generateContent(parts).then((r) => r.response.text())
     );
   } catch (err) {
+    const e = err as Record<string, unknown>;
+    const status = (e.status ?? e.httpStatus ?? e.statusCode) as number | undefined;
     const message = err instanceof Error ? err.message : String(err);
-    const status = (err as { status?: number }).status;
-    console.error(`Gemini error status=${status}`);
-    console.error(`Gemini error message=${message}`);
-    if (status === 429 || message.includes('429')) {
+    const isRateLimit =
+      status === 429 ||
+      message.includes('429') ||
+      message.includes('RESOURCE_EXHAUSTED') ||
+      message.toLowerCase().includes('too many requests') ||
+      message.toLowerCase().includes('quota exceeded');
+    if (isRateLimit) {
       return res.status(429).json({ error: 'Too many requests. Please wait a moment and try again.' });
     }
     return res.status(502).json({ error: 'AI service error. Please try again.' });
