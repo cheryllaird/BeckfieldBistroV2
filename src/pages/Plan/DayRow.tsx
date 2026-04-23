@@ -6,6 +6,7 @@ import { formatDayLabel, isoDate, generateId } from '../../lib/utils';
 import type { MealEntry, MealTime } from '../../types';
 import { PlanMealModal } from './PlanMealModal';
 import { ChangeDayModal } from './ChangeDayModal';
+import { ModalPortal } from '../../components/ui/ModalPortal';
 
 interface Props {
   date: Date;
@@ -268,6 +269,7 @@ function ServingsModal({ servings, onServingsChange, onClose }: {
   onClose: () => void;
 }) {
   return (
+    <ModalPortal>
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/40"
       onClick={onClose}
@@ -302,6 +304,7 @@ function ServingsModal({ servings, onServingsChange, onClose }: {
         </button>
       </div>
     </div>
+    </ModalPortal>
   );
 }
 
@@ -311,6 +314,7 @@ function DeleteConfirmModal({ title, onCancel, onConfirm }: {
   onConfirm: () => void;
 }) {
   return (
+    <ModalPortal>
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/40"
       onClick={onCancel}
@@ -339,5 +343,6 @@ function DeleteConfirmModal({ title, onCancel, onConfirm }: {
         </div>
       </div>
     </div>
+    </ModalPortal>
   );
 }

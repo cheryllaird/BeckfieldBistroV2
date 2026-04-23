@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { X, Check } from 'lucide-react';
 import { Button } from '../../components/ui/Button';
+import { ModalPortal } from '../../components/ui/ModalPortal';
 import { useStore } from '../../store';
 import { getWeekDays, isoDate, formatDayLabel } from '../../lib/utils';
 import type { MealEntry } from '../../types';
@@ -35,6 +36,7 @@ export function ChangeDayModal({ entry, title, onClose }: Props) {
   };
 
   return (
+    <ModalPortal>
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-black/30 backdrop-blur-sm" onClick={onClose} />
       <div className="relative z-10 w-full max-w-sm bg-white rounded-2xl p-5 shadow-xl flex flex-col max-h-[90dvh] overflow-y-auto animate-slide-up">
@@ -98,5 +100,6 @@ export function ChangeDayModal({ entry, title, onClose }: Props) {
         </div>
       </div>
     </div>
+    </ModalPortal>
   );
 }
