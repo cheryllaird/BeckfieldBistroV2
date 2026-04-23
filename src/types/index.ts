@@ -23,6 +23,7 @@ export interface Recipe {
 }
 
 export type MealEntryType = 'recipe' | 'custom' | 'dining-out';
+export type MealTime = 'breakfast' | 'lunch' | 'dinner' | 'snack';
 
 export interface MealEntry {
   id: string;
@@ -32,6 +33,7 @@ export interface MealEntry {
   customTitle?: string;
   servings: number;
   location?: string; // for dining-out
+  mealTime?: MealTime;
 }
 
 export interface ShoppingItem {
