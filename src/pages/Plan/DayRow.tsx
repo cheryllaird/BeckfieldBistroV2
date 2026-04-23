@@ -146,6 +146,7 @@ interface ChipProps {
 function MealChip({ entry, title, onClick, onDelete, onServingsChange, onMealTimeChange, onAddToShoppingList, onChangeDay }: ChipProps) {
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [addedToList, setAddedToList] = useState(false);
+  const [servingsOpen, setServingsOpen] = useState(false);
 
   const typeStyles: Record<MealEntry['type'], string> = {
     recipe: 'bg-slate-50 border-slate-200',
@@ -154,6 +155,21 @@ function MealChip({ entry, title, onClick, onDelete, onServingsChange, onMealTim
   };
 
   return (
+    <>
+    {servingsOpen && (
+      <ServingsModal
+        servings={entry.servings}
+        onServingsChange={onServingsChange}
+        onClose={() => setServingsOpen(false)}
+      />
+    )}
+    {confirmingDelete && (
+      <DeleteConfirmModal
+        title={title}
+        onCancel={() => setConfirmingDelete(false)}
+        onConfirm={() => { setConfirmingDelete(false); onDelete(); }}
+      />
+    )}
     <div className={`flex flex-col gap-2 rounded-xl border px-3 py-2.5 ${typeStyles[entry.type]}`}>
       {/* Row 1: Icon + Title */}
       <div className="flex items-start gap-2">
@@ -195,24 +211,14 @@ function MealChip({ entry, title, onClick, onDelete, onServingsChange, onMealTim
           </select>
         </div>
 
-        {/* Servings control */}
-        <div className="flex items-center gap-0.5 shrink-0">
-          <button
-            onClick={() => onServingsChange(-1)}
-            className="w-6 h-6 flex items-center justify-center text-slate-400 hover:text-slate-600 rounded-full hover:bg-white/70"
-            aria-label="Reduce servings"
-          >
-            <Minus size={11} />
-          </button>
-          <span className="text-[10px] text-slate-500 font-medium whitespace-nowrap">{entry.servings} servings</span>
-          <button
-            onClick={() => onServingsChange(1)}
-            className="w-6 h-6 flex items-center justify-center text-slate-400 hover:text-slate-600 rounded-full hover:bg-white/70"
-            aria-label="Increase servings"
-          >
-            <Plus size={11} />
-          </button>
-        </div>
+        {/* Servings label — opens modal on click */}
+        <button
+          onClick={() => setServingsOpen(true)}
+          className="shrink-0 text-[10px] text-slate-500 font-medium whitespace-nowrap px-2 py-1 rounded-full hover:bg-white/70 hover:text-slate-700 transition-colors"
+          aria-label="Edit servings"
+        >
+          {entry.servings} servings
+        </button>
 
         <div className="flex-1" />
 
@@ -243,31 +249,94 @@ function MealChip({ entry, title, onClick, onDelete, onServingsChange, onMealTim
         </button>
 
         {/* Delete */}
-        {confirmingDelete ? (
-          <div className="flex items-center gap-1 shrink-0">
-            <span className="text-[10px] text-red-500 font-medium">Delete?</span>
-            <button
-              onClick={() => setConfirmingDelete(false)}
-              className="text-[10px] px-2 py-0.5 rounded-full bg-slate-100 text-slate-500 hover:bg-slate-200 transition-colors"
-            >
-              Cancel
-            </button>
-            <button
-              onClick={() => { setConfirmingDelete(false); onDelete(); }}
-              className="text-[10px] px-2 py-0.5 rounded-full bg-red-100 text-red-600 hover:bg-red-200 transition-colors"
-            >
-              Delete
-            </button>
-          </div>
-        ) : (
+        <button
+          onClick={() => setConfirmingDelete(true)}
+          className="shrink-0 w-8 h-8 flex items-center justify-center rounded-full text-slate-300 hover:text-red-400 hover:bg-red-50 transition-colors"
+          aria-label="Remove meal"
+        >
+          <Trash2 size={15} />
+        </button>
+      </div>
+    </div>
+    </>
+  );
+}
+
+function ServingsModal({ servings, onServingsChange, onClose }: {
+  servings: number;
+  onServingsChange: (delta: number) => void;
+  onClose: () => void;
+}) {
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40"
+      onClick={onClose}
+    >
+      <div
+        className="bg-white rounded-2xl p-6 shadow-xl w-56 flex flex-col items-center gap-4"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <p className="text-sm font-semibold text-slate-700">Servings</p>
+        <div className="flex items-center gap-5">
           <button
-            onClick={() => setConfirmingDelete(true)}
-            className="shrink-0 w-8 h-8 flex items-center justify-center rounded-full text-slate-300 hover:text-red-400 hover:bg-red-50 transition-colors"
-            aria-label="Remove meal"
+            onClick={() => onServingsChange(-1)}
+            className="w-10 h-10 flex items-center justify-center rounded-full bg-slate-100 text-slate-600 hover:bg-slate-200 transition-colors"
+            aria-label="Reduce servings"
           >
-            <Trash2 size={15} />
+            <Minus size={18} />
           </button>
-        )}
+          <span className="text-3xl font-bold text-slate-800 w-8 text-center">{servings}</span>
+          <button
+            onClick={() => onServingsChange(1)}
+            className="w-10 h-10 flex items-center justify-center rounded-full bg-slate-100 text-slate-600 hover:bg-slate-200 transition-colors"
+            aria-label="Increase servings"
+          >
+            <Plus size={18} />
+          </button>
+        </div>
+        <button
+          onClick={onClose}
+          className="w-full py-2 rounded-xl bg-amber-500 text-white text-sm font-semibold hover:bg-amber-600 transition-colors"
+        >
+          Done
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function DeleteConfirmModal({ title, onCancel, onConfirm }: {
+  title: string;
+  onCancel: () => void;
+  onConfirm: () => void;
+}) {
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40"
+      onClick={onCancel}
+    >
+      <div
+        className="bg-white rounded-2xl p-6 shadow-xl w-72 flex flex-col gap-4"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex flex-col gap-1">
+          <p className="text-sm font-semibold text-slate-800">Remove meal?</p>
+          <p className="text-xs text-slate-500">{title} will be removed from your plan.</p>
+        </div>
+        <div className="flex gap-2">
+          <button
+            onClick={onCancel}
+            className="flex-1 py-2 rounded-xl bg-slate-100 text-slate-600 text-sm font-semibold hover:bg-slate-200 transition-colors"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={onConfirm}
+            className="flex-1 py-2 rounded-xl bg-red-500 text-white text-sm font-semibold hover:bg-red-600 transition-colors"
+          >
+            Delete
+          </button>
+        </div>
       </div>
     </div>
   );
