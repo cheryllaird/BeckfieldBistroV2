@@ -1,10 +1,11 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Plus, UtensilsCrossed, MapPin, FileText, Minus, Trash2, ShoppingCart } from 'lucide-react';
+import { Plus, UtensilsCrossed, MapPin, FileText, Minus, Trash2, ShoppingCart, CalendarDays } from 'lucide-react';
 import { useStore } from '../../store';
 import { formatDayLabel, isoDate, generateId } from '../../lib/utils';
 import type { MealEntry, MealTime } from '../../types';
 import { PlanMealModal } from './PlanMealModal';
+import { ChangeDayModal } from './ChangeDayModal';
 
 interface Props {
   date: Date;
@@ -30,6 +31,7 @@ export function DayRow({ date }: Props) {
   const { weekday, monthDay, isToday } = formatDayLabel(date);
   const iso = isoDate(date);
   const [modalOpen, setModalOpen] = useState(false);
+  const [changeDayEntry, setChangeDayEntry] = useState<MealEntry | null>(null);
 
   const dayEntries = mealEntries.filter((e) => e.date === iso);
   const sortedEntries = [...dayEntries].sort((a, b) => {
@@ -116,6 +118,7 @@ export function DayRow({ date }: Props) {
               }
               onMealTimeChange={(mt) => updateMealEntry({ ...entry, mealTime: mt })}
               onAddToShoppingList={() => handleAddToShoppingList(entry)}
+              onChangeDay={() => setChangeDayEntry(entry)}
             />
           ))}
         </div>
@@ -123,6 +126,13 @@ export function DayRow({ date }: Props) {
 
       {modalOpen && (
         <PlanMealModal date={iso} onClose={() => setModalOpen(false)} />
+      )}
+      {changeDayEntry && (
+        <ChangeDayModal
+          entry={changeDayEntry}
+          title={getRecipeTitle(changeDayEntry)}
+          onClose={() => setChangeDayEntry(null)}
+        />
       )}
     </div>
   );
@@ -136,9 +146,10 @@ interface ChipProps {
   onServingsChange: (delta: number) => void;
   onMealTimeChange: (mealTime: MealTime | undefined) => void;
   onAddToShoppingList: () => void;
+  onChangeDay: () => void;
 }
 
-function MealChip({ entry, title, onClick, onDelete, onServingsChange, onMealTimeChange, onAddToShoppingList }: ChipProps) {
+function MealChip({ entry, title, onClick, onDelete, onServingsChange, onMealTimeChange, onAddToShoppingList, onChangeDay }: ChipProps) {
   const typeStyles: Record<MealEntry['type'], string> = {
     recipe: 'bg-slate-50 border-slate-200',
     custom: 'bg-blue-50 border-blue-100',
@@ -218,6 +229,16 @@ function MealChip({ entry, title, onClick, onDelete, onServingsChange, onMealTim
             <ShoppingCart size={13} />
           </button>
         )}
+
+        {/* Change day */}
+        <button
+          onClick={onChangeDay}
+          className="shrink-0 text-slate-300 hover:text-amber-500 transition-colors"
+          title="Move to a different day"
+          aria-label="Move to a different day"
+        >
+          <CalendarDays size={13} />
+        </button>
 
         {/* Delete */}
         <button
