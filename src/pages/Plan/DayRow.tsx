@@ -85,7 +85,7 @@ export function DayRow({ date }: Props) {
   return (
     <div
       className={[
-        'rounded-2xl border transition-all',
+        'bg-white rounded-2xl border transition-all',
         isToday ? 'border-amber-200' : 'border-slate-100',
       ].join(' ')}
     >
