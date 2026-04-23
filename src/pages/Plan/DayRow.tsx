@@ -50,6 +50,13 @@ export function DayRow({ date }: Props) {
     return entry.customTitle ?? '';
   };
 
+  const getRecipeCoverImage = (entry: MealEntry) => {
+    if (entry.type === 'recipe' && entry.recipeId) {
+      return recipes.find((r) => r.id === entry.recipeId)?.coverImage;
+    }
+    return undefined;
+  };
+
   const handleEntryClick = (entry: MealEntry) => {
     if (entry.type === 'recipe' && entry.recipeId) {
       navigate(`/recipes/${entry.recipeId}`);
@@ -106,6 +113,7 @@ export function DayRow({ date }: Props) {
               key={entry.id}
               entry={entry}
               title={getRecipeTitle(entry)}
+              coverImage={getRecipeCoverImage(entry)}
               onClick={() => handleEntryClick(entry)}
               onDelete={() => deleteMealEntry(entry.id)}
               onServingsChange={(delta) =>
@@ -136,6 +144,7 @@ export function DayRow({ date }: Props) {
 interface ChipProps {
   entry: MealEntry;
   title: string;
+  coverImage?: string;
   onClick: () => void;
   onDelete: () => void;
   onServingsChange: (delta: number) => void;
@@ -144,16 +153,11 @@ interface ChipProps {
   onChangeDay: () => void;
 }
 
-function MealChip({ entry, title, onClick, onDelete, onServingsChange, onMealTimeChange, onAddToShoppingList, onChangeDay }: ChipProps) {
+function MealChip({ entry, title, coverImage, onClick, onDelete, onServingsChange, onMealTimeChange, onAddToShoppingList, onChangeDay }: ChipProps) {
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [addedToList, setAddedToList] = useState(false);
   const [servingsOpen, setServingsOpen] = useState(false);
-
-  const typeStyles: Record<MealEntry['type'], string> = {
-    recipe: 'bg-slate-50 border-slate-200',
-    custom: 'bg-blue-50 border-blue-100',
-    'dining-out': 'bg-amber-50 border-amber-200',
-  };
+  const [imgError, setImgError] = useState(false);
 
   return (
     <>
@@ -171,92 +175,110 @@ function MealChip({ entry, title, onClick, onDelete, onServingsChange, onMealTim
         onConfirm={() => { setConfirmingDelete(false); onDelete(); }}
       />
     )}
-    <div className={`flex flex-col gap-2 rounded-xl border px-3 py-2.5 ${typeStyles[entry.type]}`}>
-      {/* Row 1: Icon + Title */}
-      <div className="flex items-start gap-2">
-        <span className="shrink-0 mt-0.5">
-          {entry.type === 'recipe' && <UtensilsCrossed size={13} className="text-slate-400" />}
-          {entry.type === 'custom' && <FileText size={13} className="text-blue-400" />}
-          {entry.type === 'dining-out' && <MapPin size={13} className="text-amber-500" />}
-        </span>
+    <div className="flex items-start gap-3 rounded-xl border border-slate-100 p-3 bg-white">
+      {/* Thumbnail */}
+      {entry.type === 'recipe' && (
+        coverImage && !imgError ? (
+          <img
+            src={coverImage}
+            alt=""
+            className="w-10 h-10 rounded-lg object-cover shrink-0"
+            onError={() => setImgError(true)}
+          />
+        ) : (
+          <div className="w-10 h-10 rounded-lg bg-slate-100 flex items-center justify-center shrink-0 text-slate-300">
+            <UtensilsCrossed size={18} />
+          </div>
+        )
+      )}
+      {entry.type === 'custom' && (
+        <div className="w-10 h-10 rounded-lg bg-blue-50 flex items-center justify-center shrink-0 text-blue-300">
+          <FileText size={18} />
+        </div>
+      )}
+      {entry.type === 'dining-out' && (
+        <div className="w-10 h-10 rounded-lg bg-amber-50 flex items-center justify-center shrink-0 text-amber-400">
+          <MapPin size={18} />
+        </div>
+      )}
+
+      {/* Content */}
+      <div className="flex-1 min-w-0">
         <button
           onClick={onClick}
-          className="flex-1 text-left text-xs font-medium text-slate-700 hover:text-slate-900 leading-snug"
+          className="text-sm font-medium text-slate-800 hover:text-slate-900 leading-snug w-full text-left truncate block"
         >
           {title}
-          {entry.type === 'dining-out' && entry.location && (
-            <span className="text-amber-600 ml-1">· {entry.location}</span>
-          )}
         </button>
-      </div>
 
-      {/* Row 2: Meal time chip + Actions */}
-      <div className="flex items-center gap-1.5">
-        {/* Meal time select chip */}
-        <div className="relative inline-flex items-center shrink-0">
-          <div className="flex items-center gap-1 pl-2.5 pr-2 py-1 rounded-full text-[10px] font-semibold pointer-events-none bg-slate-100 text-slate-500">
-            {(entry.mealTime ?? 'dinner').charAt(0).toUpperCase() + (entry.mealTime ?? 'dinner').slice(1)}
-            <ChevronDown size={9} />
+        {/* Controls row */}
+        <div className="flex items-center gap-1.5 mt-1.5">
+          {/* Meal time select chip */}
+          <div className="relative inline-flex items-center shrink-0">
+            <div className="flex items-center gap-1 pl-2.5 pr-2 py-1 rounded-full text-[10px] font-semibold pointer-events-none bg-slate-100 text-slate-500">
+              {(entry.mealTime ?? 'dinner').charAt(0).toUpperCase() + (entry.mealTime ?? 'dinner').slice(1)}
+              <ChevronDown size={9} />
+            </div>
+            <select
+              value={entry.mealTime ?? 'dinner'}
+              onChange={(e) => onMealTimeChange((e.target.value as MealTime) || undefined)}
+              className="absolute inset-0 opacity-0 w-full h-full cursor-pointer"
+              aria-label="Meal time"
+            >
+              <option value="">No time set</option>
+              <option value="breakfast">Breakfast</option>
+              <option value="lunch">Lunch</option>
+              <option value="dinner">Dinner</option>
+              <option value="snack">Snack</option>
+            </select>
           </div>
-          <select
-            value={entry.mealTime ?? 'dinner'}
-            onChange={(e) => onMealTimeChange((e.target.value as MealTime) || undefined)}
-            className="absolute inset-0 opacity-0 w-full h-full cursor-pointer"
-            aria-label="Meal time"
-          >
-            <option value="">No time set</option>
-            <option value="breakfast">Breakfast</option>
-            <option value="lunch">Lunch</option>
-            <option value="dinner">Dinner</option>
-            <option value="snack">Snack</option>
-          </select>
-        </div>
 
-        {/* Servings label — opens modal on click */}
-        <button
-          onClick={() => setServingsOpen(true)}
-          className="shrink-0 text-[10px] text-slate-500 font-medium whitespace-nowrap px-2 py-1 rounded-full hover:bg-white/70 hover:text-slate-700 transition-colors"
-          aria-label="Edit servings"
-        >
-          {entry.servings} servings
-        </button>
-
-        <div className="flex-1" />
-
-        {/* Add to shopping list (recipe only) */}
-        {entry.type === 'recipe' && (
+          {/* Servings */}
           <button
-            onClick={() => { onAddToShoppingList(); setAddedToList(true); }}
-            className={`shrink-0 w-8 h-8 flex items-center justify-center rounded-full transition-colors ${
-              addedToList
-                ? 'text-green-500 bg-green-50'
-                : 'text-slate-300 hover:text-blue-400 hover:bg-blue-50'
-            }`}
-            title={addedToList ? 'Added to shopping list' : 'Add ingredients to shopping list'}
-            aria-label={addedToList ? 'Added to shopping list' : 'Add ingredients to shopping list'}
+            onClick={() => setServingsOpen(true)}
+            className="shrink-0 text-[10px] text-slate-400 font-medium whitespace-nowrap px-2 py-1 rounded-full hover:bg-slate-100 hover:text-slate-600 transition-colors"
+            aria-label="Edit servings"
           >
-            {addedToList ? <Check size={15} /> : <ShoppingCart size={15} />}
+            {entry.servings} srv
           </button>
-        )}
 
-        {/* Change day */}
-        <button
-          onClick={onChangeDay}
-          className="shrink-0 w-8 h-8 flex items-center justify-center rounded-full text-slate-300 hover:text-amber-500 hover:bg-amber-50 transition-colors"
-          title="Move to a different day"
-          aria-label="Move to a different day"
-        >
-          <CalendarDays size={15} />
-        </button>
+          <div className="flex-1" />
 
-        {/* Delete */}
-        <button
-          onClick={() => setConfirmingDelete(true)}
-          className="shrink-0 w-8 h-8 flex items-center justify-center rounded-full text-slate-300 hover:text-red-400 hover:bg-red-50 transition-colors"
-          aria-label="Remove meal"
-        >
-          <Trash2 size={15} />
-        </button>
+          {/* Add to shopping list (recipe only) */}
+          {entry.type === 'recipe' && (
+            <button
+              onClick={() => { onAddToShoppingList(); setAddedToList(true); }}
+              className={`shrink-0 w-7 h-7 flex items-center justify-center rounded-full transition-colors ${
+                addedToList
+                  ? 'text-green-500 bg-green-50'
+                  : 'text-slate-300 hover:text-blue-400 hover:bg-blue-50'
+              }`}
+              title={addedToList ? 'Added to shopping list' : 'Add ingredients to shopping list'}
+              aria-label={addedToList ? 'Added to shopping list' : 'Add ingredients to shopping list'}
+            >
+              {addedToList ? <Check size={14} /> : <ShoppingCart size={14} />}
+            </button>
+          )}
+
+          {/* Change day */}
+          <button
+            onClick={onChangeDay}
+            className="shrink-0 w-7 h-7 flex items-center justify-center rounded-full text-slate-300 hover:text-amber-500 hover:bg-amber-50 transition-colors"
+            title="Move to a different day"
+            aria-label="Move to a different day"
+          >
+            <CalendarDays size={14} />
+          </button>
+
+          {/* Delete */}
+          <button
+            onClick={() => setConfirmingDelete(true)}
+            className="shrink-0 w-7 h-7 flex items-center justify-center rounded-full text-slate-300 hover:text-red-400 hover:bg-red-50 transition-colors"
+            aria-label="Remove meal"
+          >
+            <Trash2 size={14} />
+          </button>
+        </div>
       </div>
     </div>
     </>
