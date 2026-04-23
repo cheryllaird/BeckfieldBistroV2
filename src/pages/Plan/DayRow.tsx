@@ -182,15 +182,13 @@ function MealChip({ entry, title, onClick, onDelete, onServingsChange, onMealTim
         <div className="relative inline-flex items-center shrink-0">
           <div className={[
             'flex items-center gap-1 pl-2.5 pr-2 py-1 rounded-full text-[10px] font-semibold pointer-events-none',
-            entry.mealTime ? MEAL_TIME_CHIP[entry.mealTime] : 'bg-slate-100 text-slate-400',
+            MEAL_TIME_CHIP[entry.mealTime ?? 'dinner'],
           ].join(' ')}>
-            {entry.mealTime
-              ? entry.mealTime.charAt(0).toUpperCase() + entry.mealTime.slice(1)
-              : 'Set time'}
+            {(entry.mealTime ?? 'dinner').charAt(0).toUpperCase() + (entry.mealTime ?? 'dinner').slice(1)}
             <ChevronDown size={9} />
           </div>
           <select
-            value={entry.mealTime ?? ''}
+            value={entry.mealTime ?? 'dinner'}
             onChange={(e) => onMealTimeChange((e.target.value as MealTime) || undefined)}
             className="absolute inset-0 opacity-0 w-full h-full cursor-pointer"
             aria-label="Meal time"
