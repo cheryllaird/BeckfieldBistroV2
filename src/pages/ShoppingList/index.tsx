@@ -244,12 +244,6 @@ export function ShoppingListPage() {
               <Plus size={14} />
             </Button>
           </div>
-          <button
-            onClick={() => { pushHistory(); setShoppingItems([]); }}
-            className="text-xs text-slate-400 hover:text-red-500 transition-colors self-center"
-          >
-            Clear entire list
-          </button>
         </>
       )}
 
@@ -278,6 +272,15 @@ export function ShoppingListPage() {
           )
         )}
       </div>
+
+      {mode === 'edit' && unchecked.length > 0 && (
+        <button
+          onClick={() => { pushHistory(); setShoppingItems([]); }}
+          className="text-xs text-slate-400 hover:text-red-500 transition-colors self-center"
+        >
+          Clear entire list
+        </button>
+      )}
 
       {/* Checked / In basket */}
       {checked.length > 0 && (
@@ -372,7 +375,6 @@ function ShopItem({
             {item.name}
           </span>
         </button>
-        <Badge variant="default" size="sm">{item.category}</Badge>
         {hasSources && (
           <button
             onClick={() => setSourcesOpen(true)}
