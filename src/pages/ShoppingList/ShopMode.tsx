@@ -106,10 +106,6 @@ function ShopItem({
           item.checked ? 'line-through text-slate-400' : 'text-slate-800',
         ].join(' ')}
       >
-        {item.quantity > 0 && item.quantity !== 1 && (
-          <span className="text-slate-500 mr-1">{item.quantity}</span>
-        )}
-        {item.unit && <span className="text-slate-500 mr-1">{item.unit}</span>}
         {item.name}
       </span>
     </button>

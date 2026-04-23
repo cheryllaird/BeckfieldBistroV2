@@ -86,8 +86,6 @@ export function ShoppingListPage() {
     addShoppingItem({
       id: generateId(),
       name: manualItem.trim(),
-      quantity: 1,
-      unit: '',
       category: categorize(manualItem.trim()),
       checked: false,
       manual: true,
@@ -186,9 +184,6 @@ export function ShoppingListPage() {
               <ArrowUpDown size={14} />
             </Button>
           )}
-          <Button variant="secondary" size="sm" onClick={() => setGenerateOpen(true)}>
-            <Zap size={14} /> Regenerate
-          </Button>
           {/* Tab switcher */}
           <div className="flex gap-1 bg-slate-100 rounded-xl p-0.5">
             <button
@@ -349,10 +344,6 @@ function ShopItem({
           item.checked ? 'line-through text-slate-400' : 'text-slate-800',
         ].join(' ')}
       >
-        {item.quantity > 0 && item.quantity !== 1 && (
-          <span className="text-slate-500 mr-1">{item.quantity}</span>
-        )}
-        {item.unit && <span className="text-slate-500 mr-1">{item.unit}</span>}
         {item.name}
       </span>
       <Badge variant="default" size="sm">{item.category}</Badge>
@@ -429,10 +420,6 @@ function EditItem({
             item.checked ? 'line-through text-slate-400' : 'text-slate-700 hover:text-slate-900',
           ].join(' ')}
         >
-          {item.quantity > 0 && item.quantity !== 1 && (
-            <span className="font-medium text-slate-900 mr-1">{item.quantity}</span>
-          )}
-          {item.unit && <span className="text-slate-500 mr-1">{item.unit}</span>}
           {item.name}
         </button>
       )}
