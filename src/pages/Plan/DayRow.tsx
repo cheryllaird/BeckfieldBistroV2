@@ -85,12 +85,12 @@ export function DayRow({ date }: Props) {
   return (
     <div
       className={[
-        'bg-white rounded-2xl border p-3 transition-all',
-        isToday ? 'border-amber-200 shadow-sm' : 'border-slate-100',
+        'rounded-2xl border transition-all',
+        isToday ? 'border-amber-200' : 'border-slate-100',
       ].join(' ')}
     >
       {/* Day header */}
-      <div className="flex items-center justify-between mb-2">
+      <div className="flex items-center justify-between px-3 pt-3 pb-3">
         <p className="text-sm leading-none">
           <span className={`font-bold ${isToday ? 'text-amber-500' : 'text-slate-800'}`}>{fullWeekday}</span>
           <span className="text-slate-400 font-normal"> {dateLabel}</span>
@@ -107,7 +107,7 @@ export function DayRow({ date }: Props) {
 
       {/* Meal entries */}
       {sortedEntries.length > 0 && (
-        <div className="flex flex-col gap-2 mt-2">
+        <div className="flex flex-col gap-px">
           {sortedEntries.map((entry) => (
             <MealChip
               key={entry.id}
@@ -175,7 +175,7 @@ function MealChip({ entry, title, coverImage, onClick, onDelete, onServingsChang
         onConfirm={() => { setConfirmingDelete(false); onDelete(); }}
       />
     )}
-    <div className="flex items-start gap-3 rounded-xl border border-slate-100 p-3 bg-white">
+    <div className="flex items-start gap-3 px-3 py-2.5 bg-slate-50 border-t border-slate-100 last:rounded-b-2xl last:pb-3">
       {/* Thumbnail */}
       {entry.type === 'recipe' && (
         coverImage && !imgError ? (
@@ -239,7 +239,7 @@ function MealChip({ entry, title, coverImage, onClick, onDelete, onServingsChang
             className="shrink-0 text-[10px] text-slate-400 font-medium whitespace-nowrap px-2 py-1 rounded-full hover:bg-slate-100 hover:text-slate-600 transition-colors"
             aria-label="Edit servings"
           >
-            {entry.servings} srv
+            {entry.servings} servings
           </button>
 
           <div className="flex-1" />
