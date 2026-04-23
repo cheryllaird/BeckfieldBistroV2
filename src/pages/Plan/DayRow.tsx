@@ -25,10 +25,18 @@ const MEAL_TIME_CHIP: Record<MealTime, string> = {
   snack: 'bg-purple-400 text-white',
 };
 
+function ordinal(n: number) {
+  if (n >= 11 && n <= 13) return `${n}th`;
+  const suffix: Record<number, string> = { 1: 'st', 2: 'nd', 3: 'rd' };
+  return `${n}${suffix[n % 10] ?? 'th'}`;
+}
+
 export function DayRow({ date }: Props) {
   const navigate = useNavigate();
   const { mealEntries, recipes, deleteMealEntry, updateMealEntry, addShoppingItem } = useStore();
-  const { weekday, monthDay, isToday } = formatDayLabel(date);
+  const { isToday } = formatDayLabel(date);
+  const fullWeekday = date.toLocaleDateString('en-GB', { weekday: 'long' });
+  const dateLabel = `${ordinal(date.getDate())} ${date.toLocaleDateString('en-GB', { month: 'short' })}`;
   const iso = isoDate(date);
   const [modalOpen, setModalOpen] = useState(false);
   const [changeDayEntry, setChangeDayEntry] = useState<MealEntry | null>(null);
@@ -81,18 +89,10 @@ export function DayRow({ date }: Props) {
     >
       {/* Day header */}
       <div className="flex items-center justify-between mb-2">
-        <div className="flex items-center gap-2">
-          <div
-            className={[
-              'w-8 h-8 rounded-full flex flex-col items-center justify-center',
-              isToday ? 'bg-amber-500 text-white' : 'bg-slate-100 text-slate-600',
-            ].join(' ')}
-          >
-            <span className="text-[9px] font-semibold leading-none uppercase">{weekday}</span>
-            <span className="text-[11px] font-bold leading-none">{monthDay.split(' ')[0]}</span>
-          </div>
-          <span className="text-xs text-slate-400">{monthDay.split(' ')[1]}</span>
-        </div>
+        <p className="text-sm leading-none">
+          <span className={`font-bold ${isToday ? 'text-amber-500' : 'text-slate-800'}`}>{fullWeekday}</span>
+          <span className="text-slate-400 font-normal"> {dateLabel}</span>
+        </p>
         <button
           onClick={() => setModalOpen(true)}
           className="flex items-center gap-1 text-xs text-slate-400 hover:text-amber-600 transition-colors py-1.5 px-2 -mr-2 rounded-lg"
