@@ -42,6 +42,8 @@ export function GenerateListModal({ onClose }: Props) {
           ingredients: recipe.ingredients,
           servings: e.servings,
           originalServings: recipe.servings,
+          mealEntryId: e.id,
+          recipeTitle: recipe.title,
         };
       })
       .filter((g) => g.ingredients);
