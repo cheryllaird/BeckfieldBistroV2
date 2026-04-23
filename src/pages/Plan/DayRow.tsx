@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Plus, UtensilsCrossed, MapPin, FileText, Minus, Trash2, ShoppingCart, CalendarDays, CalendarPlus, ChevronDown, Check } from 'lucide-react';
+import { Plus, UtensilsCrossed, MapPin, FileText, Minus, Trash2, ShoppingCart, CalendarDays, CalendarPlus, ChevronDown, Check, Users } from 'lucide-react';
 import { useStore } from '../../store';
 import { formatDayLabel, isoDate, generateId } from '../../lib/utils';
 import type { MealEntry, MealTime } from '../../types';
@@ -236,10 +236,11 @@ function MealChip({ entry, title, coverImage, onClick, onDelete, onServingsChang
           {/* Servings */}
           <button
             onClick={() => setServingsOpen(true)}
-            className="shrink-0 text-[10px] text-slate-400 font-medium whitespace-nowrap px-2 py-1 rounded-full hover:bg-slate-100 hover:text-slate-600 transition-colors"
+            className="shrink-0 flex items-center gap-1 text-xs text-slate-500 px-2 py-1 rounded-full hover:bg-slate-100 hover:text-slate-700 transition-colors"
             aria-label="Edit servings"
           >
-            {entry.servings} servings
+            <Users size={12} />
+            {entry.servings}
           </button>
 
           <div className="flex-1" />
