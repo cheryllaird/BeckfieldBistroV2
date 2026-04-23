@@ -35,7 +35,6 @@ export function ShoppingListPage() {
   const {
     shoppingItems,
     toggleShoppingItem,
-    addShoppingItem,
     removeShoppingItem,
     setShoppingItems,
     reorderShoppingItems,
@@ -83,13 +82,14 @@ export function ShoppingListPage() {
 
   const handleAddManual = () => {
     if (!manualItem.trim()) return;
-    addShoppingItem({
+    const newItem: ShoppingItem = {
       id: generateId(),
       name: manualItem.trim(),
       category: categorize(manualItem.trim()),
       checked: false,
       manual: true,
-    });
+    };
+    setShoppingItems([newItem, ...shoppingItems]);
     setManualItem('');
   };
 
@@ -212,18 +212,44 @@ export function ShoppingListPage() {
         </div>
       </div>
 
-      {/* Progress */}
-      <div className="flex items-center gap-2">
-        <div className="flex-1 h-1.5 bg-slate-100 rounded-full overflow-hidden">
-          <div
-            className="h-full bg-amber-400 rounded-full transition-all duration-300"
-            style={{ width: `${shoppingItems.length > 0 ? (checked.length / shoppingItems.length) * 100 : 0}%` }}
-          />
+      {/* Progress (shop mode only) */}
+      {mode === 'shop' && (
+        <div className="flex items-center gap-2">
+          <div className="flex-1 h-1.5 bg-slate-100 rounded-full overflow-hidden">
+            <div
+              className="h-full bg-amber-400 rounded-full transition-all duration-300"
+              style={{ width: `${shoppingItems.length > 0 ? (checked.length / shoppingItems.length) * 100 : 0}%` }}
+            />
+          </div>
+          <span className="text-xs text-slate-400 shrink-0">
+            {checked.length}/{shoppingItems.length}
+          </span>
         </div>
-        <span className="text-xs text-slate-400 shrink-0">
-          {checked.length}/{shoppingItems.length}
-        </span>
-      </div>
+      )}
+
+      {/* Manual add (edit mode only) */}
+      {mode === 'edit' && (
+        <>
+          <div className="flex gap-2">
+            <input
+              value={manualItem}
+              onChange={(e) => setManualItem(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && handleAddManual()}
+              placeholder="Add item manually…"
+              className="flex-1 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-800 placeholder-slate-400 outline-none focus:border-amber-400 focus:ring-2 focus:ring-amber-100 transition-colors"
+            />
+            <Button size="sm" onClick={handleAddManual} disabled={!manualItem.trim()} aria-label="Add">
+              <Plus size={14} />
+            </Button>
+          </div>
+          <button
+            onClick={() => { pushHistory(); setShoppingItems([]); }}
+            className="text-xs text-slate-400 hover:text-red-500 transition-colors self-center"
+          >
+            Clear entire list
+          </button>
+        </>
+      )}
 
       {/* Unchecked items */}
       <div className="flex flex-col gap-1">
@@ -250,22 +276,6 @@ export function ShoppingListPage() {
           )
         )}
       </div>
-
-      {/* Manual add (edit mode only) */}
-      {mode === 'edit' && (
-        <div className="flex gap-2">
-          <input
-            value={manualItem}
-            onChange={(e) => setManualItem(e.target.value)}
-            onKeyDown={(e) => e.key === 'Enter' && handleAddManual()}
-            placeholder="Add item manually…"
-            className="flex-1 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-800 placeholder-slate-400 outline-none focus:border-amber-400 focus:ring-2 focus:ring-amber-100 transition-colors"
-          />
-          <Button size="sm" onClick={handleAddManual} disabled={!manualItem.trim()} aria-label="Add">
-            <Plus size={14} />
-          </Button>
-        </div>
-      )}
 
       {/* Checked / In basket */}
       {checked.length > 0 && (
@@ -324,7 +334,7 @@ function ShopItem({
     <button
       onClick={onToggle}
       className={[
-        'flex items-center gap-3 px-4 py-4 rounded-2xl border transition-all duration-200 text-left w-full active:scale-[0.98]',
+        'flex items-center gap-3 px-3 py-2.5 rounded-xl border transition-all duration-200 text-left w-full active:scale-[0.98]',
         item.checked
           ? 'bg-slate-50 border-slate-100 opacity-60'
           : 'bg-white border-slate-200 shadow-sm hover:border-amber-300',
@@ -340,7 +350,7 @@ function ShopItem({
       </div>
       <span
         className={[
-          'text-base font-medium flex-1 text-left',
+          'text-sm font-medium flex-1 text-left',
           item.checked ? 'line-through text-slate-400' : 'text-slate-800',
         ].join(' ')}
       >
