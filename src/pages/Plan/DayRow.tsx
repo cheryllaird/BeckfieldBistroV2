@@ -175,7 +175,7 @@ function MealChip({ entry, title, coverImage, onClick, onDelete, onServingsChang
         onConfirm={() => { setConfirmingDelete(false); onDelete(); }}
       />
     )}
-    <div className="flex items-start gap-3 px-3 py-2.5 bg-slate-50 border-t border-slate-100 last:rounded-b-2xl last:pb-3">
+    <div className="flex items-start gap-3 px-3 py-2.5 bg-white border-t border-slate-100 last:rounded-b-2xl last:pb-3">
       {/* Thumbnail */}
       {entry.type === 'recipe' && (
         coverImage && !imgError ? (
