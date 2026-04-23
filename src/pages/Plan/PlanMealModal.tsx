@@ -1,11 +1,11 @@
 import { useState } from 'react';
-import { X, Search, UtensilsCrossed, FileText, MapPin, ChevronDown } from 'lucide-react';
+import { X, Search, UtensilsCrossed, FileText, MapPin } from 'lucide-react';
 import { useStore } from '../../store';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
 import { ModalPortal } from '../../components/ui/ModalPortal';
 import { generateId } from '../../lib/utils';
-import type { Recipe, MealTime } from '../../types';
+import type { Recipe } from '../../types';
 
 function RecipeListItem({ recipe, onClick }: { recipe: Recipe; onClick: () => void }) {
   const [imgError, setImgError] = useState(false);
@@ -34,13 +34,6 @@ function RecipeListItem({ recipe, onClick }: { recipe: Recipe; onClick: () => vo
   );
 }
 
-const MEAL_TIME_ACTIVE: Record<MealTime, string> = {
-  breakfast: 'bg-amber-400 text-white',
-  lunch: 'bg-green-500 text-white',
-  dinner: 'bg-blue-500 text-white',
-  snack: 'bg-purple-400 text-white',
-};
-
 interface Props {
   date: string;
   onClose: () => void;
@@ -49,7 +42,6 @@ interface Props {
 export function PlanMealModal({ date, onClose }: Props) {
   const { recipes, addMealEntry } = useStore();
   const [tab, setTab] = useState<'recipe' | 'custom' | 'dining-out'>('recipe');
-  const [mealTime, setMealTime] = useState<MealTime | undefined>('dinner');
   const [query, setQuery] = useState('');
   const [customTitle, setCustomTitle] = useState('');
   const [location, setLocation] = useState('');
@@ -60,13 +52,13 @@ export function PlanMealModal({ date, onClose }: Props) {
   );
 
   const addRecipeMeal = (recipeId: string, servings: number) => {
-    addMealEntry({ id: generateId(), date, type: 'recipe', recipeId, servings, mealTime });
+    addMealEntry({ id: generateId(), date, type: 'recipe', recipeId, servings });
     onClose();
   };
 
   const addCustomMeal = () => {
     if (!customTitle.trim()) return;
-    addMealEntry({ id: generateId(), date, type: 'custom', customTitle: customTitle.trim(), servings: 1, mealTime });
+    addMealEntry({ id: generateId(), date, type: 'custom', customTitle: customTitle.trim(), servings: 1 });
     onClose();
   };
 
@@ -78,7 +70,6 @@ export function PlanMealModal({ date, onClose }: Props) {
       customTitle: location.trim() || 'Dining Out',
       location: location.trim(),
       servings: 1,
-      mealTime,
     });
     onClose();
   };
@@ -87,41 +78,13 @@ export function PlanMealModal({ date, onClose }: Props) {
     <ModalPortal>
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-black/30 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative z-10 w-full max-w-sm bg-white rounded-2xl shadow-xl flex flex-col max-h-[90dvh] animate-slide-up">
+      <div className="relative z-10 w-full max-w-sm bg-white rounded-2xl shadow-xl flex flex-col h-[90dvh] animate-slide-up">
         {/* Header */}
         <div className="flex items-center justify-between p-4 border-b border-slate-100 shrink-0">
           <h3 className="text-base font-semibold text-slate-800">Plan a Meal</h3>
           <button onClick={onClose} className="text-slate-400 hover:text-slate-600">
             <X size={18} />
           </button>
-        </div>
-
-        {/* Meal time selector */}
-        <div className="px-4 pt-3 pb-2 shrink-0">
-          <p className="text-[10px] font-medium text-slate-400 uppercase tracking-wide mb-2">Meal time</p>
-          <div className="relative inline-flex items-center">
-            <div className={[
-              'flex items-center gap-1.5 pl-3 pr-2.5 py-1.5 rounded-full text-xs font-semibold pointer-events-none',
-              mealTime ? MEAL_TIME_ACTIVE[mealTime] : 'bg-slate-100 text-slate-400',
-            ].join(' ')}>
-              {mealTime
-                ? mealTime.charAt(0).toUpperCase() + mealTime.slice(1)
-                : 'Set time'}
-              <ChevronDown size={11} />
-            </div>
-            <select
-              value={mealTime ?? ''}
-              onChange={(e) => setMealTime((e.target.value as MealTime) || undefined)}
-              className="absolute inset-0 opacity-0 w-full h-full cursor-pointer"
-              aria-label="Meal time"
-            >
-              <option value="">No time set</option>
-              <option value="breakfast">Breakfast</option>
-              <option value="lunch">Lunch</option>
-              <option value="dinner">Dinner</option>
-              <option value="snack">Snack</option>
-            </select>
-          </div>
         </div>
 
         {/* Tabs */}
