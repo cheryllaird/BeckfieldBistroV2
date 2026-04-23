@@ -1,13 +1,15 @@
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import {
   ShoppingCart,
   Plus,
   Check,
-  Trash2,
+  X,
   Undo2,
   ArrowUpDown,
-  ShoppingBag,
   Zap,
+  GripVertical,
+  ShoppingBag,
+  Pencil,
 } from 'lucide-react';
 import { useStore } from '../../store';
 import { Button } from '../../components/ui/Button';
@@ -15,9 +17,8 @@ import { Badge } from '../../components/ui/Badge';
 import { categorize, generateId } from '../../lib/utils';
 import type { ShoppingCategory, ShoppingItem } from '../../types';
 import { GenerateListModal } from './GenerateListModal';
-import { ShopMode } from './ShopMode';
 
-type Mode = 'edit' | 'shop';
+type Mode = 'shop' | 'edit';
 
 const CATEGORY_ORDER: ShoppingCategory[] = [
   'Produce',
@@ -37,13 +38,19 @@ export function ShoppingListPage() {
     addShoppingItem,
     removeShoppingItem,
     setShoppingItems,
+    reorderShoppingItems,
     clearCheckedItems,
   } = useStore();
 
-  const [mode, setMode] = useState<Mode>('edit');
+  const [mode, setMode] = useState<Mode>('shop');
   const [generateOpen, setGenerateOpen] = useState(false);
   const [manualItem, setManualItem] = useState('');
   const [history, setHistory] = useState<ShoppingItem[][]>([]);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editingValue, setEditingValue] = useState('');
+  const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
+  const dragItem = useRef<number | null>(null);
+  const dragOverItem = useRef<number | null>(null);
 
   const pushHistory = () => setHistory((h) => [...h, shoppingItems]);
 
@@ -88,20 +95,59 @@ export function ShoppingListPage() {
     setManualItem('');
   };
 
+  const handleEditStart = (item: ShoppingItem) => {
+    setEditingId(item.id);
+    setEditingValue(item.name);
+  };
+
+  const handleEditSave = (id: string) => {
+    if (editingValue.trim()) {
+      pushHistory();
+      setShoppingItems(
+        shoppingItems.map((item) =>
+          item.id === id ? { ...item, name: editingValue.trim() } : item
+        )
+      );
+    }
+    setEditingId(null);
+    setEditingValue('');
+  };
+
+  const handleEditCancel = () => {
+    setEditingId(null);
+    setEditingValue('');
+  };
+
+  const handleDragStart = (index: number) => {
+    dragItem.current = index;
+  };
+
+  const handleDragEnter = (index: number) => {
+    dragOverItem.current = index;
+    setDragOverIndex(index);
+  };
+
+  const handleDragEnd = () => {
+    if (
+      dragItem.current !== null &&
+      dragOverItem.current !== null &&
+      dragItem.current !== dragOverItem.current
+    ) {
+      pushHistory();
+      const unchecked = shoppingItems.filter((i) => !i.checked);
+      const checked = shoppingItems.filter((i) => i.checked);
+      const reordered = [...unchecked];
+      const [moved] = reordered.splice(dragItem.current, 1);
+      reordered.splice(dragOverItem.current, 0, moved);
+      reorderShoppingItems([...reordered, ...checked]);
+    }
+    dragItem.current = null;
+    dragOverItem.current = null;
+    setDragOverIndex(null);
+  };
+
   const unchecked = shoppingItems.filter((i) => !i.checked);
   const checked = shoppingItems.filter((i) => i.checked);
-
-  if (mode === 'shop') {
-    return (
-      <ShopMode
-        items={shoppingItems}
-        onToggle={handleToggle}
-        onUndo={handleUndo}
-        canUndo={history.length > 0}
-        onExit={() => setMode('edit')}
-      />
-    );
-  }
 
   if (shoppingItems.length === 0) {
     return (
@@ -127,23 +173,47 @@ export function ShoppingListPage() {
   return (
     <div className="flex flex-col gap-4">
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <h2 className="text-xl font-bold text-slate-800">Shopping List</h2>
-        <div className="flex gap-1.5">
+      <div className="flex items-center justify-between gap-2">
+        <h2 className="text-xl font-bold text-slate-800 shrink-0">Shopping List</h2>
+        <div className="flex items-center gap-1.5">
           {history.length > 0 && (
             <Button variant="ghost" size="sm" onClick={handleUndo} aria-label="Undo">
               <Undo2 size={14} />
             </Button>
           )}
-          <Button variant="ghost" size="sm" onClick={handleAutoSort} aria-label="Auto-sort">
-            <ArrowUpDown size={14} />
-          </Button>
+          {mode === 'edit' && (
+            <Button variant="ghost" size="sm" onClick={handleAutoSort} aria-label="Auto-sort">
+              <ArrowUpDown size={14} />
+            </Button>
+          )}
           <Button variant="secondary" size="sm" onClick={() => setGenerateOpen(true)}>
             <Zap size={14} /> Regenerate
           </Button>
-          <Button size="sm" onClick={() => setMode('shop')}>
-            <ShoppingBag size={14} /> Shop
-          </Button>
+          {/* Tab switcher */}
+          <div className="flex gap-1 bg-slate-100 rounded-xl p-0.5">
+            <button
+              onClick={() => setMode('shop')}
+              className={[
+                'flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg transition-all',
+                mode === 'shop'
+                  ? 'bg-white text-slate-800 shadow-sm'
+                  : 'text-slate-500 hover:text-slate-700',
+              ].join(' ')}
+            >
+              <ShoppingBag size={12} /> Shop
+            </button>
+            <button
+              onClick={() => setMode('edit')}
+              className={[
+                'flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg transition-all',
+                mode === 'edit'
+                  ? 'bg-white text-slate-800 shadow-sm'
+                  : 'text-slate-500 hover:text-slate-700',
+              ].join(' ')}
+            >
+              <Pencil size={12} /> Edit
+            </button>
+          </div>
         </div>
       </div>
 
@@ -162,52 +232,84 @@ export function ShoppingListPage() {
 
       {/* Unchecked items */}
       <div className="flex flex-col gap-1">
-        {unchecked.map((item) => (
-          <ShoppingItemRow
-            key={item.id}
-            item={item}
-            onToggle={() => handleToggle(item.id)}
-            onRemove={() => handleRemove(item.id)}
+        {unchecked.map((item, index) =>
+          mode === 'shop' ? (
+            <ShopItem key={item.id} item={item} onToggle={() => handleToggle(item.id)} />
+          ) : (
+            <EditItem
+              key={item.id}
+              item={item}
+              isDragOver={dragOverIndex === index}
+              isEditing={editingId === item.id}
+              editingValue={editingValue}
+              onEditStart={() => handleEditStart(item)}
+              onEditChange={setEditingValue}
+              onEditSave={() => handleEditSave(item.id)}
+              onEditCancel={handleEditCancel}
+              onRemove={() => handleRemove(item.id)}
+              onDragStart={() => handleDragStart(index)}
+              onDragEnter={() => handleDragEnter(index)}
+              onDragEnd={handleDragEnd}
+              draggable
+            />
+          )
+        )}
+      </div>
+
+      {/* Manual add (edit mode only) */}
+      {mode === 'edit' && (
+        <div className="flex gap-2">
+          <input
+            value={manualItem}
+            onChange={(e) => setManualItem(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && handleAddManual()}
+            placeholder="Add item manually…"
+            className="flex-1 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-800 placeholder-slate-400 outline-none focus:border-amber-400 focus:ring-2 focus:ring-amber-100 transition-colors"
           />
-        ))}
-      </div>
+          <Button size="sm" onClick={handleAddManual} disabled={!manualItem.trim()} aria-label="Add">
+            <Plus size={14} />
+          </Button>
+        </div>
+      )}
 
-      {/* Manual add */}
-      <div className="flex gap-2">
-        <input
-          value={manualItem}
-          onChange={(e) => setManualItem(e.target.value)}
-          onKeyDown={(e) => e.key === 'Enter' && handleAddManual()}
-          placeholder="Add item manually…"
-          className="flex-1 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-800 placeholder-slate-400 outline-none focus:border-amber-400 focus:ring-2 focus:ring-amber-100 transition-colors"
-        />
-        <Button size="sm" onClick={handleAddManual} disabled={!manualItem.trim()} aria-label="Add">
-          <Plus size={14} />
-        </Button>
-      </div>
-
-      {/* Checked items */}
+      {/* Checked / In basket */}
       {checked.length > 0 && (
         <div className="flex flex-col gap-1">
           <div className="flex items-center justify-between">
             <span className="text-xs font-medium text-slate-400 uppercase tracking-wide">
               In basket ({checked.length})
             </span>
-            <button
-              onClick={() => { pushHistory(); clearCheckedItems(); }}
-              className="text-xs text-slate-400 hover:text-red-500 transition-colors"
-            >
-              Clear all
-            </button>
+            {mode === 'edit' && (
+              <button
+                onClick={() => { pushHistory(); clearCheckedItems(); }}
+                className="text-xs text-slate-400 hover:text-red-500 transition-colors"
+              >
+                Clear all
+              </button>
+            )}
           </div>
-          {checked.map((item) => (
-            <ShoppingItemRow
-              key={item.id}
-              item={item}
-              onToggle={() => handleToggle(item.id)}
-              onRemove={() => handleRemove(item.id)}
-            />
-          ))}
+          {checked.map((item) =>
+            mode === 'shop' ? (
+              <ShopItem key={item.id} item={item} onToggle={() => handleToggle(item.id)} />
+            ) : (
+              <EditItem
+                key={item.id}
+                item={item}
+                isDragOver={false}
+                isEditing={editingId === item.id}
+                editingValue={editingValue}
+                onEditStart={() => handleEditStart(item)}
+                onEditChange={setEditingValue}
+                onEditSave={() => handleEditSave(item.id)}
+                onEditCancel={handleEditCancel}
+                onRemove={() => handleRemove(item.id)}
+                onDragStart={() => {}}
+                onDragEnter={() => {}}
+                onDragEnd={() => {}}
+                draggable={false}
+              />
+            )
+          )}
         </div>
       )}
 
@@ -216,58 +318,133 @@ export function ShoppingListPage() {
   );
 }
 
-function ShoppingItemRow({
+function ShopItem({
   item,
   onToggle,
-  onRemove,
 }: {
   item: ShoppingItem;
   onToggle: () => void;
-  onRemove: () => void;
 }) {
   return (
-    <div
+    <button
+      onClick={onToggle}
       className={[
-        'flex items-center gap-3 px-3 py-2.5 rounded-xl border transition-all duration-200',
+        'flex items-center gap-3 px-4 py-4 rounded-2xl border transition-all duration-200 text-left w-full active:scale-[0.98]',
         item.checked
           ? 'bg-slate-50 border-slate-100 opacity-60'
-          : 'bg-white border-slate-100',
+          : 'bg-white border-slate-200 shadow-sm hover:border-amber-300',
       ].join(' ')}
     >
-      <button
-        onClick={onToggle}
+      <div
         className={[
-          'w-5 h-5 rounded-full border-2 flex items-center justify-center shrink-0 transition-all',
-          item.checked
-            ? 'bg-amber-500 border-amber-500'
-            : 'border-slate-300 hover:border-amber-400',
+          'w-6 h-6 rounded-full border-2 flex items-center justify-center shrink-0 transition-all',
+          item.checked ? 'bg-amber-500 border-amber-500' : 'border-slate-300',
         ].join(' ')}
-        aria-label={item.checked ? 'Uncheck' : 'Check'}
       >
-        {item.checked && <Check size={10} className="text-white" />}
-      </button>
-
+        {item.checked && <Check size={12} className="text-white" />}
+      </div>
       <span
         className={[
-          'flex-1 text-sm',
-          item.checked ? 'line-through text-slate-400' : 'text-slate-700',
+          'text-base font-medium flex-1 text-left',
+          item.checked ? 'line-through text-slate-400' : 'text-slate-800',
         ].join(' ')}
       >
         {item.quantity > 0 && item.quantity !== 1 && (
-          <span className="font-medium text-slate-900 mr-1">{item.quantity}</span>
+          <span className="text-slate-500 mr-1">{item.quantity}</span>
         )}
         {item.unit && <span className="text-slate-500 mr-1">{item.unit}</span>}
         {item.name}
       </span>
+      <Badge variant="default" size="sm">{item.category}</Badge>
+    </button>
+  );
+}
+
+function EditItem({
+  item,
+  draggable,
+  isDragOver,
+  isEditing,
+  editingValue,
+  onEditStart,
+  onEditChange,
+  onEditSave,
+  onEditCancel,
+  onRemove,
+  onDragStart,
+  onDragEnter,
+  onDragEnd,
+}: {
+  item: ShoppingItem;
+  draggable: boolean;
+  isDragOver: boolean;
+  isEditing: boolean;
+  editingValue: string;
+  onEditStart: () => void;
+  onEditChange: (v: string) => void;
+  onEditSave: () => void;
+  onEditCancel: () => void;
+  onRemove: () => void;
+  onDragStart: () => void;
+  onDragEnter: () => void;
+  onDragEnd: () => void;
+}) {
+  return (
+    <div
+      draggable={draggable}
+      onDragStart={onDragStart}
+      onDragEnter={onDragEnter}
+      onDragEnd={onDragEnd}
+      onDragOver={(e) => e.preventDefault()}
+      className={[
+        'flex items-center gap-3 px-3 py-2.5 rounded-xl border transition-all duration-150',
+        item.checked ? 'bg-slate-50 border-slate-100 opacity-60' : 'bg-white border-slate-100',
+        isDragOver ? 'border-amber-400 shadow-sm scale-[1.01]' : '',
+      ].join(' ')}
+    >
+      {draggable && (
+        <GripVertical
+          size={16}
+          className="text-slate-300 shrink-0 cursor-grab active:cursor-grabbing touch-none"
+        />
+      )}
+
+      {isEditing ? (
+        <input
+          autoFocus
+          value={editingValue}
+          onChange={(e) => onEditChange(e.target.value)}
+          onBlur={onEditSave}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') onEditSave();
+            if (e.key === 'Escape') onEditCancel();
+          }}
+          className="flex-1 text-sm text-slate-800 bg-transparent border-b border-amber-400 outline-none py-0.5"
+        />
+      ) : (
+        <button
+          onClick={onEditStart}
+          className={[
+            'flex-1 text-sm text-left',
+            item.checked ? 'line-through text-slate-400' : 'text-slate-700 hover:text-slate-900',
+          ].join(' ')}
+        >
+          {item.quantity > 0 && item.quantity !== 1 && (
+            <span className="font-medium text-slate-900 mr-1">{item.quantity}</span>
+          )}
+          {item.unit && <span className="text-slate-500 mr-1">{item.unit}</span>}
+          {item.name}
+        </button>
+      )}
 
       <Badge variant="default" size="sm">{item.category}</Badge>
 
       <button
         onClick={onRemove}
-        className="text-slate-200 hover:text-red-400 transition-colors shrink-0"
+        className="text-slate-300 hover:text-red-400 transition-colors shrink-0"
         aria-label="Remove item"
       >
-        <Trash2 size={13} />
+        <X size={15} />
       </button>
     </div>
   );
