@@ -83,9 +83,9 @@ export function PlanMealModal({ date, onClose }: Props) {
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-black/30 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative z-10 w-full max-w-sm bg-white rounded-t-3xl sm:rounded-2xl shadow-xl flex flex-col max-h-[80dvh] animate-slide-up">
+      <div className="relative z-10 w-full max-w-sm bg-white rounded-2xl shadow-xl flex flex-col max-h-[90dvh] animate-slide-up">
         {/* Header */}
         <div className="flex items-center justify-between p-4 border-b border-slate-100 shrink-0">
           <h3 className="text-base font-semibold text-slate-800">Plan a Meal</h3>
