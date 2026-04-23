@@ -95,7 +95,7 @@ export function DayRow({ date }: Props) {
         </div>
         <button
           onClick={() => setModalOpen(true)}
-          className="flex items-center gap-1 text-xs text-slate-400 hover:text-amber-600 transition-colors"
+          className="flex items-center gap-1 text-xs text-slate-400 hover:text-amber-600 transition-colors py-1.5 px-2 -mr-2 rounded-lg"
           aria-label="Plan meal"
         >
           <Plus size={14} />
@@ -186,7 +186,7 @@ function MealChip({ entry, title, onClick, onDelete, onServingsChange, onMealTim
               title={mt.charAt(0).toUpperCase() + mt.slice(1)}
               onClick={() => onMealTimeChange(entry.mealTime === mt ? undefined : mt)}
               className={[
-                'w-5 h-5 rounded-full text-[9px] font-bold flex items-center justify-center transition-colors',
+                'w-7 h-7 rounded-full text-[10px] font-bold flex items-center justify-center transition-colors',
                 entry.mealTime === mt
                   ? MEAL_TIME_ACTIVE[mt]
                   : 'bg-white/70 text-slate-300 hover:bg-slate-200 hover:text-slate-500',
@@ -203,18 +203,18 @@ function MealChip({ entry, title, onClick, onDelete, onServingsChange, onMealTim
         <div className="flex items-center gap-1 shrink-0">
           <button
             onClick={() => onServingsChange(-1)}
-            className="w-5 h-5 flex items-center justify-center text-slate-400 hover:text-slate-600 rounded-full hover:bg-white/70"
+            className="w-7 h-7 flex items-center justify-center text-slate-400 hover:text-slate-600 rounded-full hover:bg-white/70"
             aria-label="Reduce servings"
           >
-            <Minus size={10} />
+            <Minus size={12} />
           </button>
           <span className="text-[11px] text-slate-600 font-medium w-4 text-center">{entry.servings}</span>
           <button
             onClick={() => onServingsChange(1)}
-            className="w-5 h-5 flex items-center justify-center text-slate-400 hover:text-slate-600 rounded-full hover:bg-white/70"
+            className="w-7 h-7 flex items-center justify-center text-slate-400 hover:text-slate-600 rounded-full hover:bg-white/70"
             aria-label="Increase servings"
           >
-            <Plus size={10} />
+            <Plus size={12} />
           </button>
         </div>
 
@@ -222,31 +222,31 @@ function MealChip({ entry, title, onClick, onDelete, onServingsChange, onMealTim
         {entry.type === 'recipe' && (
           <button
             onClick={onAddToShoppingList}
-            className="shrink-0 text-slate-300 hover:text-blue-400 transition-colors"
+            className="shrink-0 w-8 h-8 flex items-center justify-center rounded-full text-slate-300 hover:text-blue-400 hover:bg-blue-50 transition-colors"
             title="Add ingredients to shopping list"
             aria-label="Add ingredients to shopping list"
           >
-            <ShoppingCart size={13} />
+            <ShoppingCart size={15} />
           </button>
         )}
 
         {/* Change day */}
         <button
           onClick={onChangeDay}
-          className="shrink-0 text-slate-300 hover:text-amber-500 transition-colors"
+          className="shrink-0 w-8 h-8 flex items-center justify-center rounded-full text-slate-300 hover:text-amber-500 hover:bg-amber-50 transition-colors"
           title="Move to a different day"
           aria-label="Move to a different day"
         >
-          <CalendarDays size={13} />
+          <CalendarDays size={15} />
         </button>
 
         {/* Delete */}
         <button
           onClick={onDelete}
-          className="shrink-0 text-slate-300 hover:text-red-400 transition-colors"
+          className="shrink-0 w-8 h-8 flex items-center justify-center rounded-full text-slate-300 hover:text-red-400 hover:bg-red-50 transition-colors"
           aria-label="Remove meal"
         >
-          <Trash2 size={13} />
+          <Trash2 size={15} />
         </button>
       </div>
     </div>
