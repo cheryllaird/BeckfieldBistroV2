@@ -1,4 +1,5 @@
-import { Clock, Users, Plus } from 'lucide-react';
+import { Clock, Users, Plus, UtensilsCrossed } from 'lucide-react';
+import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import type { Recipe } from '../../types';
 import { useStore } from '../../store';
@@ -11,6 +12,7 @@ interface Props {
 export function RecipeCard({ recipe }: Props) {
   const navigate = useNavigate();
   const { addMealEntry, mealEntries } = useStore();
+  const [imgError, setImgError] = useState(false);
 
   const handleQuickPlan = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -36,16 +38,17 @@ export function RecipeCard({ recipe }: Props) {
     >
       {/* Cover image */}
       <div className="relative aspect-[4/3] bg-slate-100">
-        {recipe.coverImage ? (
+        {recipe.coverImage && !imgError ? (
           <img
             src={recipe.coverImage}
             alt={recipe.title}
             className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
             loading="lazy"
+            onError={() => setImgError(true)}
           />
         ) : (
-          <div className="w-full h-full flex items-center justify-center text-slate-300 text-4xl">
-            🍽️
+          <div className="w-full h-full flex items-center justify-center text-slate-300">
+            <UtensilsCrossed size={40} />
           </div>
         )}
 

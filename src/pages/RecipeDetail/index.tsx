@@ -12,6 +12,7 @@ import {
   MoreVertical,
   ExternalLink,
   Image,
+  UtensilsCrossed,
 } from 'lucide-react';
 import { useStore } from '../../store';
 import { Button } from '../../components/ui/Button';
@@ -29,6 +30,7 @@ export function RecipeDetailPage() {
   const recipe = recipes.find((r) => r.id === id);
   const [tab, setTab] = useState<Tab>('ingredients');
   const [servings, setServings] = useState(recipe?.servings ?? 2);
+  const [imgError, setImgError] = useState(false);
   const [planModalOpen, setPlanModalOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -71,15 +73,16 @@ export function RecipeDetailPage() {
     <div className="flex flex-col gap-0 animate-in">
       {/* Cover image */}
       <div className="relative -mx-4 -mt-4 aspect-[16/9] bg-slate-100 mb-4">
-        {recipe.coverImage ? (
+        {recipe.coverImage && !imgError ? (
           <img
             src={recipe.coverImage}
             alt={recipe.title}
             className="w-full h-full object-cover"
+            onError={() => setImgError(true)}
           />
         ) : (
-          <div className="w-full h-full flex items-center justify-center text-6xl text-slate-300">
-            🍽️
+          <div className="w-full h-full flex items-center justify-center text-slate-300">
+            <UtensilsCrossed size={64} />
           </div>
         )}
         <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-transparent" />

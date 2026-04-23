@@ -1,5 +1,5 @@
-import { useRef, useState } from 'react';
-import { Plus, Trash2, Loader, Camera, X, Link } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
+import { Plus, Trash2, Loader, Camera, X, Link, UtensilsCrossed } from 'lucide-react';
 import type { Recipe, Ingredient } from '../../types';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
@@ -32,6 +32,8 @@ export function RecipeForm({ initial, knownSources, onSave, onCancel, isSaving }
   const [coverPhotoLoading, setCoverPhotoLoading] = useState(false);
   const [showCoverActions, setShowCoverActions] = useState(false);
   const [showUrlEntry, setShowUrlEntry] = useState(false);
+  const [imgError, setImgError] = useState(false);
+  useEffect(() => { setImgError(false); }, [coverImage]);
   const coverPhotoRef = useRef<HTMLInputElement>(null);
 
   const handleCoverPhotoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -163,12 +165,18 @@ export function RecipeForm({ initial, knownSources, onSave, onCancel, isSaving }
 
           {coverImage && (
             <div className="relative">
-              <img
-                src={coverImage}
-                alt="Cover preview"
-                className="w-full aspect-video object-cover rounded-xl"
-                onError={(e) => (e.currentTarget.style.display = 'none')}
-              />
+              {imgError ? (
+                <div className="w-full aspect-video rounded-xl bg-slate-100 flex items-center justify-center text-slate-300">
+                  <UtensilsCrossed size={48} />
+                </div>
+              ) : (
+                <img
+                  src={coverImage}
+                  alt="Cover preview"
+                  className="w-full aspect-video object-cover rounded-xl"
+                  onError={() => setImgError(true)}
+                />
+              )}
               <button
                 type="button"
                 onClick={() => setCoverImage('')}
