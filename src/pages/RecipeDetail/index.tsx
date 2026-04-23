@@ -72,7 +72,7 @@ export function RecipeDetailPage() {
   return (
     <div className="flex flex-col gap-0 animate-in">
       {/* Cover image */}
-      <div className="relative -mx-4 -mt-4 aspect-[16/9] bg-slate-100 mb-4">
+      <div className="relative -mx-4 -mt-4 aspect-[16/9] max-h-[50vh] bg-slate-100 mb-4 overflow-hidden">
         {recipe.coverImage && !imgError ? (
           <img
             src={recipe.coverImage}
