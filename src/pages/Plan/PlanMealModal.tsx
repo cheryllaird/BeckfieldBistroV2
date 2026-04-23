@@ -4,7 +4,7 @@ import { useStore } from '../../store';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
 import { generateId } from '../../lib/utils';
-import type { Recipe } from '../../types';
+import type { Recipe, MealTime } from '../../types';
 
 function RecipeListItem({ recipe, onClick }: { recipe: Recipe; onClick: () => void }) {
   const [imgError, setImgError] = useState(false);
@@ -33,6 +33,13 @@ function RecipeListItem({ recipe, onClick }: { recipe: Recipe; onClick: () => vo
   );
 }
 
+const MEAL_TIME_ACTIVE: Record<MealTime, string> = {
+  breakfast: 'bg-amber-400 text-white',
+  lunch: 'bg-green-500 text-white',
+  dinner: 'bg-blue-500 text-white',
+  snack: 'bg-purple-400 text-white',
+};
+
 interface Props {
   date: string;
   onClose: () => void;
@@ -41,6 +48,7 @@ interface Props {
 export function PlanMealModal({ date, onClose }: Props) {
   const { recipes, addMealEntry } = useStore();
   const [tab, setTab] = useState<'recipe' | 'custom' | 'dining-out'>('recipe');
+  const [mealTime, setMealTime] = useState<MealTime | undefined>(undefined);
   const [query, setQuery] = useState('');
   const [customTitle, setCustomTitle] = useState('');
   const [location, setLocation] = useState('');
@@ -51,13 +59,13 @@ export function PlanMealModal({ date, onClose }: Props) {
   );
 
   const addRecipeMeal = (recipeId: string, servings: number) => {
-    addMealEntry({ id: generateId(), date, type: 'recipe', recipeId, servings });
+    addMealEntry({ id: generateId(), date, type: 'recipe', recipeId, servings, mealTime });
     onClose();
   };
 
   const addCustomMeal = () => {
     if (!customTitle.trim()) return;
-    addMealEntry({ id: generateId(), date, type: 'custom', customTitle: customTitle.trim(), servings: 1 });
+    addMealEntry({ id: generateId(), date, type: 'custom', customTitle: customTitle.trim(), servings: 1, mealTime });
     onClose();
   };
 
@@ -69,6 +77,7 @@ export function PlanMealModal({ date, onClose }: Props) {
       customTitle: location.trim() || 'Dining Out',
       location: location.trim(),
       servings: 1,
+      mealTime,
     });
     onClose();
   };
@@ -83,6 +92,27 @@ export function PlanMealModal({ date, onClose }: Props) {
           <button onClick={onClose} className="text-slate-400 hover:text-slate-600">
             <X size={18} />
           </button>
+        </div>
+
+        {/* Meal time selector */}
+        <div className="px-4 pt-3 pb-2 shrink-0">
+          <p className="text-[10px] font-medium text-slate-400 uppercase tracking-wide mb-2">Meal time</p>
+          <div className="flex gap-2">
+            {(['breakfast', 'lunch', 'dinner', 'snack'] as MealTime[]).map((mt) => (
+              <button
+                key={mt}
+                onClick={() => setMealTime(mealTime === mt ? undefined : mt)}
+                className={[
+                  'flex-1 py-1.5 rounded-lg text-[10px] font-semibold capitalize transition-colors',
+                  mealTime === mt
+                    ? MEAL_TIME_ACTIVE[mt]
+                    : 'bg-slate-100 text-slate-400 hover:bg-slate-200',
+                ].join(' ')}
+              >
+                {mt}
+              </button>
+            ))}
+          </div>
         </div>
 
         {/* Tabs */}
