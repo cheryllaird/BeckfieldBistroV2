@@ -1,5 +1,39 @@
 import type { Ingredient, ShoppingItem, ShoppingCategory } from '../types';
 
+const UNIT_NORMALIZE_MAP: Record<string, string> = {
+  gram: 'g', grams: 'g',
+  kilogram: 'kg', kilograms: 'kg',
+  ounce: 'oz', ounces: 'oz',
+  pound: 'lb', pounds: 'lb', lbs: 'lb',
+  milliliter: 'ml', millilitre: 'ml', milliliters: 'ml', millilitres: 'ml',
+  liter: 'l', litre: 'l', liters: 'l', litres: 'l',
+  teaspoon: 'tsp', teaspoons: 'tsp',
+  tablespoon: 'tbsp', tablespoons: 'tbsp',
+  cups: 'cup',
+  piece: '', pieces: '', each: '', whole: '',
+};
+
+export function normalizeUnit(unit: string): string {
+  const lower = unit.toLowerCase().trim();
+  return Object.prototype.hasOwnProperty.call(UNIT_NORMALIZE_MAP, lower)
+    ? UNIT_NORMALIZE_MAP[lower]
+    : lower;
+}
+
+export function normalizeIngredientName(name: string): string {
+  const lower = name.toLowerCase().trim();
+  if (lower.endsWith('ies') && lower.length > 4) return lower.slice(0, -3) + 'y';
+  if (lower.endsWith('es') && lower.length > 4) return lower.slice(0, -2);
+  if (
+    lower.endsWith('s') &&
+    !lower.endsWith('ss') &&
+    !lower.endsWith('us') &&
+    !lower.endsWith('is') &&
+    lower.length > 3
+  ) return lower.slice(0, -1);
+  return lower;
+}
+
 export function generateId(): string {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
 }
@@ -68,7 +102,7 @@ export function consolidateIngredients(
   for (const { ingredients, servings, originalServings } of ingredientGroups) {
     for (const ing of ingredients) {
       const scaled = scaleIngredient(ing, originalServings, servings);
-      const key = `${scaled.name.toLowerCase()}__${scaled.unit.toLowerCase()}`;
+      const key = `${normalizeIngredientName(scaled.name)}__${normalizeUnit(scaled.unit)}`;
       const existing = map.get(key);
       if (existing) {
         map.set(key, { ...existing, quantity: Math.round((existing.quantity + scaled.quantity) * 100) / 100 });
@@ -86,6 +120,45 @@ export function consolidateIngredients(
   }
 
   return Array.from(map.values()).sort((a, b) => a.category.localeCompare(b.category));
+}
+
+export function mergeIntoShoppingList(
+  existing: ShoppingItem[],
+  ingredients: Ingredient[],
+  scale: number
+): ShoppingItem[] {
+  const result = existing.map((item) => ({ ...item }));
+
+  for (const ing of ingredients) {
+    const scaledQty = Math.round(ing.quantity * scale * 100) / 100;
+    const normName = normalizeIngredientName(ing.name);
+    const normUnit = normalizeUnit(ing.unit);
+
+    const matchIdx = result.findIndex(
+      (item) =>
+        normalizeIngredientName(item.name) === normName &&
+        normalizeUnit(item.unit) === normUnit
+    );
+
+    if (matchIdx >= 0) {
+      const match = result[matchIdx];
+      result[matchIdx] = {
+        ...match,
+        quantity: Math.round((match.quantity + scaledQty) * 100) / 100,
+      };
+    } else {
+      result.push({
+        id: generateId(),
+        name: ing.name,
+        quantity: scaledQty,
+        unit: ing.unit,
+        category: categorize(ing.name),
+        checked: false,
+      });
+    }
+  }
+
+  return result;
 }
 
 export function isoDate(date: Date): string {
