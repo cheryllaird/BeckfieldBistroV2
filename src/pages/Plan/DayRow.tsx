@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Plus, UtensilsCrossed, MapPin, FileText, Minus, Trash2, ShoppingCart, CalendarDays, CalendarPlus, ChevronDown, Check } from 'lucide-react';
+import { Plus, UtensilsCrossed, MapPin, FileText, Minus, Trash2, ShoppingCart, CalendarDays, CalendarPlus, ChevronDown, Check, Users } from 'lucide-react';
 import { useStore } from '../../store';
 import { formatDayLabel, isoDate, generateId } from '../../lib/utils';
 import type { MealEntry, MealTime } from '../../types';
@@ -85,12 +85,12 @@ export function DayRow({ date }: Props) {
   return (
     <div
       className={[
-        'bg-white rounded-2xl border p-3 transition-all',
-        isToday ? 'border-amber-200 shadow-sm' : 'border-slate-100',
+        'rounded-2xl border transition-all',
+        isToday ? 'border-amber-200' : 'border-slate-100',
       ].join(' ')}
     >
       {/* Day header */}
-      <div className="flex items-center justify-between mb-2">
+      <div className="flex items-center justify-between px-3 pt-3 pb-3">
         <p className="text-sm leading-none">
           <span className={`font-bold ${isToday ? 'text-amber-500' : 'text-slate-800'}`}>{fullWeekday}</span>
           <span className="text-slate-400 font-normal"> {dateLabel}</span>
@@ -107,7 +107,7 @@ export function DayRow({ date }: Props) {
 
       {/* Meal entries */}
       {sortedEntries.length > 0 && (
-        <div className="flex flex-col gap-2 mt-2">
+        <div className="flex flex-col gap-px">
           {sortedEntries.map((entry) => (
             <MealChip
               key={entry.id}
@@ -175,7 +175,7 @@ function MealChip({ entry, title, coverImage, onClick, onDelete, onServingsChang
         onConfirm={() => { setConfirmingDelete(false); onDelete(); }}
       />
     )}
-    <div className="flex items-start gap-3 rounded-xl border border-slate-100 p-3 bg-white">
+    <div className="flex items-start gap-3 px-3 py-2.5 bg-slate-50 border-t border-slate-100 last:rounded-b-2xl last:pb-3">
       {/* Thumbnail */}
       {entry.type === 'recipe' && (
         coverImage && !imgError ? (
@@ -236,10 +236,11 @@ function MealChip({ entry, title, coverImage, onClick, onDelete, onServingsChang
           {/* Servings */}
           <button
             onClick={() => setServingsOpen(true)}
-            className="shrink-0 text-[10px] text-slate-400 font-medium whitespace-nowrap px-2 py-1 rounded-full hover:bg-slate-100 hover:text-slate-600 transition-colors"
+            className="shrink-0 flex items-center gap-1 text-xs text-slate-500 px-2 py-1 rounded-full hover:bg-slate-100 hover:text-slate-700 transition-colors"
             aria-label="Edit servings"
           >
-            {entry.servings} srv
+            <Users size={12} />
+            {entry.servings}
           </button>
 
           <div className="flex-1" />
