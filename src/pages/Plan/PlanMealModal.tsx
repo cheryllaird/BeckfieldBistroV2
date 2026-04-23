@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { X, Search, UtensilsCrossed, FileText, MapPin } from 'lucide-react';
+import { X, Search, UtensilsCrossed, MapPin } from 'lucide-react';
 import { useStore } from '../../store';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
@@ -41,9 +41,8 @@ interface Props {
 
 export function PlanMealModal({ date, onClose }: Props) {
   const { recipes, addMealEntry } = useStore();
-  const [tab, setTab] = useState<'recipe' | 'custom' | 'dining-out'>('recipe');
+  const [tab, setTab] = useState<'recipe' | 'dining-out'>('recipe');
   const [query, setQuery] = useState('');
-  const [customTitle, setCustomTitle] = useState('');
   const [location, setLocation] = useState('');
 
   const filtered = recipes.filter((r) =>
@@ -56,9 +55,8 @@ export function PlanMealModal({ date, onClose }: Props) {
     onClose();
   };
 
-  const addCustomMeal = () => {
-    if (!customTitle.trim()) return;
-    addMealEntry({ id: generateId(), date, type: 'custom', customTitle: customTitle.trim(), servings: 1 });
+  const addCustomMeal = (title: string) => {
+    addMealEntry({ id: generateId(), date, type: 'custom', customTitle: title.trim(), servings: 1 });
     onClose();
   };
 
@@ -91,7 +89,6 @@ export function PlanMealModal({ date, onClose }: Props) {
         <div className="flex border-b border-slate-100 shrink-0">
           {[
             { key: 'recipe', label: 'From Library', icon: UtensilsCrossed },
-            { key: 'custom', label: 'Custom', icon: FileText },
             { key: 'dining-out', label: 'Dining Out', icon: MapPin },
           ].map(({ key, label, icon: Icon }) => (
             <button
@@ -120,8 +117,22 @@ export function PlanMealModal({ date, onClose }: Props) {
                 onChange={(e) => setQuery(e.target.value)}
                 icon={<Search size={14} />}
               />
-              {filtered.length === 0 && (
-                <p className="text-xs text-slate-400 text-center py-4">No recipes found</p>
+              {filtered.length === 0 && query.trim() && (
+                <button
+                  onClick={() => addCustomMeal(query)}
+                  className="flex items-center gap-3 p-3 rounded-xl border border-dashed border-slate-200 hover:bg-slate-50 transition-colors text-left w-full"
+                >
+                  <div className="w-10 h-10 rounded-lg bg-slate-100 flex items-center justify-center shrink-0 text-slate-400">
+                    <UtensilsCrossed size={18} />
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium text-slate-800 truncate">"{query}"</p>
+                    <p className="text-xs text-slate-400">Add as custom meal</p>
+                  </div>
+                </button>
+              )}
+              {filtered.length === 0 && !query.trim() && (
+                <p className="text-xs text-slate-400 text-center py-4">No recipes in library</p>
               )}
               {filtered.map((r) => (
                 <RecipeListItem
@@ -130,20 +141,6 @@ export function PlanMealModal({ date, onClose }: Props) {
                   onClick={() => addRecipeMeal(r.id, r.servings)}
                 />
               ))}
-            </div>
-          )}
-
-          {tab === 'custom' && (
-            <div className="flex flex-col gap-3">
-              <Input
-                label="Meal name"
-                placeholder="e.g. Leftover pasta, Sandwiches…"
-                value={customTitle}
-                onChange={(e) => setCustomTitle(e.target.value)}
-              />
-              <Button fullWidth onClick={addCustomMeal} disabled={!customTitle.trim()}>
-                Add Custom Meal
-              </Button>
             </div>
           )}
 
