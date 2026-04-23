@@ -194,26 +194,26 @@ function MealChip({ entry, title, onClick, onDelete, onServingsChange, onMealTim
           </select>
         </div>
 
-        <div className="flex-1" />
-
         {/* Servings control */}
-        <div className="flex items-center gap-1 shrink-0">
+        <div className="flex items-center gap-0.5 shrink-0">
           <button
             onClick={() => onServingsChange(-1)}
-            className="w-7 h-7 flex items-center justify-center text-slate-400 hover:text-slate-600 rounded-full hover:bg-white/70"
+            className="w-6 h-6 flex items-center justify-center text-slate-400 hover:text-slate-600 rounded-full hover:bg-white/70"
             aria-label="Reduce servings"
           >
-            <Minus size={12} />
+            <Minus size={11} />
           </button>
-          <span className="text-[11px] text-slate-600 font-medium w-4 text-center">{entry.servings}</span>
+          <span className="text-[10px] text-slate-500 font-medium whitespace-nowrap">{entry.servings} servings</span>
           <button
             onClick={() => onServingsChange(1)}
-            className="w-7 h-7 flex items-center justify-center text-slate-400 hover:text-slate-600 rounded-full hover:bg-white/70"
+            className="w-6 h-6 flex items-center justify-center text-slate-400 hover:text-slate-600 rounded-full hover:bg-white/70"
             aria-label="Increase servings"
           >
-            <Plus size={12} />
+            <Plus size={11} />
           </button>
         </div>
+
+        <div className="flex-1" />
 
         {/* Add to shopping list (recipe only) */}
         {entry.type === 'recipe' && (
