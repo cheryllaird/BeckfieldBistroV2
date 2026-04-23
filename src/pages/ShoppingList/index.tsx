@@ -324,7 +324,7 @@ function ShopItem({
     <button
       onClick={onToggle}
       className={[
-        'flex items-center gap-3 px-4 py-4 rounded-2xl border transition-all duration-200 text-left w-full active:scale-[0.98]',
+        'flex items-center gap-3 px-3 py-2.5 rounded-xl border transition-all duration-200 text-left w-full active:scale-[0.98]',
         item.checked
           ? 'bg-slate-50 border-slate-100 opacity-60'
           : 'bg-white border-slate-200 shadow-sm hover:border-amber-300',
@@ -340,7 +340,7 @@ function ShopItem({
       </div>
       <span
         className={[
-          'text-base font-medium flex-1 text-left',
+          'text-sm font-medium flex-1 text-left',
           item.checked ? 'line-through text-slate-400' : 'text-slate-800',
         ].join(' ')}
       >
