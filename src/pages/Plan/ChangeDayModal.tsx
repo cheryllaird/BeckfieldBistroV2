@@ -35,9 +35,9 @@ export function ChangeDayModal({ entry, title, onClose }: Props) {
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-black/30 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative z-10 w-full max-w-sm bg-white rounded-t-3xl sm:rounded-2xl p-5 shadow-xl animate-slide-up">
+      <div className="relative z-10 w-full max-w-sm bg-white rounded-2xl p-5 shadow-xl flex flex-col max-h-[90dvh] overflow-y-auto animate-slide-up">
         <div className="flex items-center justify-between mb-4">
           <h3 className="text-base font-semibold text-slate-800">Move to a different day</h3>
           <button onClick={onClose} className="text-slate-400 hover:text-slate-600">
