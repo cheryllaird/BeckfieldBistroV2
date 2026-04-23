@@ -144,6 +144,8 @@ interface ChipProps {
 }
 
 function MealChip({ entry, title, onClick, onDelete, onServingsChange, onMealTimeChange, onAddToShoppingList, onChangeDay }: ChipProps) {
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
+
   const typeStyles: Record<MealEntry['type'], string> = {
     recipe: 'bg-slate-50 border-slate-200',
     custom: 'bg-blue-50 border-blue-100',
@@ -236,13 +238,31 @@ function MealChip({ entry, title, onClick, onDelete, onServingsChange, onMealTim
         </button>
 
         {/* Delete */}
-        <button
-          onClick={onDelete}
-          className="shrink-0 w-8 h-8 flex items-center justify-center rounded-full text-slate-300 hover:text-red-400 hover:bg-red-50 transition-colors"
-          aria-label="Remove meal"
-        >
-          <Trash2 size={15} />
-        </button>
+        {confirmingDelete ? (
+          <div className="flex items-center gap-1 shrink-0">
+            <span className="text-[10px] text-red-500 font-medium">Delete?</span>
+            <button
+              onClick={() => setConfirmingDelete(false)}
+              className="text-[10px] px-2 py-0.5 rounded-full bg-slate-100 text-slate-500 hover:bg-slate-200 transition-colors"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={() => { setConfirmingDelete(false); onDelete(); }}
+              className="text-[10px] px-2 py-0.5 rounded-full bg-red-100 text-red-600 hover:bg-red-200 transition-colors"
+            >
+              Delete
+            </button>
+          </div>
+        ) : (
+          <button
+            onClick={() => setConfirmingDelete(true)}
+            className="shrink-0 w-8 h-8 flex items-center justify-center rounded-full text-slate-300 hover:text-red-400 hover:bg-red-50 transition-colors"
+            aria-label="Remove meal"
+          >
+            <Trash2 size={15} />
+          </button>
+        )}
       </div>
     </div>
   );
