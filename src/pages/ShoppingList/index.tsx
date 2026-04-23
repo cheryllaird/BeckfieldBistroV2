@@ -253,18 +253,26 @@ export function ShoppingListPage() {
 
       {/* Manual add (edit mode only) */}
       {mode === 'edit' && (
-        <div className="flex gap-2">
-          <input
-            value={manualItem}
-            onChange={(e) => setManualItem(e.target.value)}
-            onKeyDown={(e) => e.key === 'Enter' && handleAddManual()}
-            placeholder="Add item manually…"
-            className="flex-1 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-800 placeholder-slate-400 outline-none focus:border-amber-400 focus:ring-2 focus:ring-amber-100 transition-colors"
-          />
-          <Button size="sm" onClick={handleAddManual} disabled={!manualItem.trim()} aria-label="Add">
-            <Plus size={14} />
-          </Button>
-        </div>
+        <>
+          <div className="flex gap-2">
+            <input
+              value={manualItem}
+              onChange={(e) => setManualItem(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && handleAddManual()}
+              placeholder="Add item manually…"
+              className="flex-1 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-800 placeholder-slate-400 outline-none focus:border-amber-400 focus:ring-2 focus:ring-amber-100 transition-colors"
+            />
+            <Button size="sm" onClick={handleAddManual} disabled={!manualItem.trim()} aria-label="Add">
+              <Plus size={14} />
+            </Button>
+          </div>
+          <button
+            onClick={() => { pushHistory(); setShoppingItems([]); }}
+            className="text-xs text-slate-400 hover:text-red-500 transition-colors self-center"
+          >
+            Clear entire list
+          </button>
+        </>
       )}
 
       {/* Checked / In basket */}
