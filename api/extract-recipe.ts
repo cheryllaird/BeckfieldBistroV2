@@ -108,36 +108,51 @@ function stripHtml(html: string): string {
     .slice(0, 15000);
 }
 
-async function callGeminiWithRetry(fn: () => Promise<string>): Promise<string> {
-  const delays = [8000, 20000];
-  for (let attempt = 0; attempt <= delays.length; attempt++) {
-    console.log(`Gemini attempt ${attempt + 1}/${delays.length + 1}`);
+function isRateLimitError(err: unknown): boolean {
+  const e = err as Record<string, unknown>;
+  const status = (e.status ?? e.httpStatus ?? e.statusCode) as number | undefined;
+  const message = err instanceof Error ? err.message : String(err);
+  return (
+    status === 429 ||
+    message.includes('429') ||
+    message.includes('RESOURCE_EXHAUSTED') ||
+    message.toLowerCase().includes('too many requests') ||
+    message.toLowerCase().includes('quota exceeded')
+  );
+}
+
+async function callGeminiWithRetry(genAI: GoogleGenerativeAI, parts: (string | Part)[]): Promise<string> {
+  // Primary model: up to 3 attempts with delays between them.
+  const primaryDelays = [8000, 20000];
+  let lastErr: unknown;
+
+  for (let attempt = 0; attempt <= primaryDelays.length; attempt++) {
+    console.log(`gemini-2.0-flash attempt ${attempt + 1}/${primaryDelays.length + 1}`);
     try {
-      return await fn();
+      const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash', systemInstruction: SYSTEM_PROMPT });
+      return await model.generateContent(parts).then((r) => r.response.text());
     } catch (err) {
-      const e = err as Record<string, unknown>;
-      const status = (e.status ?? e.httpStatus ?? e.statusCode) as number | undefined;
       const message = err instanceof Error ? err.message : String(err);
-      const errName = err instanceof Error ? err.constructor.name : typeof err;
-      // Log every property on the error object for Vercel log diagnostics
-      const errKeys = Object.getOwnPropertyNames(e).filter((k) => k !== 'stack');
-      const errProps: Record<string, unknown> = {};
-      for (const k of errKeys) errProps[k] = e[k];
-      console.error(`Gemini attempt ${attempt + 1} failed: ${errName} status=${status} keys=${errKeys.join(',')}`);
-      console.error(`Gemini error props: ${JSON.stringify(errProps)}`);
-      console.error(`Gemini error message: ${message}`);
-      const isRateLimit =
-        status === 429 ||
-        message.includes('429') ||
-        message.includes('RESOURCE_EXHAUSTED') ||
-        message.toLowerCase().includes('too many requests') ||
-        message.toLowerCase().includes('quota exceeded');
-      if (!isRateLimit || attempt === delays.length) throw err;
-      console.log(`Rate limit detected — waiting ${delays[attempt]}ms before retry`);
-      await new Promise((resolve) => setTimeout(resolve, delays[attempt]));
+      console.error(`gemini-2.0-flash attempt ${attempt + 1} failed: ${message}`);
+      if (!isRateLimitError(err)) throw err;
+      lastErr = err;
+      if (attempt < primaryDelays.length) {
+        console.log(`Rate limit — waiting ${primaryDelays[attempt]}ms`);
+        await new Promise((resolve) => setTimeout(resolve, primaryDelays[attempt]));
+      }
     }
   }
-  throw new Error('unreachable');
+
+  // Primary quota exhausted — fall back to gemini-1.5-flash (separate quota bucket).
+  console.log('gemini-2.0-flash exhausted, falling back to gemini-1.5-flash');
+  try {
+    const fallback = genAI.getGenerativeModel({ model: 'gemini-1.5-flash', systemInstruction: SYSTEM_PROMPT });
+    return await fallback.generateContent(parts).then((r) => r.response.text());
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.error(`gemini-1.5-flash failed: ${message}`);
+    throw lastErr; // surface the original rate-limit error
+  }
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
@@ -175,10 +190,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   const genAI = new GoogleGenerativeAI(apiKey);
-  const model = genAI.getGenerativeModel({
-    model: 'gemini-2.0-flash',
-    systemInstruction: SYSTEM_PROMPT,
-  });
 
   // Build content parts based on input type
   let parts: (string | Part)[];
@@ -224,20 +235,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   let rawText: string;
   try {
-    rawText = await callGeminiWithRetry(() =>
-      model.generateContent(parts).then((r) => r.response.text())
-    );
+    rawText = await callGeminiWithRetry(genAI, parts);
   } catch (err) {
-    const e = err as Record<string, unknown>;
-    const status = (e.status ?? e.httpStatus ?? e.statusCode) as number | undefined;
-    const message = err instanceof Error ? err.message : String(err);
-    const isRateLimit =
-      status === 429 ||
-      message.includes('429') ||
-      message.includes('RESOURCE_EXHAUSTED') ||
-      message.toLowerCase().includes('too many requests') ||
-      message.toLowerCase().includes('quota exceeded');
-    if (isRateLimit) {
+    if (isRateLimitError(err)) {
       return res.status(429).json({ error: 'Too many requests. Please wait a moment and try again.' });
     }
     return res.status(502).json({ error: 'AI service error. Please try again.' });
