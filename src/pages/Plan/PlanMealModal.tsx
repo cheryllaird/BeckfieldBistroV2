@@ -3,6 +3,7 @@ import { X, Search, UtensilsCrossed, FileText, MapPin, ChevronDown } from 'lucid
 import { useStore } from '../../store';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
+import { ModalPortal } from '../../components/ui/ModalPortal';
 import { generateId } from '../../lib/utils';
 import type { Recipe, MealTime } from '../../types';
 
@@ -83,6 +84,7 @@ export function PlanMealModal({ date, onClose }: Props) {
   };
 
   return (
+    <ModalPortal>
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-black/30 backdrop-blur-sm" onClick={onClose} />
       <div className="relative z-10 w-full max-w-sm bg-white rounded-2xl shadow-xl flex flex-col max-h-[90dvh] animate-slide-up">
@@ -199,5 +201,6 @@ export function PlanMealModal({ date, onClose }: Props) {
         </div>
       </div>
     </div>
+    </ModalPortal>
   );
 }

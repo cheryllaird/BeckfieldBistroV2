@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import type { Recipe } from '../../types';
 import { useStore } from '../../store';
 import { Button } from '../../components/ui/Button';
+import { ModalPortal } from '../../components/ui/ModalPortal';
 import { generateId, isoDate, getWeekDays, formatDayLabel } from '../../lib/utils';
 
 interface Props {
@@ -38,6 +39,7 @@ export function PlanDateModal({ recipe, servings, onClose }: Props) {
   };
 
   return (
+    <ModalPortal>
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-black/30 backdrop-blur-sm" onClick={onClose} />
       <div className="relative z-10 w-full max-w-sm bg-white rounded-2xl p-5 shadow-xl flex flex-col max-h-[90dvh] overflow-y-auto animate-slide-up">
@@ -92,5 +94,6 @@ export function PlanDateModal({ recipe, servings, onClose }: Props) {
         </div>
       </div>
     </div>
+    </ModalPortal>
   );
 }
