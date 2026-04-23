@@ -372,7 +372,6 @@ function ShopItem({
             {item.name}
           </span>
         </button>
-        <Badge variant="default" size="sm">{item.category}</Badge>
         {hasSources && (
           <button
             onClick={() => setSourcesOpen(true)}
