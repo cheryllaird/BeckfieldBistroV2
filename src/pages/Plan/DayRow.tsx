@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Plus, UtensilsCrossed, MapPin, FileText, Minus, Trash2, ShoppingCart, CalendarDays, CalendarPlus, ChevronDown } from 'lucide-react';
+import { Plus, UtensilsCrossed, MapPin, FileText, Minus, Trash2, ShoppingCart, CalendarDays, CalendarPlus, ChevronDown, Check } from 'lucide-react';
 import { useStore } from '../../store';
 import { formatDayLabel, isoDate, generateId } from '../../lib/utils';
 import type { MealEntry, MealTime } from '../../types';
@@ -145,6 +145,7 @@ interface ChipProps {
 
 function MealChip({ entry, title, onClick, onDelete, onServingsChange, onMealTimeChange, onAddToShoppingList, onChangeDay }: ChipProps) {
   const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const [addedToList, setAddedToList] = useState(false);
 
   const typeStyles: Record<MealEntry['type'], string> = {
     recipe: 'bg-slate-50 border-slate-200',
@@ -218,12 +219,16 @@ function MealChip({ entry, title, onClick, onDelete, onServingsChange, onMealTim
         {/* Add to shopping list (recipe only) */}
         {entry.type === 'recipe' && (
           <button
-            onClick={onAddToShoppingList}
-            className="shrink-0 w-8 h-8 flex items-center justify-center rounded-full text-slate-300 hover:text-blue-400 hover:bg-blue-50 transition-colors"
-            title="Add ingredients to shopping list"
-            aria-label="Add ingredients to shopping list"
+            onClick={() => { onAddToShoppingList(); setAddedToList(true); }}
+            className={`shrink-0 w-8 h-8 flex items-center justify-center rounded-full transition-colors ${
+              addedToList
+                ? 'text-green-500 bg-green-50'
+                : 'text-slate-300 hover:text-blue-400 hover:bg-blue-50'
+            }`}
+            title={addedToList ? 'Added to shopping list' : 'Add ingredients to shopping list'}
+            aria-label={addedToList ? 'Added to shopping list' : 'Add ingredients to shopping list'}
           >
-            <ShoppingCart size={15} />
+            {addedToList ? <Check size={15} /> : <ShoppingCart size={15} />}
           </button>
         )}
 
