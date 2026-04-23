@@ -18,12 +18,6 @@ const MEAL_TIME_ORDER: Record<MealTime, number> = {
   snack: 3,
 };
 
-const MEAL_TIME_CHIP: Record<MealTime, string> = {
-  breakfast: 'bg-amber-400 text-white',
-  lunch: 'bg-green-500 text-white',
-  dinner: 'bg-blue-500 text-white',
-  snack: 'bg-purple-400 text-white',
-};
 
 function ordinal(n: number) {
   if (n >= 11 && n <= 13) return `${n}th`;
@@ -180,10 +174,7 @@ function MealChip({ entry, title, onClick, onDelete, onServingsChange, onMealTim
       <div className="flex items-center gap-1.5">
         {/* Meal time select chip */}
         <div className="relative inline-flex items-center shrink-0">
-          <div className={[
-            'flex items-center gap-1 pl-2.5 pr-2 py-1 rounded-full text-[10px] font-semibold pointer-events-none',
-            MEAL_TIME_CHIP[entry.mealTime ?? 'dinner'],
-          ].join(' ')}>
+          <div className="flex items-center gap-1 pl-2.5 pr-2 py-1 rounded-full text-[10px] font-semibold pointer-events-none bg-slate-100 text-slate-500">
             {(entry.mealTime ?? 'dinner').charAt(0).toUpperCase() + (entry.mealTime ?? 'dinner').slice(1)}
             <ChevronDown size={9} />
           </div>
