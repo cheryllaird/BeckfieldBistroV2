@@ -478,25 +478,20 @@ function EditItem({
   onDragEnter: () => void;
   onDragEnd: () => void;
 }) {
-  const rowRef = useRef<HTMLDivElement>(null);
-
-  const handleGripPointerDown = () => {
-    if (!rowRef.current) return;
-    rowRef.current.draggable = true;
-    document.addEventListener('pointerup', () => {
-      if (rowRef.current) rowRef.current.draggable = false;
-    }, { once: true });
-  };
+  const fromGrip = useRef(false);
 
   return (
     <div
-      ref={rowRef}
-      onDragStart={onDragStart}
+      draggable={isDraggable}
+      onDragStart={(e) => {
+        if (!fromGrip.current) { e.preventDefault(); return; }
+        onDragStart();
+      }}
       onDragEnter={(e) => {
         if (!e.currentTarget.contains(e.relatedTarget as Node)) onDragEnter();
       }}
       onDragEnd={() => {
-        if (rowRef.current) rowRef.current.draggable = false;
+        fromGrip.current = false;
         onDragEnd();
       }}
       onDragOver={(e) => e.preventDefault()}
@@ -510,7 +505,8 @@ function EditItem({
         <GripVertical
           size={16}
           className="text-slate-300 shrink-0 cursor-grab active:cursor-grabbing touch-none select-none"
-          onPointerDown={handleGripPointerDown}
+          onPointerDown={() => { fromGrip.current = true; }}
+          onPointerUp={() => { fromGrip.current = false; }}
         />
       )}
 
