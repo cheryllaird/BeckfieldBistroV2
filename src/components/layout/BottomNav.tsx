@@ -9,8 +9,8 @@ const navItems = [
 
 export function BottomNav() {
   return (
-    <nav className="fixed bottom-4 left-1/2 -translate-x-1/2 z-40 w-full max-w-xs">
-      <div className="mx-4 bg-white rounded-2xl border border-slate-200 shadow-lg shadow-slate-200 px-2 py-1.5">
+    <nav className="fixed bottom-0 left-0 right-0 z-40 w-full">
+      <div className="bg-white border-t border-slate-200 shadow-lg shadow-slate-200 px-2 py-1.5">
         <div className="flex items-center justify-around">
           {navItems.map(({ to, icon: Icon, label }) => (
             <NavLink
