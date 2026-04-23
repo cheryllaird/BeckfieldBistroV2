@@ -38,9 +38,7 @@ export interface MealEntry {
 
 export interface ShoppingItem {
   id: string;
-  name: string;
-  quantity: number;
-  unit: string;
+  name: string; // full plain text e.g. "2 cups flour" or "chicken breast"
   category: ShoppingCategory;
   checked: boolean;
   manual?: boolean;

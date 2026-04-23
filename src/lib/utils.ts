@@ -97,7 +97,7 @@ export function categorize(name: string): ShoppingCategory {
 export function consolidateIngredients(
   ingredientGroups: { ingredients: Ingredient[]; servings: number; originalServings: number }[]
 ): ShoppingItem[] {
-  const map = new Map<string, ShoppingItem>();
+  const map = new Map<string, { quantity: number; unit: string; name: string; category: ShoppingCategory }>();
 
   for (const { ingredients, servings, originalServings } of ingredientGroups) {
     for (const ing of ingredients) {
@@ -108,18 +108,23 @@ export function consolidateIngredients(
         map.set(key, { ...existing, quantity: Math.round((existing.quantity + scaled.quantity) * 100) / 100 });
       } else {
         map.set(key, {
-          id: generateId(),
-          name: scaled.name,
           quantity: scaled.quantity,
           unit: scaled.unit,
+          name: scaled.name,
           category: categorize(scaled.name),
-          checked: false,
         });
       }
     }
   }
 
-  return Array.from(map.values()).sort((a, b) => a.category.localeCompare(b.category));
+  return Array.from(map.values())
+    .map(({ quantity, unit, name, category }) => ({
+      id: generateId(),
+      name: [quantity > 0 ? formatQuantity(quantity) : '', unit, name].filter(Boolean).join(' '),
+      category,
+      checked: false,
+    }))
+    .sort((a, b) => a.category.localeCompare(b.category));
 }
 
 export function mergeIntoShoppingList(
@@ -127,31 +132,17 @@ export function mergeIntoShoppingList(
   ingredients: Ingredient[],
   scale: number
 ): ShoppingItem[] {
-  const result = existing.map((item) => ({ ...item }));
+  const result = [...existing];
 
   for (const ing of ingredients) {
     const scaledQty = Math.round(ing.quantity * scale * 100) / 100;
-    const normName = normalizeIngredientName(ing.name);
-    const normUnit = normalizeUnit(ing.unit);
-
-    const matchIdx = result.findIndex(
-      (item) =>
-        normalizeIngredientName(item.name) === normName &&
-        normalizeUnit(item.unit) === normUnit
-    );
-
-    if (matchIdx >= 0) {
-      const match = result[matchIdx];
-      result[matchIdx] = {
-        ...match,
-        quantity: Math.round((match.quantity + scaledQty) * 100) / 100,
-      };
-    } else {
+    const text = [scaledQty > 0 ? formatQuantity(scaledQty) : '', ing.unit, ing.name]
+      .filter(Boolean)
+      .join(' ');
+    if (!result.some((item) => item.name.toLowerCase() === text.toLowerCase())) {
       result.push({
         id: generateId(),
-        name: ing.name,
-        quantity: scaledQty,
-        unit: ing.unit,
+        name: text,
         category: categorize(ing.name),
         checked: false,
       });
