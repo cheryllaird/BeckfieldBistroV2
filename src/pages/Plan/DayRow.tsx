@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Plus, UtensilsCrossed, MapPin, FileText, Minus, Trash2, ShoppingCart, CalendarDays, ChevronDown } from 'lucide-react';
+import { Plus, UtensilsCrossed, MapPin, FileText, Minus, Trash2, ShoppingCart, CalendarDays, CalendarPlus, ChevronDown } from 'lucide-react';
 import { useStore } from '../../store';
 import { formatDayLabel, isoDate, generateId } from '../../lib/utils';
 import type { MealEntry, MealTime } from '../../types';
@@ -18,12 +18,6 @@ const MEAL_TIME_ORDER: Record<MealTime, number> = {
   snack: 3,
 };
 
-const MEAL_TIME_CHIP: Record<MealTime, string> = {
-  breakfast: 'bg-amber-400 text-white',
-  lunch: 'bg-green-500 text-white',
-  dinner: 'bg-blue-500 text-white',
-  snack: 'bg-purple-400 text-white',
-};
 
 function ordinal(n: number) {
   if (n >= 11 && n <= 13) return `${n}th`;
@@ -98,11 +92,7 @@ export function DayRow({ date }: Props) {
           className="flex items-center gap-1 text-xs text-slate-400 hover:text-amber-600 transition-colors py-1.5 px-2 -mr-2 rounded-lg"
           aria-label="Plan meal"
         >
-          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-            <circle cx="8" cy="8" r="6.5" stroke="currentColor" strokeWidth="1.5"/>
-            <circle cx="8" cy="8" r="4" stroke="currentColor" strokeWidth="1" strokeOpacity="0.5"/>
-            <path d="M8 5.5v5M5.5 8h5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
-          </svg>
+          <CalendarPlus size={15} />
           Plan
         </button>
       </div>
@@ -184,17 +174,12 @@ function MealChip({ entry, title, onClick, onDelete, onServingsChange, onMealTim
       <div className="flex items-center gap-1.5">
         {/* Meal time select chip */}
         <div className="relative inline-flex items-center shrink-0">
-          <div className={[
-            'flex items-center gap-1 pl-2.5 pr-2 py-1 rounded-full text-[10px] font-semibold pointer-events-none',
-            entry.mealTime ? MEAL_TIME_CHIP[entry.mealTime] : 'bg-slate-100 text-slate-400',
-          ].join(' ')}>
-            {entry.mealTime
-              ? entry.mealTime.charAt(0).toUpperCase() + entry.mealTime.slice(1)
-              : 'Set time'}
+          <div className="flex items-center gap-1 pl-2.5 pr-2 py-1 rounded-full text-[10px] font-semibold pointer-events-none bg-slate-100 text-slate-500">
+            {(entry.mealTime ?? 'dinner').charAt(0).toUpperCase() + (entry.mealTime ?? 'dinner').slice(1)}
             <ChevronDown size={9} />
           </div>
           <select
-            value={entry.mealTime ?? ''}
+            value={entry.mealTime ?? 'dinner'}
             onChange={(e) => onMealTimeChange((e.target.value as MealTime) || undefined)}
             className="absolute inset-0 opacity-0 w-full h-full cursor-pointer"
             aria-label="Meal time"
