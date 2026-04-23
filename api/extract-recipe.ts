@@ -45,6 +45,7 @@ const USER_PROMPT = `Extract the recipe and return a JSON object with exactly th
 
 Rules:
 - Return ONLY the JSON object. No markdown. No explanation.
+- Be concise: keep step strings short (1-3 sentences each); do not pad or elaborate.
 - If a field cannot be determined, use sensible defaults: empty string for strings, 4 for servings, empty arrays for arrays.
 - Keep "originalText" as faithful to the source as possible.
 - Split steps so each array entry is one paragraph of instruction.`;
@@ -105,7 +106,7 @@ function stripHtml(html: string): string {
     .replace(/&quot;/g, '"')
     .replace(/\s{2,}/g, ' ')
     .trim()
-    .slice(0, 15000);
+    .slice(0, 8000);
 }
 
 function isRateLimitError(err: unknown): boolean {
