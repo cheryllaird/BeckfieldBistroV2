@@ -1,4 +1,4 @@
-import { Clock, Users, Plus, UtensilsCrossed } from 'lucide-react';
+import { Clock, Users, Plus, CalendarPlus, UtensilsCrossed } from 'lucide-react';
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import type { Recipe } from '../../types';
@@ -58,7 +58,7 @@ export function RecipeCard({ recipe }: Props) {
           className="absolute top-2 right-2 w-8 h-8 rounded-full bg-white/90 backdrop-blur flex items-center justify-center shadow hover:bg-amber-500 hover:text-white transition-colors"
           aria-label="Add to plan"
         >
-          <Plus size={15} />
+          <CalendarPlus size={15} />
         </button>
       </div>
 
