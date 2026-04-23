@@ -70,8 +70,11 @@ export function DayRow({ date }: Props) {
     const recipe = recipes.find((r) => r.id === entry.recipeId);
     if (!recipe) return;
     const scale = recipe.servings > 0 ? entry.servings / recipe.servings : 1;
-    setShoppingItems(mergeIntoShoppingList(shoppingItems, recipe.ingredients, scale));
+    setShoppingItems(mergeIntoShoppingList(shoppingItems, recipe.ingredients, scale, entry.id, recipe.title));
   };
+
+  const isInShoppingList = (entryId: string) =>
+    shoppingItems.some((item) => item.mealSources?.some((src) => src.mealEntryId === entryId));
 
   return (
     <div
@@ -113,6 +116,7 @@ export function DayRow({ date }: Props) {
               onMealTimeChange={(mt) => updateMealEntry({ ...entry, mealTime: mt })}
               onAddToShoppingList={() => handleAddToShoppingList(entry)}
               onChangeDay={() => setChangeDayEntry(entry)}
+              isAddedToList={isInShoppingList(entry.id)}
             />
           ))}
         </div>
@@ -142,11 +146,11 @@ interface ChipProps {
   onMealTimeChange: (mealTime: MealTime | undefined) => void;
   onAddToShoppingList: () => void;
   onChangeDay: () => void;
+  isAddedToList: boolean;
 }
 
-function MealChip({ entry, title, coverImage, onClick, onDelete, onServingsChange, onMealTimeChange, onAddToShoppingList, onChangeDay }: ChipProps) {
+function MealChip({ entry, title, coverImage, onClick, onDelete, onServingsChange, onMealTimeChange, onAddToShoppingList, onChangeDay, isAddedToList }: ChipProps) {
   const [confirmingDelete, setConfirmingDelete] = useState(false);
-  const [addedToList, setAddedToList] = useState(false);
   const [servingsOpen, setServingsOpen] = useState(false);
   const [imgError, setImgError] = useState(false);
 
@@ -239,16 +243,16 @@ function MealChip({ entry, title, coverImage, onClick, onDelete, onServingsChang
           {/* Add to shopping list (recipe only) */}
           {entry.type === 'recipe' && (
             <button
-              onClick={() => { onAddToShoppingList(); setAddedToList(true); }}
+              onClick={onAddToShoppingList}
               className={`shrink-0 w-7 h-7 flex items-center justify-center rounded-full transition-colors ${
-                addedToList
+                isAddedToList
                   ? 'text-green-500 bg-green-50'
                   : 'text-slate-300 hover:text-blue-400 hover:bg-blue-50'
               }`}
-              title={addedToList ? 'Added to shopping list' : 'Add ingredients to shopping list'}
-              aria-label={addedToList ? 'Added to shopping list' : 'Add ingredients to shopping list'}
+              title={isAddedToList ? 'Added to shopping list' : 'Add ingredients to shopping list'}
+              aria-label={isAddedToList ? 'Added to shopping list' : 'Add ingredients to shopping list'}
             >
-              {addedToList ? <Check size={14} /> : <ShoppingCart size={14} />}
+              {isAddedToList ? <Check size={14} /> : <ShoppingCart size={14} />}
             </button>
           )}
 

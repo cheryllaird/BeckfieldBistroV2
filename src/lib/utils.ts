@@ -1,4 +1,4 @@
-import type { Ingredient, ShoppingItem, ShoppingCategory } from '../types';
+import type { Ingredient, MealSource, ShoppingItem, ShoppingCategory } from '../types';
 
 const UNIT_NORMALIZE_MAP: Record<string, string> = {
   gram: 'g', grams: 'g',
@@ -133,34 +133,57 @@ export function categorize(name: string): ShoppingCategory {
 }
 
 export function consolidateIngredients(
-  ingredientGroups: { ingredients: Ingredient[]; servings: number; originalServings: number }[]
+  ingredientGroups: {
+    ingredients: Ingredient[];
+    servings: number;
+    originalServings: number;
+    mealEntryId?: string;
+    recipeTitle?: string;
+  }[]
 ): ShoppingItem[] {
-  const map = new Map<string, { quantity: number; unit: string; name: string; category: ShoppingCategory }>();
+  const map = new Map<string, {
+    quantity: number;
+    unit: string;
+    name: string;
+    category: ShoppingCategory;
+    sources: MealSource[];
+  }>();
 
-  for (const { ingredients, servings, originalServings } of ingredientGroups) {
+  for (const { ingredients, servings, originalServings, mealEntryId, recipeTitle } of ingredientGroups) {
     for (const ing of ingredients) {
       const scaled = scaleIngredient(ing, originalServings, servings);
       const key = `${normalizeIngredientName(scaled.name)}__${normalizeUnit(scaled.unit)}`;
       const existing = map.get(key);
+      const newSource: MealSource | undefined =
+        mealEntryId && recipeTitle
+          ? { mealEntryId, recipeTitle, scaledQuantity: scaled.quantity, unit: scaled.unit, ingredientName: scaled.name }
+          : undefined;
       if (existing) {
-        map.set(key, { ...existing, quantity: Math.round((existing.quantity + scaled.quantity) * 100) / 100 });
+        map.set(key, {
+          ...existing,
+          quantity: Math.round((existing.quantity + scaled.quantity) * 100) / 100,
+          sources: newSource ? [...existing.sources, newSource] : existing.sources,
+        });
       } else {
         map.set(key, {
           quantity: scaled.quantity,
           unit: scaled.unit,
           name: scaled.name,
           category: categorize(scaled.name),
+          sources: newSource ? [newSource] : [],
         });
       }
     }
   }
 
-  return Array.from(map.values())
-    .map(({ quantity, unit, name, category }) => ({
+  return Array.from(map.entries())
+    .map(([key, { quantity, unit, name, category, sources }]) => ({
       id: generateId(),
       name: [quantity > 0 ? formatQuantity(quantity) : '', unit, name].filter(Boolean).join(' '),
       category,
       checked: false,
+      mealSources: sources.length > 0 ? sources : undefined,
+      ingredientKey: key,
     }))
     .sort((a, b) => a.category.localeCompare(b.category));
 }
@@ -168,21 +191,54 @@ export function consolidateIngredients(
 export function mergeIntoShoppingList(
   existing: ShoppingItem[],
   ingredients: Ingredient[],
-  scale: number
+  scale: number,
+  mealEntryId?: string,
+  recipeTitle?: string,
 ): ShoppingItem[] {
   const result = [...existing];
 
   for (const ing of ingredients) {
     const scaledQty = Math.round(ing.quantity * scale * 100) / 100;
-    const text = [scaledQty > 0 ? formatQuantity(scaledQty) : '', ing.unit, ing.name]
-      .filter(Boolean)
-      .join(' ');
-    if (!result.some((item) => item.name.toLowerCase() === text.toLowerCase())) {
+    const key = `${normalizeIngredientName(ing.name)}__${normalizeUnit(ing.unit)}`;
+
+    const existingIndex = result.findIndex((item) => item.ingredientKey === key);
+
+    if (existingIndex >= 0) {
+      const existingItem = result[existingIndex];
+      // Skip if this meal entry is already tracked as a source
+      if (mealEntryId && existingItem.mealSources?.some((s) => s.mealEntryId === mealEntryId)) {
+        continue;
+      }
+      const newSource: MealSource = {
+        mealEntryId: mealEntryId ?? '',
+        recipeTitle: recipeTitle ?? '',
+        scaledQuantity: scaledQty,
+        unit: ing.unit,
+        ingredientName: ing.name,
+      };
+      const newSources = [...(existingItem.mealSources ?? []), newSource];
+      const totalQty = Math.round(newSources.reduce((sum, s) => sum + s.scaledQuantity, 0) * 100) / 100;
+      result[existingIndex] = {
+        ...existingItem,
+        name: [totalQty > 0 ? formatQuantity(totalQty) : '', ing.unit, ing.name].filter(Boolean).join(' '),
+        mealSources: newSources,
+      };
+    } else {
+      // Fall back to text match for manually-added items without an ingredientKey
+      const text = [scaledQty > 0 ? formatQuantity(scaledQty) : '', ing.unit, ing.name].filter(Boolean).join(' ');
+      if (result.some((item) => item.name.toLowerCase() === text.toLowerCase() && !item.ingredientKey)) {
+        continue;
+      }
+      const newSource: MealSource | undefined = mealEntryId
+        ? { mealEntryId, recipeTitle: recipeTitle ?? '', scaledQuantity: scaledQty, unit: ing.unit, ingredientName: ing.name }
+        : undefined;
       result.push({
         id: generateId(),
         name: text,
         category: categorize(ing.name),
         checked: false,
+        mealSources: newSource ? [newSource] : undefined,
+        ingredientKey: key,
       });
     }
   }

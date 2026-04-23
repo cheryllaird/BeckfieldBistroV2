@@ -10,13 +10,15 @@ import {
   GripVertical,
   ShoppingBag,
   Pencil,
+  UtensilsCrossed,
 } from 'lucide-react';
 import { useStore } from '../../store';
 import { Button } from '../../components/ui/Button';
 import { Badge } from '../../components/ui/Badge';
-import { categorize, generateId } from '../../lib/utils';
-import type { ShoppingCategory, ShoppingItem } from '../../types';
+import { categorize, formatQuantity, generateId } from '../../lib/utils';
+import type { MealSource, ShoppingCategory, ShoppingItem } from '../../types';
 import { GenerateListModal } from './GenerateListModal';
+import { ModalPortal } from '../../components/ui/ModalPortal';
 
 type Mode = 'shop' | 'edit';
 
@@ -330,34 +332,106 @@ function ShopItem({
   item: ShoppingItem;
   onToggle: () => void;
 }) {
+  const [sourcesOpen, setSourcesOpen] = useState(false);
+  const hasSources = (item.mealSources?.length ?? 0) > 0;
+
   return (
-    <button
-      onClick={onToggle}
-      className={[
-        'flex items-center gap-3 px-3 py-2.5 rounded-xl border transition-all duration-150 text-left w-full active:scale-[0.98]',
-        item.checked
-          ? 'bg-slate-50 border-slate-100 opacity-60'
-          : 'bg-white border-slate-100 hover:border-amber-300',
-      ].join(' ')}
-    >
+    <>
+      {sourcesOpen && hasSources && (
+        <MealSourcesModal
+          sources={item.mealSources!}
+          onClose={() => setSourcesOpen(false)}
+        />
+      )}
       <div
         className={[
-          'w-5 h-5 rounded-full border-2 flex items-center justify-center shrink-0 transition-all',
-          item.checked ? 'bg-amber-500 border-amber-500' : 'border-slate-300',
+          'flex items-center gap-2 px-3 py-2.5 rounded-xl border transition-all duration-150',
+          item.checked
+            ? 'bg-slate-50 border-slate-100 opacity-60'
+            : 'bg-white border-slate-100 hover:border-amber-300',
         ].join(' ')}
       >
-        {item.checked && <Check size={10} className="text-white" />}
+        <button
+          onClick={onToggle}
+          className="flex items-center gap-3 flex-1 text-left active:scale-[0.98] min-w-0"
+        >
+          <div
+            className={[
+              'w-5 h-5 rounded-full border-2 flex items-center justify-center shrink-0 transition-all',
+              item.checked ? 'bg-amber-500 border-amber-500' : 'border-slate-300',
+            ].join(' ')}
+          >
+            {item.checked && <Check size={10} className="text-white" />}
+          </div>
+          <span
+            className={[
+              'text-sm flex-1 text-left',
+              item.checked ? 'line-through text-slate-400' : 'text-slate-700',
+            ].join(' ')}
+          >
+            {item.name}
+          </span>
+        </button>
+        <Badge variant="default" size="sm">{item.category}</Badge>
+        {hasSources && (
+          <button
+            onClick={() => setSourcesOpen(true)}
+            className="shrink-0 w-6 h-6 flex items-center justify-center rounded-full text-slate-300 hover:text-amber-500 hover:bg-amber-50 transition-colors"
+            aria-label="View meal sources"
+          >
+            <UtensilsCrossed size={12} />
+          </button>
+        )}
       </div>
-      <span
-        className={[
-          'text-sm flex-1 text-left',
-          item.checked ? 'line-through text-slate-400' : 'text-slate-700',
-        ].join(' ')}
+    </>
+  );
+}
+
+function MealSourcesModal({
+  sources,
+  onClose,
+}: {
+  sources: MealSource[];
+  onClose: () => void;
+}) {
+  return (
+    <ModalPortal>
+      <div
+        className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40"
+        onClick={onClose}
       >
-        {item.name}
-      </span>
-      <Badge variant="default" size="sm">{item.category}</Badge>
-    </button>
+        <div
+          className="bg-white rounded-2xl p-5 shadow-xl w-full max-w-xs flex flex-col gap-4 animate-slide-up"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <div className="flex items-center justify-between">
+            <p className="text-sm font-semibold text-slate-800">Used in meals</p>
+            <button onClick={onClose} className="text-slate-400 hover:text-slate-600">
+              <X size={16} />
+            </button>
+          </div>
+          <div className="flex flex-col gap-1">
+            {sources.map((src, i) => (
+              <div
+                key={i}
+                className="flex items-center justify-between gap-3 py-2.5 border-b border-slate-50 last:border-0"
+              >
+                <div className="flex items-center gap-2.5 min-w-0">
+                  <div className="w-7 h-7 rounded-lg bg-amber-50 flex items-center justify-center shrink-0">
+                    <UtensilsCrossed size={13} className="text-amber-500" />
+                  </div>
+                  <span className="text-sm text-slate-700 truncate">{src.recipeTitle}</span>
+                </div>
+                <span className="text-xs text-slate-400 shrink-0 font-medium">
+                  {src.scaledQuantity > 0 ? formatQuantity(src.scaledQuantity) : ''}
+                  {src.unit ? ` ${src.unit}` : ''}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    </ModalPortal>
   );
 }
 

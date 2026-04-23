@@ -36,12 +36,22 @@ export interface MealEntry {
   mealTime?: MealTime;
 }
 
+export interface MealSource {
+  mealEntryId: string;
+  recipeTitle: string;
+  scaledQuantity: number;
+  unit: string;
+  ingredientName: string;
+}
+
 export interface ShoppingItem {
   id: string;
   name: string; // full plain text e.g. "2 cups flour" or "chicken breast"
   category: ShoppingCategory;
   checked: boolean;
   manual?: boolean;
+  mealSources?: MealSource[];
+  ingredientKey?: string; // normalizeIngredientName(name)__normalizeUnit(unit) for dedup
 }
 
 export type ShoppingCategory =
