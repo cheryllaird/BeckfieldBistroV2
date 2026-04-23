@@ -49,9 +49,10 @@ export function ShoppingListPage() {
   const [history, setHistory] = useState<ShoppingItem[][]>([]);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editingValue, setEditingValue] = useState('');
-  const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
-  const dragItem = useRef<number | null>(null);
-  const dragOverItem = useRef<number | null>(null);
+  const [draggingItemId, setDraggingItemId] = useState<string | null>(null);
+  const [dropTargetIndex, setDropTargetIndex] = useState<number | null>(null);
+  const draggingItemIdRef = useRef<string | null>(null);
+  const dropTargetIndexRef = useRef<number | null>(null);
 
   const pushHistory = () => setHistory((h) => [...h, shoppingItems]);
 
@@ -118,36 +119,47 @@ export function ShoppingListPage() {
     setEditingValue('');
   };
 
-  const handleDragStart = (index: number) => {
-    dragItem.current = index;
+  const handleDragStart = (itemId: string) => {
+    setDraggingItemId(itemId);
+    draggingItemIdRef.current = itemId;
   };
 
   const handleDragEnter = (index: number) => {
-    dragOverItem.current = index;
-    setDragOverIndex(index);
+    setDropTargetIndex(index);
+    dropTargetIndexRef.current = index;
   };
 
   const handleDragEnd = () => {
-    if (
-      dragItem.current !== null &&
-      dragOverItem.current !== null &&
-      dragItem.current !== dragOverItem.current
-    ) {
-      pushHistory();
-      const unchecked = shoppingItems.filter((i) => !i.checked);
-      const checked = shoppingItems.filter((i) => i.checked);
-      const reordered = [...unchecked];
-      const [moved] = reordered.splice(dragItem.current, 1);
-      reordered.splice(dragOverItem.current, 0, moved);
-      reorderShoppingItems([...reordered, ...checked]);
+    const itemId = draggingItemIdRef.current;
+    const targetIndex = dropTargetIndexRef.current;
+    if (itemId && targetIndex !== null) {
+      const sourceIndex = unchecked.findIndex((i) => i.id === itemId);
+      if (sourceIndex !== -1 && sourceIndex !== targetIndex) {
+        pushHistory();
+        const items = [...unchecked];
+        const [moved] = items.splice(sourceIndex, 1);
+        items.splice(targetIndex, 0, moved);
+        reorderShoppingItems([...items, ...checked]);
+      }
     }
-    dragItem.current = null;
-    dragOverItem.current = null;
-    setDragOverIndex(null);
+    setDraggingItemId(null);
+    setDropTargetIndex(null);
+    draggingItemIdRef.current = null;
+    dropTargetIndexRef.current = null;
   };
 
   const unchecked = shoppingItems.filter((i) => !i.checked);
   const checked = shoppingItems.filter((i) => i.checked);
+
+  const previewUnchecked = (() => {
+    if (!draggingItemId || dropTargetIndex === null) return unchecked;
+    const sourceIndex = unchecked.findIndex((i) => i.id === draggingItemId);
+    if (sourceIndex === -1 || sourceIndex === dropTargetIndex) return unchecked;
+    const items = [...unchecked];
+    const [moved] = items.splice(sourceIndex, 1);
+    items.splice(dropTargetIndex, 0, moved);
+    return items;
+  })();
 
   if (shoppingItems.length === 0) {
     return (
@@ -249,14 +261,15 @@ export function ShoppingListPage() {
 
       {/* Unchecked items */}
       <div className="flex flex-col gap-1">
-        {unchecked.map((item, index) =>
+        {(mode === 'shop' ? unchecked : previewUnchecked).map((item, index) =>
           mode === 'shop' ? (
             <ShopItem key={item.id} item={item} onToggle={() => handleToggle(item.id)} />
           ) : (
             <EditItem
               key={item.id}
               item={item}
-              isDragOver={dragOverIndex === index}
+              isDraggable={true}
+              isBeingDragged={item.id === draggingItemId}
               isEditing={editingId === item.id}
               editingValue={editingValue}
               onEditStart={() => handleEditStart(item)}
@@ -264,10 +277,9 @@ export function ShoppingListPage() {
               onEditSave={() => handleEditSave(item.id)}
               onEditCancel={handleEditCancel}
               onRemove={() => handleRemove(item.id)}
-              onDragStart={() => handleDragStart(index)}
+              onDragStart={() => handleDragStart(item.id)}
               onDragEnter={() => handleDragEnter(index)}
               onDragEnd={handleDragEnd}
-              draggable
             />
           )
         )}
@@ -305,7 +317,8 @@ export function ShoppingListPage() {
               <EditItem
                 key={item.id}
                 item={item}
-                isDragOver={false}
+                isDraggable={false}
+                isBeingDragged={false}
                 isEditing={editingId === item.id}
                 editingValue={editingValue}
                 onEditStart={() => handleEditStart(item)}
@@ -316,7 +329,6 @@ export function ShoppingListPage() {
                 onDragStart={() => {}}
                 onDragEnter={() => {}}
                 onDragEnd={() => {}}
-                draggable={false}
               />
             )
           )}
@@ -439,8 +451,8 @@ function MealSourcesModal({
 
 function EditItem({
   item,
-  draggable,
-  isDragOver,
+  isDraggable,
+  isBeingDragged,
   isEditing,
   editingValue,
   onEditStart,
@@ -453,8 +465,8 @@ function EditItem({
   onDragEnd,
 }: {
   item: ShoppingItem;
-  draggable: boolean;
-  isDragOver: boolean;
+  isDraggable: boolean;
+  isBeingDragged: boolean;
   isEditing: boolean;
   editingValue: string;
   onEditStart: () => void;
@@ -466,23 +478,39 @@ function EditItem({
   onDragEnter: () => void;
   onDragEnd: () => void;
 }) {
+  const rowRef = useRef<HTMLDivElement>(null);
+
+  const handleGripPointerDown = () => {
+    if (!rowRef.current) return;
+    rowRef.current.draggable = true;
+    document.addEventListener('pointerup', () => {
+      if (rowRef.current) rowRef.current.draggable = false;
+    }, { once: true });
+  };
+
   return (
     <div
-      draggable={draggable}
+      ref={rowRef}
       onDragStart={onDragStart}
-      onDragEnter={onDragEnter}
-      onDragEnd={onDragEnd}
+      onDragEnter={(e) => {
+        if (!e.currentTarget.contains(e.relatedTarget as Node)) onDragEnter();
+      }}
+      onDragEnd={() => {
+        if (rowRef.current) rowRef.current.draggable = false;
+        onDragEnd();
+      }}
       onDragOver={(e) => e.preventDefault()}
       className={[
         'flex items-center gap-3 px-3 py-2.5 rounded-xl border transition-all duration-150',
         item.checked ? 'bg-slate-50 border-slate-100 opacity-60' : 'bg-white border-slate-100',
-        isDragOver ? 'border-amber-400 shadow-sm scale-[1.01]' : '',
+        isBeingDragged ? 'opacity-40 border-dashed border-amber-400 bg-amber-50/40 scale-[0.99]' : '',
       ].join(' ')}
     >
-      {draggable && (
+      {isDraggable && (
         <GripVertical
           size={16}
-          className="text-slate-300 shrink-0 cursor-grab active:cursor-grabbing touch-none"
+          className="text-slate-300 shrink-0 cursor-grab active:cursor-grabbing touch-none select-none"
+          onPointerDown={handleGripPointerDown}
         />
       )}
 
