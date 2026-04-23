@@ -4,6 +4,34 @@ import { useStore } from '../../store';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
 import { generateId } from '../../lib/utils';
+import type { Recipe } from '../../types';
+
+function RecipeListItem({ recipe, onClick }: { recipe: Recipe; onClick: () => void }) {
+  const [imgError, setImgError] = useState(false);
+  return (
+    <button
+      onClick={onClick}
+      className="flex items-center gap-3 p-3 rounded-xl border border-slate-100 hover:bg-slate-50 transition-colors text-left w-full"
+    >
+      {recipe.coverImage && !imgError ? (
+        <img
+          src={recipe.coverImage}
+          alt=""
+          className="w-10 h-10 rounded-lg object-cover shrink-0"
+          onError={() => setImgError(true)}
+        />
+      ) : (
+        <div className="w-10 h-10 rounded-lg bg-slate-100 flex items-center justify-center shrink-0 text-slate-300">
+          <UtensilsCrossed size={18} />
+        </div>
+      )}
+      <div className="min-w-0">
+        <p className="text-sm font-medium text-slate-800 truncate">{recipe.title}</p>
+        <p className="text-xs text-slate-400">{recipe.source}</p>
+      </div>
+    </button>
+  );
+}
 
 interface Props {
   date: string;
@@ -94,27 +122,11 @@ export function PlanMealModal({ date, onClose }: Props) {
                 <p className="text-xs text-slate-400 text-center py-4">No recipes found</p>
               )}
               {filtered.map((r) => (
-                <button
+                <RecipeListItem
                   key={r.id}
+                  recipe={r}
                   onClick={() => addRecipeMeal(r.id, r.servings)}
-                  className="flex items-center gap-3 p-3 rounded-xl border border-slate-100 hover:bg-slate-50 transition-colors text-left w-full"
-                >
-                  {r.coverImage ? (
-                    <img
-                      src={r.coverImage}
-                      alt=""
-                      className="w-10 h-10 rounded-lg object-cover shrink-0"
-                    />
-                  ) : (
-                    <div className="w-10 h-10 rounded-lg bg-slate-100 flex items-center justify-center shrink-0 text-lg">
-                      🍽️
-                    </div>
-                  )}
-                  <div className="min-w-0">
-                    <p className="text-sm font-medium text-slate-800 truncate">{r.title}</p>
-                    <p className="text-xs text-slate-400">{r.source}</p>
-                  </div>
-                </button>
+                />
               ))}
             </div>
           )}
