@@ -351,19 +351,35 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const pageText = htmlToText(html).slice(0, 40_000);
 
   const genAI = new GoogleGenerativeAI(apiKey);
-  const model = genAI.getGenerativeModel({
-    model: 'gemini-2.0-flash',
-    systemInstruction: URL_SYSTEM_PROMPT,
-  });
+  const prompt = urlUserPrompt(source) + pageText;
 
   let rawText: string;
   try {
-    const result = await model.generateContent(urlUserPrompt(source) + pageText);
-    rawText = result.response.text();
-  } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    console.error('Gemini error:', message);
-    return res.status(502).json({ error: 'AI service error. Please try again.' });
+    const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash', systemInstruction: URL_SYSTEM_PROMPT });
+    rawText = await model.generateContent(prompt).then((r) => r.response.text());
+  } catch (primaryErr) {
+    const primaryMsg = primaryErr instanceof Error ? primaryErr.message : String(primaryErr);
+    const isRateLimit =
+      primaryMsg.includes('429') ||
+      primaryMsg.includes('RESOURCE_EXHAUSTED') ||
+      primaryMsg.toLowerCase().includes('too many requests') ||
+      primaryMsg.toLowerCase().includes('quota exceeded');
+
+    if (!isRateLimit) {
+      console.error('Gemini error:', primaryMsg);
+      return res.status(502).json({ error: 'AI service error. Please try again.' });
+    }
+
+    // Daily quota hit — fall back to gemini-1.5-flash (separate quota bucket).
+    console.log('gemini-2.0-flash rate-limited on URL extraction, falling back to gemini-1.5-flash');
+    try {
+      const fallback = genAI.getGenerativeModel({ model: 'gemini-1.5-flash', systemInstruction: URL_SYSTEM_PROMPT });
+      rawText = await fallback.generateContent(prompt).then((r) => r.response.text());
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      console.error('Gemini fallback error:', message);
+      return res.status(502).json({ error: 'AI service error. Please try again.' });
+    }
   }
 
   const cleaned = rawText
