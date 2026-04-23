@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Plus, UtensilsCrossed, MapPin, FileText, Minus, Trash2, ShoppingCart, CalendarDays } from 'lucide-react';
+import { Plus, UtensilsCrossed, MapPin, FileText, Minus, Trash2, ShoppingCart, CalendarDays, ChevronDown } from 'lucide-react';
 import { useStore } from '../../store';
 import { formatDayLabel, isoDate, generateId } from '../../lib/utils';
 import type { MealEntry, MealTime } from '../../types';
@@ -18,17 +18,25 @@ const MEAL_TIME_ORDER: Record<MealTime, number> = {
   snack: 3,
 };
 
-const MEAL_TIME_ACTIVE: Record<MealTime, string> = {
+const MEAL_TIME_CHIP: Record<MealTime, string> = {
   breakfast: 'bg-amber-400 text-white',
   lunch: 'bg-green-500 text-white',
   dinner: 'bg-blue-500 text-white',
   snack: 'bg-purple-400 text-white',
 };
 
+function ordinal(n: number) {
+  if (n >= 11 && n <= 13) return `${n}th`;
+  const suffix: Record<number, string> = { 1: 'st', 2: 'nd', 3: 'rd' };
+  return `${n}${suffix[n % 10] ?? 'th'}`;
+}
+
 export function DayRow({ date }: Props) {
   const navigate = useNavigate();
   const { mealEntries, recipes, deleteMealEntry, updateMealEntry, addShoppingItem } = useStore();
-  const { weekday, monthDay, isToday } = formatDayLabel(date);
+  const { isToday } = formatDayLabel(date);
+  const fullWeekday = date.toLocaleDateString('en-GB', { weekday: 'long' });
+  const dateLabel = `${ordinal(date.getDate())} ${date.toLocaleDateString('en-GB', { month: 'short' })}`;
   const iso = isoDate(date);
   const [modalOpen, setModalOpen] = useState(false);
   const [changeDayEntry, setChangeDayEntry] = useState<MealEntry | null>(null);
@@ -81,24 +89,20 @@ export function DayRow({ date }: Props) {
     >
       {/* Day header */}
       <div className="flex items-center justify-between mb-2">
-        <div className="flex items-center gap-2">
-          <div
-            className={[
-              'w-8 h-8 rounded-full flex flex-col items-center justify-center',
-              isToday ? 'bg-amber-500 text-white' : 'bg-slate-100 text-slate-600',
-            ].join(' ')}
-          >
-            <span className="text-[9px] font-semibold leading-none uppercase">{weekday}</span>
-            <span className="text-[11px] font-bold leading-none">{monthDay.split(' ')[0]}</span>
-          </div>
-          <span className="text-xs text-slate-400">{monthDay.split(' ')[1]}</span>
-        </div>
+        <p className="text-sm leading-none">
+          <span className={`font-bold ${isToday ? 'text-amber-500' : 'text-slate-800'}`}>{fullWeekday}</span>
+          <span className="text-slate-400 font-normal"> {dateLabel}</span>
+        </p>
         <button
           onClick={() => setModalOpen(true)}
-          className="flex items-center gap-1 text-xs text-slate-400 hover:text-amber-600 transition-colors"
+          className="flex items-center gap-1 text-xs text-slate-400 hover:text-amber-600 transition-colors py-1.5 px-2 -mr-2 rounded-lg"
           aria-label="Plan meal"
         >
-          <Plus size={14} />
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+            <circle cx="8" cy="8" r="6.5" stroke="currentColor" strokeWidth="1.5"/>
+            <circle cx="8" cy="8" r="4" stroke="currentColor" strokeWidth="1" strokeOpacity="0.5"/>
+            <path d="M8 5.5v5M5.5 8h5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+          </svg>
           Plan
         </button>
       </div>
@@ -176,25 +180,31 @@ function MealChip({ entry, title, onClick, onDelete, onServingsChange, onMealTim
         </button>
       </div>
 
-      {/* Row 2: Meal time pills + Actions */}
+      {/* Row 2: Meal time chip + Actions */}
       <div className="flex items-center gap-1.5">
-        {/* Meal time toggle pills */}
-        <div className="flex gap-1">
-          {(['breakfast', 'lunch', 'dinner', 'snack'] as MealTime[]).map((mt) => (
-            <button
-              key={mt}
-              title={mt.charAt(0).toUpperCase() + mt.slice(1)}
-              onClick={() => onMealTimeChange(entry.mealTime === mt ? undefined : mt)}
-              className={[
-                'w-5 h-5 rounded-full text-[9px] font-bold flex items-center justify-center transition-colors',
-                entry.mealTime === mt
-                  ? MEAL_TIME_ACTIVE[mt]
-                  : 'bg-white/70 text-slate-300 hover:bg-slate-200 hover:text-slate-500',
-              ].join(' ')}
-            >
-              {mt[0].toUpperCase()}
-            </button>
-          ))}
+        {/* Meal time select chip */}
+        <div className="relative inline-flex items-center shrink-0">
+          <div className={[
+            'flex items-center gap-1 pl-2.5 pr-2 py-1 rounded-full text-[10px] font-semibold pointer-events-none',
+            entry.mealTime ? MEAL_TIME_CHIP[entry.mealTime] : 'bg-slate-100 text-slate-400',
+          ].join(' ')}>
+            {entry.mealTime
+              ? entry.mealTime.charAt(0).toUpperCase() + entry.mealTime.slice(1)
+              : 'Set time'}
+            <ChevronDown size={9} />
+          </div>
+          <select
+            value={entry.mealTime ?? ''}
+            onChange={(e) => onMealTimeChange((e.target.value as MealTime) || undefined)}
+            className="absolute inset-0 opacity-0 w-full h-full cursor-pointer"
+            aria-label="Meal time"
+          >
+            <option value="">No time set</option>
+            <option value="breakfast">Breakfast</option>
+            <option value="lunch">Lunch</option>
+            <option value="dinner">Dinner</option>
+            <option value="snack">Snack</option>
+          </select>
         </div>
 
         <div className="flex-1" />
@@ -203,18 +213,18 @@ function MealChip({ entry, title, onClick, onDelete, onServingsChange, onMealTim
         <div className="flex items-center gap-1 shrink-0">
           <button
             onClick={() => onServingsChange(-1)}
-            className="w-5 h-5 flex items-center justify-center text-slate-400 hover:text-slate-600 rounded-full hover:bg-white/70"
+            className="w-7 h-7 flex items-center justify-center text-slate-400 hover:text-slate-600 rounded-full hover:bg-white/70"
             aria-label="Reduce servings"
           >
-            <Minus size={10} />
+            <Minus size={12} />
           </button>
           <span className="text-[11px] text-slate-600 font-medium w-4 text-center">{entry.servings}</span>
           <button
             onClick={() => onServingsChange(1)}
-            className="w-5 h-5 flex items-center justify-center text-slate-400 hover:text-slate-600 rounded-full hover:bg-white/70"
+            className="w-7 h-7 flex items-center justify-center text-slate-400 hover:text-slate-600 rounded-full hover:bg-white/70"
             aria-label="Increase servings"
           >
-            <Plus size={10} />
+            <Plus size={12} />
           </button>
         </div>
 
@@ -222,31 +232,31 @@ function MealChip({ entry, title, onClick, onDelete, onServingsChange, onMealTim
         {entry.type === 'recipe' && (
           <button
             onClick={onAddToShoppingList}
-            className="shrink-0 text-slate-300 hover:text-blue-400 transition-colors"
+            className="shrink-0 w-8 h-8 flex items-center justify-center rounded-full text-slate-300 hover:text-blue-400 hover:bg-blue-50 transition-colors"
             title="Add ingredients to shopping list"
             aria-label="Add ingredients to shopping list"
           >
-            <ShoppingCart size={13} />
+            <ShoppingCart size={15} />
           </button>
         )}
 
         {/* Change day */}
         <button
           onClick={onChangeDay}
-          className="shrink-0 text-slate-300 hover:text-amber-500 transition-colors"
+          className="shrink-0 w-8 h-8 flex items-center justify-center rounded-full text-slate-300 hover:text-amber-500 hover:bg-amber-50 transition-colors"
           title="Move to a different day"
           aria-label="Move to a different day"
         >
-          <CalendarDays size={13} />
+          <CalendarDays size={15} />
         </button>
 
         {/* Delete */}
         <button
           onClick={onDelete}
-          className="shrink-0 text-slate-300 hover:text-red-400 transition-colors"
+          className="shrink-0 w-8 h-8 flex items-center justify-center rounded-full text-slate-300 hover:text-red-400 hover:bg-red-50 transition-colors"
           aria-label="Remove meal"
         >
-          <Trash2 size={13} />
+          <Trash2 size={15} />
         </button>
       </div>
     </div>
