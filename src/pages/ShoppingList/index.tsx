@@ -186,9 +186,6 @@ export function ShoppingListPage() {
               <ArrowUpDown size={14} />
             </Button>
           )}
-          <Button variant="secondary" size="sm" onClick={() => setGenerateOpen(true)}>
-            <Zap size={14} /> Regenerate
-          </Button>
           {/* Tab switcher */}
           <div className="flex gap-1 bg-slate-100 rounded-xl p-0.5">
             <button
