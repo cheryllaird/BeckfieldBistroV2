@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Plus, UtensilsCrossed, MapPin, FileText, Minus, Trash2, ShoppingCart, CalendarDays, CalendarPlus, ChevronDown, Check, Users } from 'lucide-react';
 import { useStore } from '../../store';
-import { formatDayLabel, isoDate, generateId } from '../../lib/utils';
+import { formatDayLabel, isoDate, mergeIntoShoppingList } from '../../lib/utils';
 import type { MealEntry, MealTime } from '../../types';
 import { PlanMealModal } from './PlanMealModal';
 import { ChangeDayModal } from './ChangeDayModal';
@@ -28,7 +28,7 @@ function ordinal(n: number) {
 
 export function DayRow({ date }: Props) {
   const navigate = useNavigate();
-  const { mealEntries, recipes, deleteMealEntry, updateMealEntry, addShoppingItem } = useStore();
+  const { mealEntries, recipes, shoppingItems, deleteMealEntry, updateMealEntry, setShoppingItems } = useStore();
   const { isToday } = formatDayLabel(date);
   const fullWeekday = date.toLocaleDateString('en-GB', { weekday: 'long' });
   const dateLabel = `${ordinal(date.getDate())} ${date.toLocaleDateString('en-GB', { month: 'short' })}`;
@@ -70,16 +70,7 @@ export function DayRow({ date }: Props) {
     const recipe = recipes.find((r) => r.id === entry.recipeId);
     if (!recipe) return;
     const scale = recipe.servings > 0 ? entry.servings / recipe.servings : 1;
-    recipe.ingredients.forEach((ing) => {
-      addShoppingItem({
-        id: generateId(),
-        name: ing.name,
-        quantity: Math.round(ing.quantity * scale * 100) / 100,
-        unit: ing.unit,
-        category: 'Other',
-        checked: false,
-      });
-    });
+    setShoppingItems(mergeIntoShoppingList(shoppingItems, recipe.ingredients, scale));
   };
 
   return (
