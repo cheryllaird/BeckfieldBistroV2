@@ -334,24 +334,24 @@ function ShopItem({
     <button
       onClick={onToggle}
       className={[
-        'flex items-center gap-3 px-3 py-2.5 rounded-xl border transition-all duration-200 text-left w-full active:scale-[0.98]',
+        'flex items-center gap-3 px-3 py-2.5 rounded-xl border transition-all duration-150 text-left w-full active:scale-[0.98]',
         item.checked
           ? 'bg-slate-50 border-slate-100 opacity-60'
-          : 'bg-white border-slate-200 shadow-sm hover:border-amber-300',
+          : 'bg-white border-slate-100 hover:border-amber-300',
       ].join(' ')}
     >
       <div
         className={[
-          'w-6 h-6 rounded-full border-2 flex items-center justify-center shrink-0 transition-all',
+          'w-5 h-5 rounded-full border-2 flex items-center justify-center shrink-0 transition-all',
           item.checked ? 'bg-amber-500 border-amber-500' : 'border-slate-300',
         ].join(' ')}
       >
-        {item.checked && <Check size={12} className="text-white" />}
+        {item.checked && <Check size={10} className="text-white" />}
       </div>
       <span
         className={[
-          'text-sm font-medium flex-1 text-left',
-          item.checked ? 'line-through text-slate-400' : 'text-slate-800',
+          'text-sm flex-1 text-left',
+          item.checked ? 'line-through text-slate-400' : 'text-slate-700',
         ].join(' ')}
       >
         {item.name}
