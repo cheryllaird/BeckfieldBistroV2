@@ -11,17 +11,20 @@ interface Props {
   recipe: Recipe;
   servings: number;
   onClose: () => void;
+  initialDate?: string;
+  onConfirm?: () => void;
 }
 
-export function PlanDateModal({ recipe, servings, onClose }: Props) {
+export function PlanDateModal({ recipe, servings, onClose, initialDate, onConfirm }: Props) {
   const navigate = useNavigate();
   const addMealEntry = useStore((s) => s.addMealEntry);
   const mealEntries = useStore((s) => s.mealEntries);
 
   const today = new Date();
-  const [viewYear, setViewYear] = useState(today.getFullYear());
-  const [viewMonth, setViewMonth] = useState(today.getMonth());
-  const [selected, setSelected] = useState<string | null>(null);
+  const initDate = initialDate ? new Date(initialDate + 'T12:00:00') : null;
+  const [viewYear, setViewYear] = useState(initDate ? initDate.getFullYear() : today.getFullYear());
+  const [viewMonth, setViewMonth] = useState(initDate ? initDate.getMonth() : today.getMonth());
+  const [selected, setSelected] = useState<string | null>(initialDate ?? null);
 
   const plannedDates = new Set(mealEntries.map((e) => e.date));
   const todayIso = isoDate(today);
@@ -57,7 +60,11 @@ export function PlanDateModal({ recipe, servings, onClose }: Props) {
       servings,
     });
     onClose();
-    navigate('/plan');
+    if (onConfirm) {
+      onConfirm();
+    } else {
+      navigate('/plan');
+    }
   };
 
   return (
