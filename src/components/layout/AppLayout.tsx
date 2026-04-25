@@ -14,7 +14,7 @@ export function AppLayout() {
     <div className="flex flex-col min-h-dvh bg-slate-50">
       <ScrollToTop />
       <Header />
-      <main className="flex-1 max-w-md mx-auto w-full px-4 pt-4 pb-28 animate-in">
+      <main className="flex-1 flex flex-col max-w-md mx-auto w-full px-4 pt-4 pb-28 animate-in">
         <Outlet />
       </main>
       <BottomNav />
