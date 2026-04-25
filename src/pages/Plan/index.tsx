@@ -9,7 +9,7 @@ export function PlanPage() {
   const [view, setView] = useState<View>('plan');
 
   return (
-    <div className="flex flex-col gap-5">
+    <div className="flex-1 flex flex-col gap-5 min-h-0">
       <div className="flex items-center justify-between">
         <h2 className="text-xl font-bold text-slate-800">Meal Plan</h2>
         <div className="flex gap-1 bg-slate-100 rounded-xl p-0.5">

@@ -89,7 +89,7 @@ export function HistoryView() {
 
   return (
     <div
-      className="flex flex-col gap-4 overflow-hidden"
+      className="flex-1 flex flex-col gap-4 overflow-hidden min-h-0"
       onTouchStart={handleTouchStart}
       onTouchMove={handleTouchMove}
       onTouchEnd={handleTouchEnd}
@@ -113,50 +113,56 @@ export function HistoryView() {
         </button>
       </div>
 
-      {/* Day-of-week headers */}
-      <div ref={gridRef} className="grid grid-cols-7 gap-0.5">
-        {['M', 'T', 'W', 'T', 'F', 'S', 'S'].map((d, i) => (
-          <div key={i} className="text-center text-[10px] font-semibold text-slate-400 py-1">
-            {d}
-          </div>
-        ))}
+      {/* Calendar grid (headers + cells) */}
+      <div ref={gridRef} className="flex-1 flex flex-col gap-0.5 min-h-0">
+        {/* Day-of-week headers */}
+        <div className="grid grid-cols-7 gap-0.5">
+          {['M', 'T', 'W', 'T', 'F', 'S', 'S'].map((d, i) => (
+            <div key={i} className="text-center text-[10px] font-semibold text-slate-400 py-1">
+              {d}
+            </div>
+          ))}
+        </div>
 
-        {cells.map((day, i) => {
-          if (day === null) return <div key={i} />;
-          const iso = isoDate(new Date(year, month, day));
-          const titles = entryMap.get(iso) ?? [];
-          const isToday = iso === isoDate(today);
-          return (
-            <div
-              key={i}
-              className={[
-                'min-h-10 rounded-lg p-0.5 border transition-colors',
-                isToday ? 'border-amber-300 bg-amber-50' : 'border-transparent',
-                titles.length > 0 ? 'bg-slate-50' : '',
-              ].join(' ')}
-            >
+        {/* Day cells */}
+        <div className="flex-1 grid grid-cols-7 auto-rows-fr gap-0.5 min-h-0">
+          {cells.map((day, i) => {
+            if (day === null) return <div key={i} />;
+            const iso = isoDate(new Date(year, month, day));
+            const titles = entryMap.get(iso) ?? [];
+            const isToday = iso === isoDate(today);
+            return (
               <div
+                key={i}
                 className={[
-                  'text-[10px] font-semibold text-center pt-0.5',
-                  isToday ? 'text-amber-600' : 'text-slate-500',
+                  'rounded-lg p-0.5 border transition-colors',
+                  isToday ? 'border-amber-300 bg-amber-50' : 'border-transparent',
+                  titles.length > 0 ? 'bg-slate-50' : '',
                 ].join(' ')}
               >
-                {day}
-              </div>
-              {titles.slice(0, 2).map((t, j) => (
                 <div
-                  key={j}
-                  className="mt-0.5 text-[8px] leading-tight text-slate-600 bg-amber-100 rounded px-0.5 truncate"
+                  className={[
+                    'text-[10px] font-semibold text-center pt-0.5',
+                    isToday ? 'text-amber-600' : 'text-slate-500',
+                  ].join(' ')}
                 >
-                  {t}
+                  {day}
                 </div>
-              ))}
-              {titles.length > 2 && (
-                <div className="text-[8px] text-slate-400 text-center">+{titles.length - 2}</div>
-              )}
-            </div>
-          );
-        })}
+                {titles.slice(0, 2).map((t, j) => (
+                  <div
+                    key={j}
+                    className="mt-0.5 text-[8px] leading-tight text-slate-600 bg-amber-100 rounded px-0.5 truncate"
+                  >
+                    {t}
+                  </div>
+                ))}
+                {titles.length > 2 && (
+                  <div className="text-[8px] text-slate-400 text-center">+{titles.length - 2}</div>
+                )}
+              </div>
+            );
+          })}
+        </div>
       </div>
     </div>
   );
