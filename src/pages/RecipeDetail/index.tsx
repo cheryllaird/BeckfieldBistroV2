@@ -16,7 +16,6 @@ import {
 } from 'lucide-react';
 import { useStore } from '../../store';
 import { Button } from '../../components/ui/Button';
-import { Badge } from '../../components/ui/Badge';
 import { scaleIngredient, formatQuantity } from '../../lib/utils';
 import { PlanDateModal } from './PlanDateModal';
 
@@ -149,20 +148,20 @@ export function RecipeDetailPage() {
         </div>
       </div>
 
-      {/* Meta badges */}
-      <div className="flex items-center gap-2 flex-wrap mb-4">
-        <Badge variant="default">
-          <Users size={11} /> {recipe.servings} servings (original)
-        </Badge>
+      {/* Meta info */}
+      <div className="flex items-center gap-3 flex-wrap mb-4">
+        <span className="inline-flex items-center gap-1 text-sm text-slate-600">
+          <Users size={11} /> {recipe.servings} servings
+        </span>
         {recipe.prepTime && (
-          <Badge variant="amber">
+          <span className="inline-flex items-center gap-1 text-sm text-slate-600">
             <Clock size={11} /> Prep: {recipe.prepTime}
-          </Badge>
+          </span>
         )}
         {recipe.totalTime && (
-          <Badge variant="amber">
+          <span className="inline-flex items-center gap-1 text-sm text-slate-600">
             <Clock size={11} /> {recipe.totalTime}
-          </Badge>
+          </span>
         )}
       </div>
 
