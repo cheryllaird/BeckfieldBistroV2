@@ -3,7 +3,8 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import type { Recipe } from '../../types';
 import { useStore } from '../../store';
-import { generateId, isoDate, getWeekDays } from '../../lib/utils';
+import { isoDate, getWeekDays } from '../../lib/utils';
+import { PlanDateModal } from '../RecipeDetail/PlanDateModal';
 
 interface Props {
   recipe: Recipe;
@@ -11,8 +12,11 @@ interface Props {
 
 export function RecipeCard({ recipe }: Props) {
   const navigate = useNavigate();
-  const { addMealEntry, mealEntries } = useStore();
+  const { mealEntries } = useStore();
+
   const [imgError, setImgError] = useState(false);
+  const [planModalOpen, setPlanModalOpen] = useState(false);
+  const [defaultDate, setDefaultDate] = useState<string | undefined>(undefined);
 
   const handleQuickPlan = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -20,15 +24,8 @@ export function RecipeCard({ recipe }: Props) {
     const plannedDates = new Set(mealEntries.map((e) => e.date));
     const nextEmpty = weekDays.find((d) => !plannedDates.has(isoDate(d)));
     const targetDate = nextEmpty ? isoDate(nextEmpty) : isoDate(weekDays[0]);
-
-    addMealEntry({
-      id: generateId(),
-      date: targetDate,
-      type: 'recipe',
-      recipeId: recipe.id,
-      servings: recipe.servings,
-    });
-    navigate('/plan');
+    setDefaultDate(targetDate);
+    setPlanModalOpen(true);
   };
 
   return (
@@ -81,6 +78,16 @@ export function RecipeCard({ recipe }: Props) {
           )}
         </div>
       </div>
+
+      {planModalOpen && (
+        <PlanDateModal
+          recipe={recipe}
+          servings={recipe.servings}
+          initialDate={defaultDate}
+          onClose={() => setPlanModalOpen(false)}
+          onConfirm={() => setPlanModalOpen(false)}
+        />
+      )}
     </div>
   );
 }
