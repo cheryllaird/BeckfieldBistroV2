@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { getWeekDays, isoDate } from '../../lib/utils';
 import { DayRow } from './DayRow';
@@ -6,6 +6,19 @@ import { DayRow } from './DayRow';
 export function WeekView() {
   const [weekOffset, setWeekOffset] = useState(0);
   const days = getWeekDays(weekOffset);
+  const touchStartX = useRef<number | null>(null);
+
+  const handleTouchStart = (e: React.TouchEvent) => {
+    touchStartX.current = e.touches[0].clientX;
+  };
+
+  const handleTouchEnd = (e: React.TouchEvent) => {
+    if (touchStartX.current === null) return;
+    const delta = e.changedTouches[0].clientX - touchStartX.current;
+    if (delta < -50) setWeekOffset((w) => w + 1);
+    if (delta > 50) setWeekOffset((w) => w - 1);
+    touchStartX.current = null;
+  };
 
   const weekLabel = () => {
     if (weekOffset === 0) return 'This Week';
@@ -16,7 +29,11 @@ export function WeekView() {
   };
 
   return (
-    <div className="flex flex-col gap-3">
+    <div
+      className="flex flex-col gap-3"
+      onTouchStart={handleTouchStart}
+      onTouchEnd={handleTouchEnd}
+    >
       {/* Week navigator */}
       <div className="flex items-center justify-between">
         <button
