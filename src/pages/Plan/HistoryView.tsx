@@ -1,15 +1,20 @@
-import { useState, useRef } from 'react';
+import { useRef } from 'react';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { useStore } from '../../store';
 import { isoDate } from '../../lib/utils';
 
-export function HistoryView() {
+interface HistoryViewProps {
+  year: number;
+  month: number;
+  setYear: React.Dispatch<React.SetStateAction<number>>;
+  setMonth: React.Dispatch<React.SetStateAction<number>>;
+}
+
+export function HistoryView({ year, month, setYear, setMonth }: HistoryViewProps) {
   const mealEntries = useStore((s) => s.mealEntries);
   const recipes = useStore((s) => s.recipes);
 
   const today = new Date();
-  const [year, setYear] = useState(today.getFullYear());
-  const [month, setMonth] = useState(today.getMonth()); // 0-indexed
   const touchStartX = useRef<number | null>(null);
   const gridRef = useRef<HTMLDivElement>(null);
 
