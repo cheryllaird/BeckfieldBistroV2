@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { useStore } from '../../store';
 import { isoDate } from '../../lib/utils';
@@ -10,14 +10,56 @@ export function HistoryView() {
   const today = new Date();
   const [year, setYear] = useState(today.getFullYear());
   const [month, setMonth] = useState(today.getMonth()); // 0-indexed
+  const touchStartX = useRef<number | null>(null);
+  const gridRef = useRef<HTMLDivElement>(null);
 
-  const changeMonth = (delta: number) => {
+  const applyMonth = (delta: number) => {
     let newMonth = month + delta;
     let newYear = year;
     if (newMonth < 0) { newMonth = 11; newYear--; }
     if (newMonth > 11) { newMonth = 0; newYear++; }
     setMonth(newMonth);
     setYear(newYear);
+  };
+
+  const handleTouchStart = (e: React.TouchEvent) => {
+    touchStartX.current = e.touches[0].clientX;
+    if (gridRef.current) gridRef.current.style.transition = 'none';
+  };
+
+  const handleTouchMove = (e: React.TouchEvent) => {
+    if (touchStartX.current === null || !gridRef.current) return;
+    const delta = e.touches[0].clientX - touchStartX.current;
+    gridRef.current.style.transform = `translateX(${delta}px)`;
+  };
+
+  const handleTouchEnd = (e: React.TouchEvent) => {
+    if (touchStartX.current === null || !gridRef.current) return;
+    const delta = e.changedTouches[0].clientX - touchStartX.current;
+    touchStartX.current = null;
+    const el = gridRef.current;
+    const width = el.offsetWidth;
+
+    if (Math.abs(delta) > 50) {
+      const goNext = delta < 0;
+      el.style.transition = 'transform 0.2s ease-out';
+      el.style.transform = `translateX(${goNext ? -width : width}px)`;
+
+      setTimeout(() => {
+        applyMonth(goNext ? 1 : -1);
+        el.style.transition = 'none';
+        el.style.transform = `translateX(${goNext ? width : -width}px)`;
+        requestAnimationFrame(() => {
+          requestAnimationFrame(() => {
+            el.style.transition = 'transform 0.2s ease-out';
+            el.style.transform = 'translateX(0)';
+          });
+        });
+      }, 200);
+    } else {
+      el.style.transition = 'transform 0.2s ease-out';
+      el.style.transform = 'translateX(0)';
+    }
   };
 
   const firstDay = new Date(year, month, 1);
@@ -46,11 +88,16 @@ export function HistoryView() {
   while (cells.length % 7 !== 0) cells.push(null);
 
   return (
-    <div className="flex flex-col gap-4">
+    <div
+      className="flex flex-col gap-4 overflow-hidden"
+      onTouchStart={handleTouchStart}
+      onTouchMove={handleTouchMove}
+      onTouchEnd={handleTouchEnd}
+    >
       {/* Month navigator */}
       <div className="flex items-center justify-between">
         <button
-          onClick={() => changeMonth(-1)}
+          onClick={() => applyMonth(-1)}
           className="w-8 h-8 rounded-full flex items-center justify-center text-slate-500 hover:bg-slate-100"
           aria-label="Previous month"
         >
@@ -58,7 +105,7 @@ export function HistoryView() {
         </button>
         <span className="text-sm font-semibold text-slate-700">{monthLabel}</span>
         <button
-          onClick={() => changeMonth(1)}
+          onClick={() => applyMonth(1)}
           className="w-8 h-8 rounded-full flex items-center justify-center text-slate-500 hover:bg-slate-100"
           aria-label="Next month"
         >
@@ -67,7 +114,7 @@ export function HistoryView() {
       </div>
 
       {/* Day-of-week headers */}
-      <div className="grid grid-cols-7 gap-0.5">
+      <div ref={gridRef} className="grid grid-cols-7 gap-0.5">
         {['M', 'T', 'W', 'T', 'F', 'S', 'S'].map((d, i) => (
           <div key={i} className="text-center text-[10px] font-semibold text-slate-400 py-1">
             {d}
