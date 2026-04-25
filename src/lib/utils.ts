@@ -1,4 +1,4 @@
-import type { Ingredient, MealSource, ShoppingItem, ShoppingCategory } from '../types';
+import type { Ingredient, IngredientSection, MealSource, Recipe, ShoppingItem, ShoppingCategory } from '../types';
 
 const UNIT_NORMALIZE_MAP: Record<string, string> = {
   gram: 'g', grams: 'g',
@@ -43,6 +43,14 @@ export function formatTime(minutes: number): string {
   const h = Math.floor(minutes / 60);
   const m = minutes % 60;
   return m > 0 ? `${h}h ${m}m` : `${h}h`;
+}
+
+/** Returns a flat ingredient list from a recipe, preferring ingredientSections when present. */
+export function getRecipeIngredients(recipe: Pick<Recipe, 'ingredients' | 'ingredientSections'>): Ingredient[] {
+  if (recipe.ingredientSections?.length) {
+    return recipe.ingredientSections.flatMap((s: IngredientSection) => s.ingredients);
+  }
+  return recipe.ingredients;
 }
 
 export function scaleIngredient(ingredient: Ingredient, originalServings: number, newServings: number): Ingredient {

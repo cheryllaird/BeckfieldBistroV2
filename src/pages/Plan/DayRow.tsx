@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Plus, UtensilsCrossed, MapPin, FileText, Minus, Trash2, ShoppingCart, CalendarDays, CalendarPlus, ChevronDown, Check, Users } from 'lucide-react';
 import { useStore } from '../../store';
-import { formatDayLabel, isoDate, mergeIntoShoppingList } from '../../lib/utils';
+import { formatDayLabel, isoDate, mergeIntoShoppingList, getRecipeIngredients } from '../../lib/utils';
 import type { MealEntry, MealTime } from '../../types';
 import { PlanMealModal } from './PlanMealModal';
 import { ChangeDayModal } from './ChangeDayModal';
@@ -70,7 +70,7 @@ export function DayRow({ date }: Props) {
     const recipe = recipes.find((r) => r.id === entry.recipeId);
     if (!recipe) return;
     const scale = recipe.servings > 0 ? entry.servings / recipe.servings : 1;
-    setShoppingItems(mergeIntoShoppingList(shoppingItems, recipe.ingredients, scale, entry.id, recipe.title));
+    setShoppingItems(mergeIntoShoppingList(shoppingItems, getRecipeIngredients(recipe), scale, entry.id, recipe.title));
   };
 
   const isInShoppingList = (entryId: string) =>

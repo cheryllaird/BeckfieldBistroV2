@@ -32,12 +32,17 @@ const USER_PROMPT = `Extract the recipe and return a JSON object with exactly th
   "servings": number,
   "prepTime": "string — e.g. '15 mins', or '' if not shown",
   "totalTime": "string — e.g. '45 mins', or '' if not shown",
-  "ingredients": [
+  "ingredientSections": [
     {
-      "name": "string — ingredient name only, no quantity or unit",
-      "quantity": number,
-      "unit": "string — e.g. 'cup', 'g', 'tbsp', or '' if none",
-      "originalText": "string — the ingredient line exactly as written, e.g. '2 cups flour'"
+      "title": "string — section heading, e.g. 'For the dressing' or '' if there is only one unlabeled group",
+      "ingredients": [
+        {
+          "name": "string — ingredient name only, no quantity or unit",
+          "quantity": number,
+          "unit": "string — e.g. 'cup', 'g', 'tbsp', or '' if none",
+          "originalText": "string — the ingredient line exactly as written, e.g. '2 cups flour'"
+        }
+      ]
     }
   ],
   "steps": ["string — each step as a separate string"]
@@ -46,6 +51,8 @@ const USER_PROMPT = `Extract the recipe and return a JSON object with exactly th
 Rules:
 - Return ONLY the JSON object. No markdown. No explanation.
 - Be concise: keep step strings short (1-3 sentences each); do not pad or elaborate.
+- If all ingredients belong to one unlabeled group, use a single section with title "".
+- If ingredients are split into named groups (e.g. main dish + dressing + sauce), create one section per group with a descriptive title.
 - If a field cannot be determined, use sensible defaults: empty string for strings, 4 for servings, empty arrays for arrays.
 - Keep "originalText" as faithful to the source as possible.
 - Split steps so each array entry is one paragraph of instruction.`;
@@ -263,20 +270,34 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   const data = parsed as Record<string, unknown>;
 
+  const parseIngredient = (ing: Record<string, unknown>) => ({
+    name: String(ing.name ?? ''),
+    quantity: Number(ing.quantity) || 0,
+    unit: String(ing.unit ?? ''),
+    originalText: String(ing.originalText ?? ''),
+  });
+
+  const ingredientSections = Array.isArray(data.ingredientSections)
+    ? (data.ingredientSections as Record<string, unknown>[]).map((sec) => ({
+        title: String(sec.title ?? ''),
+        ingredients: Array.isArray(sec.ingredients)
+          ? (sec.ingredients as Record<string, unknown>[]).map(parseIngredient)
+          : [],
+      }))
+    : Array.isArray(data.ingredients)
+      ? [{ title: '', ingredients: (data.ingredients as Record<string, unknown>[]).map(parseIngredient) }]
+      : [{ title: '', ingredients: [] }];
+
+  const ingredients = ingredientSections.flatMap((s) => s.ingredients);
+
   return res.status(200).json({
     title: String(data.title ?? 'Extracted Recipe'),
     source: String(data.source ?? (hasUrl ? new URL(url).hostname.replace('www.', '') : 'Photo Upload')),
     servings: Number(data.servings) || 4,
     prepTime: String(data.prepTime ?? ''),
     totalTime: String(data.totalTime ?? ''),
-    ingredients: Array.isArray(data.ingredients)
-      ? (data.ingredients as Record<string, unknown>[]).map((ing) => ({
-          name: String(ing.name ?? ''),
-          quantity: Number(ing.quantity) || 0,
-          unit: String(ing.unit ?? ''),
-          originalText: String(ing.originalText ?? ''),
-        }))
-      : [],
+    ingredientSections,
+    ingredients,
     steps: Array.isArray(data.steps) ? data.steps.map(String) : [],
     ...(coverImage && { coverImage }),
   });

@@ -161,15 +161,52 @@ function flattenInstructions(instructions: unknown[]): string[] {
   return steps.filter(Boolean);
 }
 
+interface IngredientSection {
+  title: string;
+  ingredients: Ingredient[];
+}
+
 interface RecipeResponse {
   title: string;
   source: string;
   servings: number;
   prepTime: string;
   totalTime: string;
+  ingredientSections: IngredientSection[];
   ingredients: Ingredient[];
   steps: string[];
   coverImage: string;
+}
+
+function looksLikeSectionHeader(line: string): boolean {
+  const trimmed = line.trim();
+  if (trimmed.length === 0 || trimmed.length > 60) return false;
+  // If it starts with a digit or fraction character it's an ingredient amount
+  if (/^[\d¼½¾⅓⅔⅛]/.test(trimmed)) return false;
+  // Explicit colon at end is a strong signal
+  if (trimmed.endsWith(':')) return true;
+  // Common section-heading prefixes
+  if (/^(for |to make |sauce|dressing|marinade|topping|garnish|glaze|filling|crust|batter|coating)/i.test(trimmed)) return true;
+  // If the ingredient parser finds nothing useful, treat as header
+  const parsed = parseIngredientLine(trimmed);
+  if (parsed.quantity === 0 && parsed.unit === '' && parsed.name === trimmed) return true;
+  return false;
+}
+
+function buildIngredientSections(lines: string[]): IngredientSection[] {
+  const sections: IngredientSection[] = [];
+  let current: IngredientSection = { title: '', ingredients: [] };
+
+  for (const line of lines) {
+    if (looksLikeSectionHeader(line)) {
+      if (current.ingredients.length > 0) sections.push(current);
+      current = { title: line.trim().replace(/:$/, ''), ingredients: [] };
+    } else {
+      current.ingredients.push(parseIngredientLine(line));
+    }
+  }
+  if (current.ingredients.length > 0 || sections.length === 0) sections.push(current);
+  return sections;
 }
 
 function parseJsonLdRecipe(ld: JsonLdRecipe, source: string, coverImage: string): RecipeResponse {
@@ -177,7 +214,8 @@ function parseJsonLdRecipe(ld: JsonLdRecipe, source: string, coverImage: string)
   const yieldMatch = yieldRaw.match(/\d+/);
   const servings = yieldMatch ? parseInt(yieldMatch[0], 10) : 4;
 
-  const ingredients = (ld.recipeIngredient ?? []).map(parseIngredientLine);
+  const ingredientSections = buildIngredientSections(ld.recipeIngredient ?? []);
+  const ingredients = ingredientSections.flatMap((s) => s.ingredients);
   const steps = flattenInstructions(ld.recipeInstructions ?? []);
 
   let ldImage = '';
@@ -191,6 +229,7 @@ function parseJsonLdRecipe(ld: JsonLdRecipe, source: string, coverImage: string)
     servings,
     prepTime: parseIsoDuration(ld.prepTime),
     totalTime: parseIsoDuration(ld.totalTime),
+    ingredientSections,
     ingredients,
     steps,
     coverImage: ldImage || coverImage,
@@ -230,12 +269,17 @@ function urlUserPrompt(source: string): string {
   "servings": number,
   "prepTime": "string — e.g. '15 mins', or '' if not shown",
   "totalTime": "string — e.g. '45 mins', or '' if not shown",
-  "ingredients": [
+  "ingredientSections": [
     {
-      "name": "string — ingredient name only, no quantity or unit",
-      "quantity": number,
-      "unit": "string — e.g. 'cup', 'g', 'tbsp', or '' if none",
-      "originalText": "string — the ingredient line exactly as it appears on the page"
+      "title": "string — section heading, e.g. 'For the dressing' or '' if there is only one unlabeled group",
+      "ingredients": [
+        {
+          "name": "string — ingredient name only, no quantity or unit",
+          "quantity": number,
+          "unit": "string — e.g. 'cup', 'g', 'tbsp', or '' if none",
+          "originalText": "string — the ingredient line exactly as it appears on the page"
+        }
+      ]
     }
   ],
   "steps": ["string — each step as a separate string"]
@@ -244,6 +288,8 @@ function urlUserPrompt(source: string): string {
 Rules:
 - Return ONLY the JSON object. No markdown. No explanation.
 - The source field must be exactly "${source}".
+- If all ingredients belong to one unlabeled group, use a single section with title "".
+- If ingredients are split into named groups (e.g. main dish + dressing + sauce), create one section per group with a descriptive title.
 - If a field cannot be determined, use sensible defaults: empty string for strings, 4 for servings, empty arrays.
 - Ingredients must separate name from quantity and unit.
 - Keep "originalText" faithful to the source text.
@@ -404,20 +450,34 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   console.log(`extract-recipe-url: Gemini path source=${source}`);
 
+  const parseIngredient = (ing: Record<string, unknown>) => ({
+    name: String(ing.name ?? ''),
+    quantity: Number(ing.quantity) || 0,
+    unit: String(ing.unit ?? ''),
+    originalText: String(ing.originalText ?? ''),
+  });
+
+  const ingredientSections: IngredientSection[] = Array.isArray(data.ingredientSections)
+    ? (data.ingredientSections as Record<string, unknown>[]).map((sec) => ({
+        title: String(sec.title ?? ''),
+        ingredients: Array.isArray(sec.ingredients)
+          ? (sec.ingredients as Record<string, unknown>[]).map(parseIngredient)
+          : [],
+      }))
+    : Array.isArray(data.ingredients)
+      ? [{ title: '', ingredients: (data.ingredients as Record<string, unknown>[]).map(parseIngredient) }]
+      : [{ title: '', ingredients: [] }];
+
+  const ingredients = ingredientSections.flatMap((s) => s.ingredients);
+
   return res.status(200).json({
     title: String(data.title ?? 'Recipe'),
     source: String(data.source ?? source),
     servings: Number(data.servings) || 4,
     prepTime: String(data.prepTime ?? ''),
     totalTime: String(data.totalTime ?? ''),
-    ingredients: Array.isArray(data.ingredients)
-      ? (data.ingredients as Record<string, unknown>[]).map((ing) => ({
-          name: String(ing.name ?? ''),
-          quantity: Number(ing.quantity) || 0,
-          unit: String(ing.unit ?? ''),
-          originalText: String(ing.originalText ?? ''),
-        }))
-      : [],
+    ingredientSections,
+    ingredients,
     steps: Array.isArray(data.steps) ? (data.steps as unknown[]).map(String) : [],
     coverImage,
   });

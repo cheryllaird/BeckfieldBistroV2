@@ -57,9 +57,9 @@ export function RecipeDetailPage() {
     );
   }
 
-  const scaledIngredients = recipe.ingredients.map((ing) =>
-    scaleIngredient(ing, recipe.servings, servings)
-  );
+  const sectionsToDisplay = recipe.ingredientSections?.length
+    ? recipe.ingredientSections
+    : [{ title: '', ingredients: recipe.ingredients }];
 
   const handleDelete = () => {
     setMenuOpen(false);
@@ -222,18 +222,32 @@ export function RecipeDetailPage() {
             </div>
           </div>
 
-          {/* Ingredient list */}
-          <ul className="flex flex-col divide-y divide-slate-100">
-            {scaledIngredients.map((ing, index) => (
-              <li key={index} className="flex items-baseline justify-between py-2.5">
-                <span className="text-sm text-slate-700">{ing.name}</span>
-                <span className="text-sm font-medium text-slate-900 ml-4 shrink-0">
-                  {ing.quantity > 0 ? formatQuantity(ing.quantity) : ''}{' '}
-                  {ing.unit}
-                </span>
-              </li>
+          {/* Ingredient sections */}
+          <div className="flex flex-col gap-4">
+            {sectionsToDisplay.map((section, sIdx) => (
+              <div key={sIdx}>
+                {section.title && (
+                  <h4 className="text-xs font-semibold text-amber-700 uppercase tracking-wide mb-1">
+                    {section.title}
+                  </h4>
+                )}
+                <ul className="flex flex-col divide-y divide-slate-100">
+                  {section.ingredients.map((ing, index) => {
+                    const scaled = scaleIngredient(ing, recipe.servings, servings);
+                    return (
+                      <li key={index} className="flex items-baseline justify-between py-2.5">
+                        <span className="text-sm text-slate-700">{scaled.name}</span>
+                        <span className="text-sm font-medium text-slate-900 ml-4 shrink-0">
+                          {scaled.quantity > 0 ? formatQuantity(scaled.quantity) : ''}{' '}
+                          {scaled.unit}
+                        </span>
+                      </li>
+                    );
+                  })}
+                </ul>
+              </div>
             ))}
-          </ul>
+          </div>
         </div>
       )}
 
