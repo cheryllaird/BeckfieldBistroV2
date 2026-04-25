@@ -3,8 +3,7 @@ import { X, Check } from 'lucide-react';
 import { useStore } from '../../store';
 import { Button } from '../../components/ui/Button';
 import { ModalPortal } from '../../components/ui/ModalPortal';
-import { consolidateIngredients } from '../../lib/utils';
-import { isoDate, getWeekDays } from '../../lib/utils';
+import { consolidateIngredients, getRecipeIngredients, isoDate, getWeekDays } from '../../lib/utils';
 
 interface Props {
   onClose: () => void;
@@ -39,7 +38,7 @@ export function GenerateListModal({ onClose }: Props) {
       .map((e) => {
         const recipe = recipes.find((r) => r.id === e.recipeId)!;
         return {
-          ingredients: recipe.ingredients,
+          ingredients: getRecipeIngredients(recipe),
           servings: e.servings,
           originalServings: recipe.servings,
           mealEntryId: e.id,

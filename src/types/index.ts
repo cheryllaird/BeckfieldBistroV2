@@ -5,6 +5,11 @@ export interface Ingredient {
   originalText: string;
 }
 
+export interface IngredientSection {
+  title: string; // e.g. "For the dressing", or "" for the unlabeled main section
+  ingredients: Ingredient[];
+}
+
 export interface Recipe {
   id: string;
   userId: string;
@@ -16,7 +21,8 @@ export interface Recipe {
   servings: number;
   prepTime: string;
   totalTime: string;
-  ingredients: Ingredient[];
+  ingredients: Ingredient[]; // flat list; kept for backward compat with old recipes
+  ingredientSections?: IngredientSection[]; // multi-section support for new recipes
   steps: string[];
   createdAt: string;
   updatedAt: string;

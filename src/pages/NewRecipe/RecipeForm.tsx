@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Plus, Trash2, Loader, Camera, X, Link, UtensilsCrossed } from 'lucide-react';
-import type { Recipe, Ingredient } from '../../types';
+import type { Recipe, Ingredient, IngredientSection } from '../../types';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
 import { resizeImage } from '../../lib/recipeExtraction';
@@ -20,11 +20,11 @@ export function RecipeForm({ initial, knownSources, onSave, onCancel, isSaving }
   const [prepTime, setPrepTime] = useState(initial.prepTime ?? '');
   const [totalTime, setTotalTime] = useState(initial.totalTime ?? '');
   const [coverImage, setCoverImage] = useState(initial.coverImage ?? '');
-  const [ingredients, setIngredients] = useState<Ingredient[]>(
-    initial.ingredients?.length
-      ? initial.ingredients
-      : [{ name: '', quantity: 0, unit: '', originalText: '' }]
-  );
+  const [sections, setSections] = useState<IngredientSection[]>(() => {
+    if (initial.ingredientSections?.length) return initial.ingredientSections;
+    if (initial.ingredients?.length) return [{ title: '', ingredients: initial.ingredients }];
+    return [{ title: '', ingredients: [{ name: '', quantity: 0, unit: '', originalText: '' }] }];
+  });
   const [steps, setSteps] = useState<string[]>(
     initial.steps?.length ? initial.steps : ['']
   );
@@ -66,12 +66,18 @@ export function RecipeForm({ initial, knownSources, onSave, onCancel, isSaving }
   const handleSave = () => {
     const errs = validate();
     if (Object.keys(errs).length) { setErrors(errs); return; }
-    const filledIngredients = ingredients
-      .filter((i) => i.name.trim())
-      .map((i) => ({
-        ...i,
-        originalText: i.originalText.trim() || `${i.quantity}${i.unit} ${i.name}`.trim(),
-      }));
+    const filledSections = sections
+      .map((s) => ({
+        title: s.title.trim(),
+        ingredients: s.ingredients
+          .filter((i) => i.name.trim())
+          .map((i) => ({
+            ...i,
+            originalText: i.originalText.trim() || `${i.quantity}${i.unit} ${i.name}`.trim(),
+          })),
+      }))
+      .filter((s) => s.ingredients.length > 0);
+    const flatIngredients = filledSections.flatMap((s) => s.ingredients);
     onSave({
       title: title.trim(),
       source: source.trim() || 'Unknown',
@@ -81,24 +87,48 @@ export function RecipeForm({ initial, knownSources, onSave, onCancel, isSaving }
       coverImage: coverImage.trim() || undefined,
       originalImage: initial.originalImage,
       sourceUrl: initial.sourceUrl,
-      ingredients: filledIngredients,
+      ingredientSections: filledSections,
+      ingredients: flatIngredients,
       steps: steps.filter((s) => s.trim()),
     });
   };
 
-  const addIngredient = () =>
-    setIngredients((prev) => [
+  const addSection = () =>
+    setSections((prev) => [
       ...prev,
-      { name: '', quantity: 0, unit: '', originalText: '' },
+      { title: '', ingredients: [{ name: '', quantity: 0, unit: '', originalText: '' }] },
     ]);
 
-  const updateIngredient = (index: number, field: keyof Ingredient, value: string | number) =>
-    setIngredients((prev) =>
-      prev.map((ing, i) => (i === index ? { ...ing, [field]: value } : ing))
+  const updateSectionTitle = (sIdx: number, title: string) =>
+    setSections((prev) => prev.map((s, i) => (i === sIdx ? { ...s, title } : s)));
+
+  const removeSection = (sIdx: number) =>
+    setSections((prev) => prev.filter((_, i) => i !== sIdx));
+
+  const addIngredient = (sIdx: number) =>
+    setSections((prev) =>
+      prev.map((s, i) =>
+        i === sIdx
+          ? { ...s, ingredients: [...s.ingredients, { name: '', quantity: 0, unit: '', originalText: '' }] }
+          : s
+      )
     );
 
-  const removeIngredient = (index: number) =>
-    setIngredients((prev) => prev.filter((_, i) => i !== index));
+  const updateIngredient = (sIdx: number, iIdx: number, field: keyof Ingredient, value: string | number) =>
+    setSections((prev) =>
+      prev.map((s, si) =>
+        si === sIdx
+          ? { ...s, ingredients: s.ingredients.map((ing, ii) => (ii === iIdx ? { ...ing, [field]: value } : ing)) }
+          : s
+      )
+    );
+
+  const removeIngredient = (sIdx: number, iIdx: number) =>
+    setSections((prev) =>
+      prev.map((s, si) =>
+        si === sIdx ? { ...s, ingredients: s.ingredients.filter((_, ii) => ii !== iIdx) } : s
+      )
+    );
 
   const addStep = () => setSteps((prev) => [...prev, '']);
   const updateStep = (idx: number, value: string) =>
@@ -279,41 +309,70 @@ export function RecipeForm({ initial, knownSources, onSave, onCancel, isSaving }
       </section>
 
       {/* Ingredients */}
-      <section className="flex flex-col gap-3">
+      <section className="flex flex-col gap-4">
         <h3 className="text-sm font-semibold text-slate-700 uppercase tracking-wide">Ingredients</h3>
-        {ingredients.map((ing, index) => (
-          <div key={index} className="flex gap-2 items-start">
-            <div className="grid grid-cols-[1fr_70px_60px] gap-1.5 flex-1">
+        {sections.map((section, sIdx) => (
+          <div key={sIdx} className="flex flex-col gap-2">
+            {/* Section header row */}
+            <div className="flex items-center gap-2">
               <Input
-                placeholder="Ingredient"
-                value={ing.name}
-                onChange={(e) => updateIngredient(index, 'name', e.target.value)}
+                placeholder={sections.length > 1 ? 'Section name, e.g. For the dressing' : 'Section name (optional)'}
+                value={section.title}
+                onChange={(e) => updateSectionTitle(sIdx, e.target.value)}
+                className="flex-1 text-sm font-medium"
               />
-              <Input
-                placeholder="Qty"
-                type="number"
-                min={0}
-                step={0.1}
-                value={ing.quantity || ''}
-                onChange={(e) => updateIngredient(index, 'quantity', parseFloat(e.target.value) || 0)}
-              />
-              <Input
-                placeholder="Unit"
-                value={ing.unit}
-                onChange={(e) => updateIngredient(index, 'unit', e.target.value)}
-              />
+              {sections.length > 1 && (
+                <button
+                  onClick={() => removeSection(sIdx)}
+                  className="text-slate-300 hover:text-red-400 transition-colors shrink-0"
+                  aria-label="Remove section"
+                >
+                  <Trash2 size={15} />
+                </button>
+              )}
             </div>
-            <button
-              onClick={() => removeIngredient(index)}
-              className="mt-2 text-slate-300 hover:text-red-400 transition-colors shrink-0"
-              aria-label="Remove ingredient"
-            >
-              <Trash2 size={15} />
-            </button>
+
+            {/* Ingredients in this section */}
+            <div className={sections.length > 1 ? 'pl-3 border-l-2 border-amber-100 flex flex-col gap-2' : 'flex flex-col gap-2'}>
+              {section.ingredients.map((ing, iIdx) => (
+                <div key={iIdx} className="flex gap-2 items-start">
+                  <div className="grid grid-cols-[1fr_70px_60px] gap-1.5 flex-1">
+                    <Input
+                      placeholder="Ingredient"
+                      value={ing.name}
+                      onChange={(e) => updateIngredient(sIdx, iIdx, 'name', e.target.value)}
+                    />
+                    <Input
+                      placeholder="Qty"
+                      type="number"
+                      min={0}
+                      step={0.1}
+                      value={ing.quantity || ''}
+                      onChange={(e) => updateIngredient(sIdx, iIdx, 'quantity', parseFloat(e.target.value) || 0)}
+                    />
+                    <Input
+                      placeholder="Unit"
+                      value={ing.unit}
+                      onChange={(e) => updateIngredient(sIdx, iIdx, 'unit', e.target.value)}
+                    />
+                  </div>
+                  <button
+                    onClick={() => removeIngredient(sIdx, iIdx)}
+                    className="mt-2 text-slate-300 hover:text-red-400 transition-colors shrink-0"
+                    aria-label="Remove ingredient"
+                  >
+                    <Trash2 size={15} />
+                  </button>
+                </div>
+              ))}
+              <Button variant="ghost" size="sm" onClick={() => addIngredient(sIdx)}>
+                <Plus size={13} /> Add Ingredient
+              </Button>
+            </div>
           </div>
         ))}
-        <Button variant="ghost" size="sm" onClick={addIngredient}>
-          <Plus size={13} /> Add Ingredient
+        <Button variant="ghost" size="sm" onClick={addSection}>
+          <Plus size={13} /> Add Section
         </Button>
       </section>
 
