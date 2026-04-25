@@ -1,5 +1,5 @@
 import { useState, useRef } from 'react';
-import { ChevronLeft, ChevronRight } from 'lucide-react';
+import { ChevronLeft, ChevronRight, CalendarCheck } from 'lucide-react';
 import { getWeekDays, isoDate } from '../../lib/utils';
 import { DayRow } from './DayRow';
 
@@ -78,7 +78,17 @@ export function WeekView() {
         >
           <ChevronLeft size={18} />
         </button>
-        <span className="text-sm font-semibold text-slate-700">{weekLabel()}</span>
+        <div className="flex flex-col items-center gap-1">
+          <span className="text-sm font-semibold text-slate-700">{weekLabel()}</span>
+          {weekOffset !== 0 && (
+            <button
+              onClick={() => setWeekOffset(0)}
+              className="inline-flex items-center gap-1 text-xs text-amber-600 hover:text-amber-700 font-medium transition-colors"
+            >
+              <CalendarCheck size={11} /> Today
+            </button>
+          )}
+        </div>
         <button
           onClick={() => setWeekOffset((w) => w + 1)}
           className="w-8 h-8 rounded-full flex items-center justify-center text-slate-500 hover:bg-slate-100 transition-colors"
