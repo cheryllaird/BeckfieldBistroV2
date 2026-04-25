@@ -7,17 +7,51 @@ export function WeekView() {
   const [weekOffset, setWeekOffset] = useState(0);
   const days = getWeekDays(weekOffset);
   const touchStartX = useRef<number | null>(null);
+  const rowsRef = useRef<HTMLDivElement>(null);
 
   const handleTouchStart = (e: React.TouchEvent) => {
     touchStartX.current = e.touches[0].clientX;
+    if (rowsRef.current) {
+      rowsRef.current.style.transition = 'none';
+    }
+  };
+
+  const handleTouchMove = (e: React.TouchEvent) => {
+    if (touchStartX.current === null || !rowsRef.current) return;
+    const delta = e.touches[0].clientX - touchStartX.current;
+    rowsRef.current.style.transform = `translateX(${delta}px)`;
   };
 
   const handleTouchEnd = (e: React.TouchEvent) => {
-    if (touchStartX.current === null) return;
+    if (touchStartX.current === null || !rowsRef.current) return;
     const delta = e.changedTouches[0].clientX - touchStartX.current;
-    if (delta < -50) setWeekOffset((w) => w + 1);
-    if (delta > 50) setWeekOffset((w) => w - 1);
     touchStartX.current = null;
+    const el = rowsRef.current;
+    const width = el.offsetWidth;
+
+    if (Math.abs(delta) > 50) {
+      const goNext = delta < 0;
+      // Slide current week out
+      el.style.transition = 'transform 0.2s ease-out';
+      el.style.transform = `translateX(${goNext ? -width : width}px)`;
+
+      setTimeout(() => {
+        // Change week, snap to opposite side off-screen, then slide in
+        setWeekOffset((w) => w + (goNext ? 1 : -1));
+        el.style.transition = 'none';
+        el.style.transform = `translateX(${goNext ? width : -width}px)`;
+        requestAnimationFrame(() => {
+          requestAnimationFrame(() => {
+            el.style.transition = 'transform 0.2s ease-out';
+            el.style.transform = 'translateX(0)';
+          });
+        });
+      }, 200);
+    } else {
+      // Snap back
+      el.style.transition = 'transform 0.2s ease-out';
+      el.style.transform = 'translateX(0)';
+    }
   };
 
   const weekLabel = () => {
@@ -30,8 +64,9 @@ export function WeekView() {
 
   return (
     <div
-      className="flex flex-col gap-3"
+      className="flex flex-col gap-3 overflow-hidden"
       onTouchStart={handleTouchStart}
+      onTouchMove={handleTouchMove}
       onTouchEnd={handleTouchEnd}
     >
       {/* Week navigator */}
@@ -54,7 +89,7 @@ export function WeekView() {
       </div>
 
       {/* Day rows */}
-      <div className="flex flex-col gap-2 animate-in">
+      <div ref={rowsRef} className="flex flex-col gap-2">
         {days.map((day) => (
           <DayRow key={isoDate(day)} date={day} />
         ))}
