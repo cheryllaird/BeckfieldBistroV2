@@ -1,11 +1,11 @@
 import { useState } from 'react';
-import { X, Check } from 'lucide-react';
+import { X, Check, ChevronLeft, ChevronRight } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import type { Recipe } from '../../types';
 import { useStore } from '../../store';
 import { Button } from '../../components/ui/Button';
 import { ModalPortal } from '../../components/ui/ModalPortal';
-import { generateId, isoDate, getWeekDays, formatDayLabel } from '../../lib/utils';
+import { generateId, isoDate } from '../../lib/utils';
 
 interface Props {
   recipe: Recipe;
@@ -18,12 +18,34 @@ export function PlanDateModal({ recipe, servings, onClose }: Props) {
   const addMealEntry = useStore((s) => s.addMealEntry);
   const mealEntries = useStore((s) => s.mealEntries);
 
-  const thisWeek = getWeekDays(0);
-  const nextWeek = getWeekDays(1);
-  const allDays = [...thisWeek, ...nextWeek];
+  const today = new Date();
+  const [viewYear, setViewYear] = useState(today.getFullYear());
+  const [viewMonth, setViewMonth] = useState(today.getMonth());
   const [selected, setSelected] = useState<string | null>(null);
 
   const plannedDates = new Set(mealEntries.map((e) => e.date));
+  const todayIso = isoDate(today);
+
+  const applyMonth = (delta: number) => {
+    let m = viewMonth + delta;
+    let y = viewYear;
+    if (m < 0) { m = 11; y--; }
+    if (m > 11) { m = 0; y++; }
+    setViewMonth(m);
+    setViewYear(y);
+  };
+
+  const firstDay = new Date(viewYear, viewMonth, 1);
+  const daysInMonth = new Date(viewYear, viewMonth + 1, 0).getDate();
+  const startOffset = (firstDay.getDay() + 6) % 7; // Monday-first
+
+  const cells: (number | null)[] = [
+    ...Array(startOffset).fill(null),
+    ...Array.from({ length: daysInMonth }, (_, i) => i + 1),
+  ];
+  while (cells.length % 7 !== 0) cells.push(null);
+
+  const monthLabel = firstDay.toLocaleDateString('en-GB', { month: 'long', year: 'numeric' });
 
   const handleConfirm = () => {
     if (!selected) return;
@@ -52,20 +74,41 @@ export function PlanDateModal({ recipe, servings, onClose }: Props) {
 
         <p className="text-xs text-slate-500 mb-3">Adding: <strong>{recipe.title}</strong></p>
 
+        {/* Month navigation */}
+        <div className="flex items-center justify-between mb-3">
+          <button
+            onClick={() => applyMonth(-1)}
+            className="w-7 h-7 rounded-full flex items-center justify-center text-slate-500 hover:bg-slate-100"
+            aria-label="Previous month"
+          >
+            <ChevronLeft size={16} />
+          </button>
+          <span className="text-sm font-semibold text-slate-700">{monthLabel}</span>
+          <button
+            onClick={() => applyMonth(1)}
+            className="w-7 h-7 rounded-full flex items-center justify-center text-slate-500 hover:bg-slate-100"
+            aria-label="Next month"
+          >
+            <ChevronRight size={16} />
+          </button>
+        </div>
+
+        {/* Calendar grid */}
         <div className="grid grid-cols-7 gap-1 mb-5">
           {['M', 'T', 'W', 'T', 'F', 'S', 'S'].map((d, i) => (
             <div key={i} className="text-center text-xs font-medium text-slate-400 py-1">
               {d}
             </div>
           ))}
-          {allDays.map((day) => {
-            const iso = isoDate(day);
-            const { monthDay, isToday } = formatDayLabel(day);
+          {cells.map((day, i) => {
+            if (day === null) return <div key={i} />;
+            const iso = isoDate(new Date(viewYear, viewMonth, day));
+            const isToday = iso === todayIso;
             const isPlanned = plannedDates.has(iso);
             const isSelected = selected === iso;
             return (
               <button
-                key={iso}
+                key={i}
                 onClick={() => setSelected(iso)}
                 className={[
                   'aspect-square rounded-lg flex items-center justify-center text-xs font-medium transition-all',
@@ -78,7 +121,7 @@ export function PlanDateModal({ recipe, servings, onClose }: Props) {
                     : 'hover:bg-slate-50 text-slate-700',
                 ].join(' ')}
               >
-                {monthDay.split(' ')[0]}
+                {day}
               </button>
             );
           })}
