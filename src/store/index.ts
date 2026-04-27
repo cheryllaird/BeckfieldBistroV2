@@ -192,7 +192,7 @@ export const useStore = create<Store>()(
           onKnownSources: (knownSources) => set({ knownSources }),
         });
 
-        // Subscribe to incoming recipe shares for this user's email
+        // Subscribe to incoming recipe shares for this user's email (real-time)
         if (firebaseUser.email) {
           _unsubscribeShares = subscribeToIncomingShares(firebaseUser.email, (incomingShares) =>
             set({ incomingShares })
@@ -261,8 +261,7 @@ export const useStore = create<Store>()(
       acceptShare: async (share) => {
         const uid = get().user?.uid;
         if (!uid) return '';
-        const newId = await firestoreAcceptShare(share.id, uid, share.recipe);
-        return newId;
+        return firestoreAcceptShare(share.id, uid, share.recipe);
       },
 
       dismissShare: async (shareId) => {
