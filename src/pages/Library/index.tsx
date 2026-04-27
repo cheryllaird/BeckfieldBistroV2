@@ -3,12 +3,14 @@ import { useNavigate } from 'react-router-dom';
 import { Search, Plus, X } from 'lucide-react';
 import { useStore } from '../../store';
 import { RecipeCard } from './RecipeCard';
+import { IncomingShareCard } from './IncomingShareCard';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
 
 export function LibraryPage() {
   const navigate = useNavigate();
   const recipes = useStore((s) => s.recipes);
+  const incomingShares = useStore((s) => s.incomingShares);
   const [query, setQuery] = useState('');
 
   const filtered = useMemo(() => {
@@ -51,6 +53,21 @@ export function LibraryPage() {
           </button>
         )}
       </div>
+
+      {/* Incoming shares inbox */}
+      {incomingShares.length > 0 && (
+        <div className="flex flex-col gap-2">
+          <div className="flex items-center gap-2">
+            <h3 className="text-sm font-semibold text-slate-700">Shared with You</h3>
+            <span className="text-xs font-semibold bg-amber-500 text-white rounded-full px-1.5 py-0.5 leading-none">
+              {incomingShares.length}
+            </span>
+          </div>
+          {incomingShares.map((share) => (
+            <IncomingShareCard key={share.id} share={share} />
+          ))}
+        </div>
+      )}
 
       {/* Recipe count */}
       {query && (

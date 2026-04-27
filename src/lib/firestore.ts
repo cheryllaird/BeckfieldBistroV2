@@ -6,10 +6,13 @@ import {
   deleteDoc,
   writeBatch,
   getDocs,
+  addDoc,
+  query,
+  where,
   enableNetwork,
 } from 'firebase/firestore';
 import { db } from './firebase';
-import type { Recipe, MealEntry, ShoppingItem } from '../types';
+import type { Recipe, MealEntry, ShoppingItem, SharedRecipe } from '../types';
 
 // ── helpers ──────────────────────────────────────────────────────────────────
 
@@ -137,4 +140,49 @@ export async function saveShoppingItems(uid: string, items: ShoppingItem[]): Pro
 
 export function saveKnownSources(uid: string, sources: string[]): void {
   setDoc(profileDoc(uid), { knownSources: sources }, { merge: true }).catch(console.error);
+}
+
+// ── recipe sharing ────────────────────────────────────────────────────────────
+
+const sharedRecipesCol = () => collection(db!, 'sharedRecipes');
+
+export async function sendRecipeShare(share: Omit<SharedRecipe, 'id'>): Promise<string> {
+  const ref = await addDoc(sharedRecipesCol(), stripUndefined(share));
+  return ref.id;
+}
+
+export function subscribeToIncomingShares(
+  email: string,
+  callback: (shares: SharedRecipe[]) => void
+): () => void {
+  const q = query(sharedRecipesCol(), where('toEmail', '==', email));
+  return onSnapshot(
+    q,
+    (snap) => callback(snap.docs.map((d) => ({ id: d.id, ...d.data() } as SharedRecipe))),
+    console.error
+  );
+}
+
+export async function acceptShare(
+  shareId: string,
+  toUid: string,
+  recipe: SharedRecipe['recipe']
+): Promise<string> {
+  const { generateId } = await import('./utils');
+  const newId = generateId();
+  const now = new Date().toISOString();
+  const newRecipe: Recipe = {
+    ...recipe,
+    id: newId,
+    userId: toUid,
+    createdAt: now,
+    updatedAt: now,
+  };
+  await setDoc(doc(recipesCol(toUid), newId), stripUndefined(newRecipe));
+  await deleteDoc(doc(sharedRecipesCol(), shareId));
+  return newId;
+}
+
+export async function dismissShare(shareId: string): Promise<void> {
+  await deleteDoc(doc(sharedRecipesCol(), shareId));
 }
