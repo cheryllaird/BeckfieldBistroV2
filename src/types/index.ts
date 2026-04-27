@@ -71,6 +71,16 @@ export type ShoppingCategory =
   | 'Beverages'
   | 'Other';
 
+export interface SharedRecipe {
+  id: string;
+  fromUid: string;
+  fromName: string;
+  fromAvatar?: string;
+  toEmail: string;
+  recipe: Omit<Recipe, 'id' | 'userId'>;
+  createdAt: string;
+}
+
 export interface AppState {
   recipes: Recipe[];
   mealEntries: MealEntry[];

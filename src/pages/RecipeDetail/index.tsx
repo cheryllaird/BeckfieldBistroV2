@@ -13,11 +13,13 @@ import {
   ExternalLink,
   Image,
   UtensilsCrossed,
+  Share2,
 } from 'lucide-react';
 import { useStore } from '../../store';
 import { Button } from '../../components/ui/Button';
 import { scaleIngredient, formatQuantity } from '../../lib/utils';
 import { PlanDateModal } from './PlanDateModal';
+import { ShareModal } from './ShareModal';
 
 type Tab = 'ingredients' | 'method';
 
@@ -31,6 +33,7 @@ export function RecipeDetailPage() {
   const [servings, setServings] = useState(recipe?.servings ?? 2);
   const [imgError, setImgError] = useState(false);
   const [planModalOpen, setPlanModalOpen] = useState(false);
+  const [shareModalOpen, setShareModalOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
 
@@ -103,6 +106,13 @@ export function RecipeDetailPage() {
                 className="flex items-center gap-2.5 w-full px-4 py-2.5 text-sm text-slate-700 hover:bg-slate-50 transition-colors"
               >
                 <Edit size={14} /> Edit recipe
+              </button>
+
+              <button
+                onClick={() => { setShareModalOpen(true); setMenuOpen(false); }}
+                className="flex items-center gap-2.5 w-full px-4 py-2.5 text-sm text-slate-700 hover:bg-slate-50 transition-colors"
+              >
+                <Share2 size={14} /> Share recipe
               </button>
 
               {recipe.originalImage && !recipe.originalImage.startsWith('data:') && (
@@ -275,6 +285,13 @@ export function RecipeDetailPage() {
           recipe={recipe}
           servings={servings}
           onClose={() => setPlanModalOpen(false)}
+        />
+      )}
+
+      {shareModalOpen && (
+        <ShareModal
+          recipe={recipe}
+          onClose={() => setShareModalOpen(false)}
         />
       )}
     </div>

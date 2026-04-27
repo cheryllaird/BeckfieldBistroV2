@@ -13,13 +13,20 @@ import {
   saveShoppingItems,
   deleteShoppingItemDoc,
   saveKnownSources,
+  sendRecipeShare,
+  subscribeToIncomingShares,
+  acceptShare as firestoreAcceptShare,
+  dismissShare as firestoreDismissShare,
 } from '../lib/firestore';
-import type { Recipe, MealEntry, ShoppingItem, AppState } from '../types';
+import type { Recipe, MealEntry, ShoppingItem, AppState, SharedRecipe } from '../types';
 
 // Module-level ref so it's never serialized into Zustand state or localStorage
 let _unsubscribeUserData: (() => void) | null = null;
+let _unsubscribeShares: (() => void) | null = null;
 
 interface Store extends AppState {
+  incomingShares: SharedRecipe[];
+
   // Recipe actions
   addRecipe: (recipe: Omit<Recipe, 'userId'>) => Promise<void>;
   updateRecipe: (recipe: Recipe) => void;
@@ -45,6 +52,11 @@ interface Store extends AppState {
 
   // Source actions
   addSource: (source: string) => void;
+
+  // Sharing actions
+  sendRecipe: (recipe: Recipe, toEmail: string) => Promise<void>;
+  acceptShare: (share: SharedRecipe) => Promise<string>;
+  dismissShare: (shareId: string) => Promise<void>;
 }
 
 export const useStore = create<Store>()(
@@ -57,6 +69,7 @@ export const useStore = create<Store>()(
       isAuthenticated: false,
       user: null,
       splashDone: false,
+      incomingShares: [],
 
       addRecipe: async (recipe) => {
         const uid = get().user?.uid ?? '';
@@ -150,8 +163,9 @@ export const useStore = create<Store>()(
       },
 
       signIn: (firebaseUser) => {
-        // Tear down any previous listener (e.g. if signIn is called twice)
+        // Tear down any previous listeners (e.g. if signIn is called twice)
         _unsubscribeUserData?.();
+        _unsubscribeShares?.();
 
         // Authenticate immediately so the app opens at once — data streams in via onSnapshot.
         set({
@@ -166,6 +180,7 @@ export const useStore = create<Store>()(
           mealEntries: [],
           shoppingItems: [],
           knownSources: [],
+          incomingShares: [],
         });
 
         // Subscribe to real-time updates. First emission loads initial data;
@@ -176,12 +191,21 @@ export const useStore = create<Store>()(
           onShoppingItems: (shoppingItems) => set({ shoppingItems }),
           onKnownSources: (knownSources) => set({ knownSources }),
         });
+
+        // Subscribe to incoming recipe shares for this user's email
+        if (firebaseUser.email) {
+          _unsubscribeShares = subscribeToIncomingShares(firebaseUser.email, (incomingShares) =>
+            set({ incomingShares })
+          );
+        }
       },
 
       signOut: async () => {
         // Tear down listeners before clearing state so no orphaned callbacks fire
         _unsubscribeUserData?.();
         _unsubscribeUserData = null;
+        _unsubscribeShares?.();
+        _unsubscribeShares = null;
         if (auth) await firebaseSignOut(auth);
         set({
           isAuthenticated: false,
@@ -190,6 +214,7 @@ export const useStore = create<Store>()(
           mealEntries: [],
           shoppingItems: [],
           knownSources: [],
+          incomingShares: [],
         });
       },
 
@@ -203,6 +228,45 @@ export const useStore = create<Store>()(
         }));
         const uid = get().user?.uid;
         if (uid) saveKnownSources(uid, get().knownSources);
+      },
+
+      sendRecipe: async (recipe, toEmail) => {
+        const user = get().user;
+        if (!user) return;
+        const share: Omit<SharedRecipe, 'id'> = {
+          fromUid: user.uid,
+          fromName: user.name,
+          fromAvatar: user.avatar,
+          toEmail,
+          recipe: {
+            title: recipe.title,
+            source: recipe.source,
+            sourceUrl: recipe.sourceUrl,
+            coverImage: recipe.coverImage,
+            originalImage: recipe.originalImage,
+            servings: recipe.servings,
+            prepTime: recipe.prepTime,
+            totalTime: recipe.totalTime,
+            ingredients: recipe.ingredients,
+            ingredientSections: recipe.ingredientSections,
+            steps: recipe.steps,
+            createdAt: recipe.createdAt,
+            updatedAt: recipe.updatedAt,
+          },
+          createdAt: new Date().toISOString(),
+        };
+        await sendRecipeShare(share);
+      },
+
+      acceptShare: async (share) => {
+        const uid = get().user?.uid;
+        if (!uid) return '';
+        const newId = await firestoreAcceptShare(share.id, uid, share.recipe);
+        return newId;
+      },
+
+      dismissShare: async (shareId) => {
+        await firestoreDismissShare(shareId);
       },
     }),
     {
