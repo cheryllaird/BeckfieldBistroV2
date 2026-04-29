@@ -11,29 +11,53 @@ interface WeekViewProps {
 export function WeekView({ weekOffset, setWeekOffset }: WeekViewProps) {
   const days = getWeekDays(weekOffset);
   const touchStartX = useRef<number | null>(null);
+  const touchStartY = useRef<number | null>(null);
+  const isScrollGesture = useRef<boolean | null>(null);
   const rowsRef = useRef<HTMLDivElement>(null);
 
   const handleTouchStart = (e: React.TouchEvent) => {
     touchStartX.current = e.touches[0].clientX;
+    touchStartY.current = e.touches[0].clientY;
+    isScrollGesture.current = null;
     if (rowsRef.current) {
       rowsRef.current.style.transition = 'none';
     }
   };
 
   const handleTouchMove = (e: React.TouchEvent) => {
-    if (touchStartX.current === null || !rowsRef.current) return;
-    const delta = e.touches[0].clientX - touchStartX.current;
-    rowsRef.current.style.transform = `translateX(${delta}px)`;
+    if (touchStartX.current === null || touchStartY.current === null || !rowsRef.current) return;
+    const deltaX = e.touches[0].clientX - touchStartX.current;
+    const deltaY = e.touches[0].clientY - touchStartY.current;
+
+    // Determine gesture direction once we have enough movement
+    if (isScrollGesture.current === null && (Math.abs(deltaX) > 8 || Math.abs(deltaY) > 8)) {
+      isScrollGesture.current = Math.abs(deltaY) > Math.abs(deltaX);
+    }
+
+    // Don't intercept vertical scrolling
+    if (isScrollGesture.current) return;
+
+    rowsRef.current.style.transform = `translateX(${deltaX}px)`;
   };
 
   const handleTouchEnd = (e: React.TouchEvent) => {
     if (touchStartX.current === null || !rowsRef.current) return;
     const delta = e.changedTouches[0].clientX - touchStartX.current;
     touchStartX.current = null;
+    touchStartY.current = null;
     const el = rowsRef.current;
     const width = el.offsetWidth;
 
-    if (Math.abs(delta) > 50) {
+    // Snap back if it was a vertical scroll gesture
+    if (isScrollGesture.current) {
+      isScrollGesture.current = null;
+      el.style.transition = 'transform 0.2s ease-out';
+      el.style.transform = 'translateX(0)';
+      return;
+    }
+    isScrollGesture.current = null;
+
+    if (Math.abs(delta) > 80) {
       const goNext = delta < 0;
       // Slide current week out
       el.style.transition = 'transform 0.2s ease-out';
