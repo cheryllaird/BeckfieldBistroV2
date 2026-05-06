@@ -167,14 +167,26 @@ export function ShoppingListPage() {
         <div className="flex items-center justify-between">
           <h2 className="text-xl font-bold text-slate-800">Shopping List</h2>
         </div>
-        <div className="flex flex-col items-center gap-4 py-16 text-center animate-fade">
+        <div className="flex flex-col items-center gap-4 py-10 text-center animate-fade">
           <ShoppingCart size={48} className="text-slate-200" />
           <div>
             <p className="text-base font-semibold text-slate-700">Your list is empty</p>
-            <p className="text-sm text-slate-400 mt-1">Generate from your meal plan to get started</p>
+            <p className="text-sm text-slate-400 mt-1">Generate from your meal plan or add items manually</p>
           </div>
           <Button onClick={() => setGenerateOpen(true)}>
             <Zap size={14} /> Generate from Plan
+          </Button>
+        </div>
+        <div className="flex gap-2">
+          <input
+            value={manualItem}
+            onChange={(e) => setManualItem(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && handleAddManual()}
+            placeholder="Add item manually…"
+            className="flex-1 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-800 placeholder-slate-400 outline-none focus:border-amber-400 focus:ring-2 focus:ring-amber-100 transition-colors"
+          />
+          <Button size="sm" onClick={handleAddManual} disabled={!manualItem.trim()} aria-label="Add">
+            <Plus size={14} />
           </Button>
         </div>
         {generateOpen && <GenerateListModal onClose={() => setGenerateOpen(false)} />}
