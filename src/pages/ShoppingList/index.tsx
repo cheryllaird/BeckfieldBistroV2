@@ -14,7 +14,6 @@ import {
 } from 'lucide-react';
 import { useStore } from '../../store';
 import { Button } from '../../components/ui/Button';
-import { Badge } from '../../components/ui/Badge';
 import { categorize, formatQuantity, generateId } from '../../lib/utils';
 import { logCategoryOverride } from '../../lib/firestore';
 import type { MealSource, ShoppingCategory, ShoppingItem } from '../../types';
