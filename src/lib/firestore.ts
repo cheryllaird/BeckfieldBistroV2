@@ -12,7 +12,7 @@ import {
   enableNetwork,
 } from 'firebase/firestore';
 import { db } from './firebase';
-import type { Recipe, MealEntry, ShoppingItem, SharedRecipe } from '../types';
+import type { Recipe, MealEntry, ShoppingItem, SharedRecipe, CategoryOverrideLog } from '../types';
 
 // ── helpers ──────────────────────────────────────────────────────────────────
 
@@ -134,6 +134,15 @@ export async function saveShoppingItems(uid: string, items: ShoppingItem[]): Pro
   existing.docs.forEach((d) => batch.delete(d.ref));
   items.forEach((item, index) => batch.set(doc(col, item.id), stripUndefined({ ...item, order: index })));
   batch.commit().catch(console.error);
+}
+
+// ── category override log ─────────────────────────────────────────────────────
+
+const categoryOverrideLogsCol = (uid: string) =>
+  collection(db!, 'users', uid, 'categoryOverrideLogs');
+
+export function logCategoryOverride(uid: string, entry: Omit<CategoryOverrideLog, 'id'>): void {
+  addDoc(categoryOverrideLogsCol(uid), stripUndefined(entry)).catch(console.error);
 }
 
 // ── sources ───────────────────────────────────────────────────────────────────

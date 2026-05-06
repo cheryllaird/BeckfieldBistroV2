@@ -81,6 +81,14 @@ export interface SharedRecipe {
   createdAt: string;
 }
 
+export interface CategoryOverrideLog {
+  id: string;
+  itemName: string;
+  fromCategory: ShoppingCategory;
+  toCategory: ShoppingCategory;
+  timestamp: string; // ISO datetime
+}
+
 export interface AppState {
   recipes: Recipe[];
   mealEntries: MealEntry[];
