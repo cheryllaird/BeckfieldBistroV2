@@ -119,6 +119,15 @@ export function ShoppingListPage() {
     setEditingValue('');
   };
 
+  const handleCategoryChange = (id: string, category: ShoppingCategory) => {
+    pushHistory();
+    setShoppingItems(
+      shoppingItems.map((item) =>
+        item.id === id ? { ...item, category } : item
+      )
+    );
+  };
+
   const handleDragStart = (itemId: string) => {
     setDraggingItemId(itemId);
     draggingItemIdRef.current = itemId;
@@ -289,6 +298,7 @@ export function ShoppingListPage() {
               onEditSave={() => handleEditSave(item.id)}
               onEditCancel={handleEditCancel}
               onRemove={() => handleRemove(item.id)}
+              onCategoryChange={(cat) => handleCategoryChange(item.id, cat)}
               onDragStart={() => handleDragStart(item.id)}
               onDragEnter={() => handleDragEnter(index)}
               onDragEnd={handleDragEnd}
@@ -338,6 +348,7 @@ export function ShoppingListPage() {
                 onEditSave={() => handleEditSave(item.id)}
                 onEditCancel={handleEditCancel}
                 onRemove={() => handleRemove(item.id)}
+                onCategoryChange={(cat) => handleCategoryChange(item.id, cat)}
                 onDragStart={() => {}}
                 onDragEnter={() => {}}
                 onDragEnd={() => {}}
@@ -472,6 +483,7 @@ function EditItem({
   onEditSave,
   onEditCancel,
   onRemove,
+  onCategoryChange,
   onDragStart,
   onDragEnter,
   onDragEnd,
@@ -486,6 +498,7 @@ function EditItem({
   onEditSave: () => void;
   onEditCancel: () => void;
   onRemove: () => void;
+  onCategoryChange: (category: ShoppingCategory) => void;
   onDragStart: () => void;
   onDragEnter: () => void;
   onDragEnd: () => void;
@@ -546,7 +559,16 @@ function EditItem({
         </button>
       )}
 
-      <Badge variant="default" size="sm">{item.category}</Badge>
+      <select
+        value={item.category}
+        onChange={(e) => onCategoryChange(e.target.value as ShoppingCategory)}
+        onClick={(e) => e.stopPropagation()}
+        className="text-xs font-medium rounded-full px-2 py-0.5 bg-amber-100 text-amber-800 border border-amber-200 cursor-pointer hover:bg-amber-200 transition-colors focus:outline-none focus:ring-1 focus:ring-amber-400 shrink-0"
+      >
+        {CATEGORY_ORDER.map((cat) => (
+          <option key={cat} value={cat}>{cat}</option>
+        ))}
+      </select>
 
       <button
         onClick={onRemove}
