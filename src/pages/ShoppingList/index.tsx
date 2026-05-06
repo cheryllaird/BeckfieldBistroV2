@@ -11,6 +11,7 @@ import {
   ShoppingBag,
   Pencil,
   UtensilsCrossed,
+  ChevronDown,
 } from 'lucide-react';
 import { useStore } from '../../store';
 import { Button } from '../../components/ui/Button';
@@ -566,16 +567,23 @@ function EditItem({
         </button>
       )}
 
-      <select
-        value={item.category}
-        onChange={(e) => onCategoryChange(e.target.value as ShoppingCategory)}
-        onClick={(e) => e.stopPropagation()}
-        className="text-xs font-medium rounded-full px-2 py-0.5 bg-amber-100 text-amber-800 border border-amber-200 cursor-pointer hover:bg-amber-200 transition-colors focus:outline-none focus:ring-1 focus:ring-amber-400 shrink-0"
-      >
-        {CATEGORY_ORDER.map((cat) => (
-          <option key={cat} value={cat}>{cat}</option>
-        ))}
-      </select>
+      <div className="relative inline-flex items-center shrink-0">
+        <div className="flex items-center gap-1 pl-2.5 pr-2 py-1 rounded-full text-[10px] font-semibold pointer-events-none bg-slate-100 text-slate-500">
+          {item.category}
+          <ChevronDown size={9} />
+        </div>
+        <select
+          value={item.category}
+          onChange={(e) => onCategoryChange(e.target.value as ShoppingCategory)}
+          onClick={(e) => e.stopPropagation()}
+          className="absolute inset-0 opacity-0 w-full h-full cursor-pointer"
+          aria-label="Item category"
+        >
+          {CATEGORY_ORDER.map((cat) => (
+            <option key={cat} value={cat}>{cat}</option>
+          ))}
+        </select>
+      </div>
 
       <button
         onClick={onRemove}
