@@ -1,73 +1,54 @@
-# React + TypeScript + Vite
+# Beckfield Bistro
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+An AI-powered culinary companion built with React, TypeScript, Vite, Firebase, and Vercel.
 
-Currently, two official plugins are available:
+## Setup
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+### 1. Environment variables
 
-## React Compiler
+Copy `.env.example` to `.env.local` and fill in your values:
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
-
-## Expanding the ESLint configuration
-
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
-
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
-
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+```
+cp .env.example .env.local
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+All `VITE_FIREBASE_*` values come from **Firebase Console → Project Settings → Your apps → Web app**.
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
+### 2. Firebase authorized domains
 
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+Google Sign-in requires the domain your app runs on to be in Firebase's authorized list.
+
+**Firebase Console → Authentication → Settings → Authorized domains**
+
+Add all of the following:
+
+| Domain | Purpose |
+|--------|---------|
+| `localhost` | Local dev (added by default) |
+| `beckfield-bistro.vercel.app` | Production |
+| `beckfield-bistro-cheryllairds-projects.vercel.app` | Vercel team alias |
+| `vercel.app` | All PR preview deployments (`beckfield-bistro-git-*-cheryllairds-projects.vercel.app`) |
+
+> **Why `vercel.app`?** Vercel preview URLs are dynamic (e.g. `beckfield-bistro-git-my-branch-cheryllairds-projects.vercel.app`), so you can't add each one individually. Adding `vercel.app` covers all of them at once. Firebase still enforces your Firestore security rules, so this doesn't weaken data security.
+
+### 3. Google OAuth authorized origins
+
+In **Google Cloud Console → APIs & Services → Credentials → your OAuth 2.0 Client**, add the same domains to **Authorized JavaScript origins**:
+
+- `https://beckfield-bistro.vercel.app`
+- `https://beckfield-bistro-cheryllairds-projects.vercel.app`
+- `https://vercel.app` (covers previews)
+
+### 4. Install and run
+
+```bash
+npm install
+npm run dev
 ```
+
+## Tech stack
+
+- **Frontend**: React 19, TypeScript, Vite, Tailwind CSS
+- **Auth + DB**: Firebase (Google Sign-in, Firestore)
+- **AI**: Gemini (recipe extraction via Vercel serverless function)
+- **Hosting**: Vercel
