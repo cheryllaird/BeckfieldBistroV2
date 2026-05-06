@@ -1,7 +1,7 @@
 export function authErrorMessage(code: string): string {
   switch (code) {
     case 'auth/unauthorized-domain':
-      return 'Sign-in is not enabled for this domain. Ask the site owner to add it to Firebase Authorized Domains.';
+      return `Sign-in is blocked: "${window.location.hostname}" isn't in Firebase's authorized domains. Go to Firebase Console → Authentication → Settings → Authorized domains and add this hostname.`;
     case 'auth/operation-not-allowed':
       return 'Google sign-in is not enabled for this project. Please contact support.';
     case 'auth/network-request-failed':
