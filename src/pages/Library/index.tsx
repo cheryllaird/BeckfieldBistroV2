@@ -7,6 +7,7 @@ import { IncomingShareCard } from './IncomingShareCard';
 import { BulkShareModal } from './BulkShareModal';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
+import { ModalPortal } from '../../components/ui/ModalPortal';
 
 export function LibraryPage() {
   const navigate = useNavigate();
@@ -141,30 +142,32 @@ export function LibraryPage() {
         </div>
       )}
 
-      {/* Bulk select action bar — overlays bottom nav during selection */}
+      {/* Bulk select action bar — portalled to body to escape main's transform stacking context */}
       {selectMode && (
-        <div className="fixed bottom-0 left-0 right-0 z-50 bg-white border-t border-slate-200 shadow-lg px-4 py-3">
-          <div className="max-w-md mx-auto flex items-center gap-3">
-            <button
-              onClick={cancelSelect}
-              className="p-2 rounded-xl text-slate-500 hover:text-slate-700 hover:bg-slate-100 transition-colors"
-              aria-label="Cancel selection"
-            >
-              <X size={20} />
-            </button>
-            <span className="flex-1 text-sm font-semibold text-slate-700">
-              {selectedIds.size} selected
-            </span>
-            <Button
-              size="sm"
-              onClick={() => setBulkShareOpen(true)}
-              disabled={selectedIds.size === 0}
-            >
-              <Share2 size={14} />
-              Share {selectedIds.size > 0 ? selectedIds.size : ''}
-            </Button>
+        <ModalPortal>
+          <div className="fixed bottom-0 left-0 right-0 z-50 bg-white border-t border-slate-200 shadow-lg px-4 py-3">
+            <div className="max-w-md mx-auto flex items-center gap-3">
+              <button
+                onClick={cancelSelect}
+                className="p-2 rounded-xl text-slate-500 hover:text-slate-700 hover:bg-slate-100 transition-colors"
+                aria-label="Cancel selection"
+              >
+                <X size={20} />
+              </button>
+              <span className="flex-1 text-sm font-semibold text-slate-700">
+                {selectedIds.size} selected
+              </span>
+              <Button
+                size="sm"
+                onClick={() => setBulkShareOpen(true)}
+                disabled={selectedIds.size === 0}
+              >
+                <Share2 size={14} />
+                Share {selectedIds.size > 0 ? selectedIds.size : ''}
+              </Button>
+            </div>
           </div>
-        </div>
+        </ModalPortal>
       )}
 
       {bulkShareOpen && (
