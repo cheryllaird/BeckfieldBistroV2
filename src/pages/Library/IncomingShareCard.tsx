@@ -1,5 +1,4 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { UtensilsCrossed } from 'lucide-react';
 import type { SharedRecipe } from '../../types';
 import { useStore } from '../../store';
@@ -10,7 +9,6 @@ interface Props {
 }
 
 export function IncomingShareCard({ share }: Props) {
-  const navigate = useNavigate();
   const acceptShare = useStore((s) => s.acceptShare);
   const dismissShare = useStore((s) => s.dismissShare);
   const [accepting, setAccepting] = useState(false);
@@ -20,8 +18,7 @@ export function IncomingShareCard({ share }: Props) {
   const handleAccept = async () => {
     setAccepting(true);
     try {
-      const newId = await acceptShare(share);
-      if (newId) navigate(`/recipes/${newId}`);
+      await acceptShare(share);
     } catch {
       setAccepting(false);
     }
