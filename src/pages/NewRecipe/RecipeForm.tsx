@@ -4,6 +4,7 @@ import type { Recipe, Ingredient, IngredientSection } from '../../types';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
 import { resizeImage } from '../../lib/recipeExtraction';
+import { ImageCropper } from '../../components/ImageCropper';
 
 interface Props {
   initial: Partial<Recipe>;
@@ -30,6 +31,7 @@ export function RecipeForm({ initial, knownSources, onSave, onCancel, isSaving }
   );
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [coverPhotoLoading, setCoverPhotoLoading] = useState(false);
+  const [coverCropSrc, setCoverCropSrc] = useState<string | null>(null);
   const [showCoverActions, setShowCoverActions] = useState(false);
   const [showUrlEntry, setShowUrlEntry] = useState(false);
   const [imgError, setImgError] = useState(false);
@@ -39,21 +41,23 @@ export function RecipeForm({ initial, knownSources, onSave, onCancel, isSaving }
   const handleCoverPhotoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+    if (coverPhotoRef.current) coverPhotoRef.current.value = '';
     const reader = new FileReader();
-    reader.onload = async () => {
-      const dataUrl = reader.result as string;
-      setCoverPhotoLoading(true);
-      try {
-        const resized = await resizeImage(dataUrl);
-        setCoverImage(resized);
-        setShowCoverActions(false);
-        setShowUrlEntry(false);
-      } finally {
-        setCoverPhotoLoading(false);
-        if (coverPhotoRef.current) coverPhotoRef.current.value = '';
-      }
-    };
+    reader.onload = () => setCoverCropSrc(reader.result as string);
     reader.readAsDataURL(file);
+  };
+
+  const handleCoverCropConfirm = async (croppedDataUrl: string) => {
+    setCoverCropSrc(null);
+    setCoverPhotoLoading(true);
+    try {
+      const resized = await resizeImage(croppedDataUrl);
+      setCoverImage(resized);
+      setShowCoverActions(false);
+      setShowUrlEntry(false);
+    } finally {
+      setCoverPhotoLoading(false);
+    }
   };
 
   const validate = () => {
@@ -418,6 +422,14 @@ export function RecipeForm({ initial, knownSources, onSave, onCancel, isSaving }
           )}
         </Button>
       </div>
+
+      {coverCropSrc && (
+        <ImageCropper
+          src={coverCropSrc}
+          onConfirm={handleCoverCropConfirm}
+          onCancel={() => setCoverCropSrc(null)}
+        />
+      )}
     </div>
   );
 }

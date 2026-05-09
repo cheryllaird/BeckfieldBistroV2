@@ -8,6 +8,7 @@ import { generateId } from '../../lib/utils';
 import { extractRecipeFromImage, extractRecipeFromUrl, resizeImage, RecipeExtractionError } from '../../lib/recipeExtraction';
 import type { Recipe } from '../../types';
 import { RecipeForm } from './RecipeForm';
+import { ImageCropper } from '../../components/ImageCropper';
 
 type CaptureMode = 'url' | 'upload' | 'manual';
 
@@ -28,6 +29,8 @@ export function NewRecipePage() {
 
   const [isSaving, setIsSaving] = useState(false);
   const [saveError, setSaveError] = useState('');
+
+  const [cropSrc, setCropSrc] = useState<string | null>(null);
 
   const [draft, setDraft] = useState<Partial<Recipe>>(
     existingRecipe ?? {
@@ -64,29 +67,32 @@ export function NewRecipePage() {
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+    e.target.value = '';
     const reader = new FileReader();
-    reader.onload = async () => {
-      const dataUrl = reader.result as string;
-      setIsExtracting(true);
-      setExtractError('');
-      try {
-        const [extracted, resizedDataUrl] = await Promise.all([
-          extractRecipeFromImage(dataUrl),
-          resizeImage(dataUrl),
-        ]);
-        setDraft({ ...extracted, coverImage: resizedDataUrl });
-        setMode('manual');
-      } catch (err) {
-        setExtractError(
-          err instanceof RecipeExtractionError
-            ? err.message
-            : 'Failed to extract recipe. Please check your API key and try again.'
-        );
-      } finally {
-        setIsExtracting(false);
-      }
-    };
+    reader.onload = () => setCropSrc(reader.result as string);
     reader.readAsDataURL(file);
+  };
+
+  const handleCropConfirm = async (croppedDataUrl: string) => {
+    setCropSrc(null);
+    setIsExtracting(true);
+    setExtractError('');
+    try {
+      const [extracted, resizedDataUrl] = await Promise.all([
+        extractRecipeFromImage(croppedDataUrl),
+        resizeImage(croppedDataUrl),
+      ]);
+      setDraft({ ...extracted, coverImage: resizedDataUrl });
+      setMode('manual');
+    } catch (err) {
+      setExtractError(
+        err instanceof RecipeExtractionError
+          ? err.message
+          : 'Failed to extract recipe. Please check your API key and try again.'
+      );
+    } finally {
+      setIsExtracting(false);
+    }
   };
 
   const handleSave = async (recipe: Omit<Recipe, 'id' | 'createdAt' | 'updatedAt' | 'userId'>) => {
@@ -229,6 +235,14 @@ export function NewRecipePage() {
           />
           {saveError && <p className="text-xs text-red-500">{saveError}</p>}
         </>
+      )}
+
+      {cropSrc && (
+        <ImageCropper
+          src={cropSrc}
+          onConfirm={handleCropConfirm}
+          onCancel={() => setCropSrc(null)}
+        />
       )}
     </div>
   );
