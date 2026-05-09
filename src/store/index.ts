@@ -57,6 +57,8 @@ interface Store extends AppState {
   sendRecipe: (recipe: Recipe, toEmail: string) => Promise<void>;
   acceptShare: (share: SharedRecipe) => Promise<string>;
   dismissShare: (shareId: string) => Promise<void>;
+  acceptAllShares: () => Promise<void>;
+  dismissAllShares: () => Promise<void>;
 }
 
 export const useStore = create<Store>()(
@@ -262,11 +264,27 @@ export const useStore = create<Store>()(
         const uid = get().user?.uid;
         if (!uid) return '';
         const newId = await firestoreAcceptShare(share.id, uid, share.recipe);
+        set((s) => ({ incomingShares: s.incomingShares.filter((sh) => sh.id !== share.id) }));
         return newId;
       },
 
       dismissShare: async (shareId) => {
         await firestoreDismissShare(shareId);
+        set((s) => ({ incomingShares: s.incomingShares.filter((sh) => sh.id !== shareId) }));
+      },
+
+      acceptAllShares: async () => {
+        const uid = get().user?.uid;
+        if (!uid) return;
+        const shares = get().incomingShares;
+        await Promise.all(shares.map((share) => firestoreAcceptShare(share.id, uid, share.recipe)));
+        set({ incomingShares: [] });
+      },
+
+      dismissAllShares: async () => {
+        const shares = get().incomingShares;
+        await Promise.all(shares.map((share) => firestoreDismissShare(share.id)));
+        set({ incomingShares: [] });
       },
     }),
     {

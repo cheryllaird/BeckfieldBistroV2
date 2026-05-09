@@ -15,6 +15,12 @@ export function LibraryPage() {
   const incomingShares = useStore((s) => s.incomingShares);
   const [query, setQuery] = useState('');
 
+  const acceptAllShares = useStore((s) => s.acceptAllShares);
+  const dismissAllShares = useStore((s) => s.dismissAllShares);
+  const [showAllShares, setShowAllShares] = useState(false);
+  const [savingAll, setSavingAll] = useState(false);
+  const [dismissingAll, setDismissingAll] = useState(false);
+
   const [selectMode, setSelectMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [bulkShareOpen, setBulkShareOpen] = useState(false);
@@ -123,10 +129,41 @@ export function LibraryPage() {
             <span className="text-xs font-semibold bg-amber-500 text-white rounded-full px-1.5 py-0.5 leading-none">
               {incomingShares.length}
             </span>
+            <div className="flex gap-2 ml-auto">
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={async () => {
+                  setDismissingAll(true);
+                  try { await dismissAllShares(); } finally { setDismissingAll(false); }
+                }}
+                disabled={savingAll || dismissingAll}
+              >
+                {dismissingAll ? 'Dismissing…' : 'Dismiss All'}
+              </Button>
+              <Button
+                size="sm"
+                onClick={async () => {
+                  setSavingAll(true);
+                  try { await acceptAllShares(); } finally { setSavingAll(false); }
+                }}
+                disabled={savingAll || dismissingAll}
+              >
+                {savingAll ? 'Saving…' : 'Save All'}
+              </Button>
+            </div>
           </div>
-          {incomingShares.map((share) => (
+          {(showAllShares ? incomingShares : incomingShares.slice(0, 3)).map((share) => (
             <IncomingShareCard key={share.id} share={share} />
           ))}
+          {!showAllShares && incomingShares.length > 3 && (
+            <button
+              onClick={() => setShowAllShares(true)}
+              className="text-xs text-amber-600 hover:text-amber-700 font-medium text-left pl-1"
+            >
+              and {incomingShares.length - 3} more…
+            </button>
+          )}
         </div>
       )}
 
