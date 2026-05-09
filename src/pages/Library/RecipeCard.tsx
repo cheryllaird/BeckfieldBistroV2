@@ -1,22 +1,29 @@
-import { Clock, Users, CalendarPlus, UtensilsCrossed } from 'lucide-react';
+import { Clock, Users, CalendarPlus, UtensilsCrossed, Check } from 'lucide-react';
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import type { Recipe } from '../../types';
 import { useStore } from '../../store';
 import { isoDate, getWeekDays } from '../../lib/utils';
 import { PlanDateModal } from '../RecipeDetail/PlanDateModal';
+import { useLongPress } from '../../hooks/useLongPress';
 
 interface Props {
   recipe: Recipe;
+  isSelectMode?: boolean;
+  isSelected?: boolean;
+  onLongPress?: () => void;
+  onSelect?: () => void;
 }
 
-export function RecipeCard({ recipe }: Props) {
+export function RecipeCard({ recipe, isSelectMode, isSelected, onLongPress, onSelect }: Props) {
   const navigate = useNavigate();
   const { mealEntries } = useStore();
 
   const [imgError, setImgError] = useState(false);
   const [planModalOpen, setPlanModalOpen] = useState(false);
   const [defaultDate, setDefaultDate] = useState<string | undefined>(undefined);
+
+  const { handlers: longPressHandlers, didFire } = useLongPress(() => onLongPress?.());
 
   const handleQuickPlan = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -28,10 +35,25 @@ export function RecipeCard({ recipe }: Props) {
     setPlanModalOpen(true);
   };
 
+  const handleClick = () => {
+    if (didFire()) return;
+    if (isSelectMode) {
+      onSelect?.();
+      return;
+    }
+    navigate(`/recipes/${recipe.id}`);
+  };
+
   return (
     <div
-      onClick={() => navigate(`/recipes/${recipe.id}`)}
-      className="bg-white rounded-2xl border border-slate-100 shadow-sm cursor-pointer hover:shadow-md transition-shadow duration-200 overflow-hidden group"
+      onClick={handleClick}
+      {...longPressHandlers}
+      className={[
+        'bg-white rounded-2xl border shadow-sm cursor-pointer transition-all duration-200 overflow-hidden group relative select-none',
+        isSelected
+          ? 'border-amber-400 ring-2 ring-amber-400 shadow-amber-100'
+          : 'border-slate-100 hover:shadow-md',
+      ].join(' ')}
     >
       {/* Cover image */}
       <div className="relative aspect-[4/3] bg-slate-100">
@@ -49,14 +71,28 @@ export function RecipeCard({ recipe }: Props) {
           </div>
         )}
 
-        {/* Quick-plan button */}
-        <button
-          onClick={handleQuickPlan}
-          className="absolute top-2 right-2 w-8 h-8 rounded-full bg-white/90 backdrop-blur flex items-center justify-center shadow hover:bg-amber-500 hover:text-white transition-colors"
-          aria-label="Add to plan"
-        >
-          <CalendarPlus size={15} />
-        </button>
+        {/* Selection indicator */}
+        {isSelectMode && (
+          <div
+            className={[
+              'absolute top-2 left-2 w-6 h-6 rounded-full border-2 flex items-center justify-center transition-colors',
+              isSelected ? 'bg-amber-500 border-amber-500' : 'bg-white/90 border-slate-300',
+            ].join(' ')}
+          >
+            {isSelected && <Check size={12} className="text-white" strokeWidth={3} />}
+          </div>
+        )}
+
+        {/* Quick-plan button — hidden in select mode */}
+        {!isSelectMode && (
+          <button
+            onClick={handleQuickPlan}
+            className="absolute top-2 right-2 w-8 h-8 rounded-full bg-white/90 backdrop-blur flex items-center justify-center shadow hover:bg-amber-500 hover:text-white transition-colors"
+            aria-label="Add to plan"
+          >
+            <CalendarPlus size={15} />
+          </button>
+        )}
       </div>
 
       {/* Info */}
