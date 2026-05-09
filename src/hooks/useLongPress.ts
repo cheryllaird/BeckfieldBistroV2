@@ -39,6 +39,8 @@ export function useLongPress(onLongPress: () => void, duration = LONG_PRESS_MS) 
       onTouchEnd: cancel,
       onTouchMove: cancel,
       onTouchCancel: cancel,
+      // Suppress the native context menu that Android shows on image long-press
+      onContextMenu: (e: React.MouseEvent) => e.preventDefault(),
     },
     didFire,
   };
