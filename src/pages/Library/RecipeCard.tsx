@@ -65,7 +65,7 @@ export function RecipeCard({ recipe, isSelectMode, isSelected, onLongPress, onSe
             loading="lazy"
             draggable={false}
             onError={() => setImgError(true)}
-            style={{ WebkitTouchCallout: 'none', userSelect: 'none' }}
+            style={{ pointerEvents: 'none', userSelect: 'none', WebkitTouchCallout: 'none' }}
           />
         ) : (
           <div className="w-full h-full flex items-center justify-center text-slate-300">
