@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Search, Plus, X, Share2 } from 'lucide-react';
 import { useStore } from '../../store';
@@ -19,6 +19,29 @@ export function LibraryPage() {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [bulkShareOpen, setBulkShareOpen] = useState(false);
 
+  // Refs let the popstate handler read current values without stale closures
+  const selectModeRef = useRef(false);
+  const cancellingHistoryRef = useRef(false);
+
+  // Intercept browser back while in select mode
+  useEffect(() => {
+    const onPopstate = () => {
+      if (cancellingHistoryRef.current) {
+        // Triggered by our own history.back() in cancelSelect — ignore
+        cancellingHistoryRef.current = false;
+        return;
+      }
+      if (selectModeRef.current) {
+        // User pressed the browser back button — cancel selection instead of navigating
+        selectModeRef.current = false;
+        setSelectMode(false);
+        setSelectedIds(new Set());
+      }
+    };
+    window.addEventListener('popstate', onPopstate);
+    return () => window.removeEventListener('popstate', onPopstate);
+  }, []);
+
   const filtered = useMemo(() => {
     if (!query.trim()) return recipes;
     const q = query.toLowerCase();
@@ -31,6 +54,9 @@ export function LibraryPage() {
   }, [recipes, query]);
 
   const handleLongPress = (recipeId: string) => {
+    // Push a dummy history entry so the back button can be intercepted
+    window.history.pushState({ bulkSelect: true }, '');
+    selectModeRef.current = true;
     setSelectMode(true);
     setSelectedIds(new Set([recipeId]));
   };
@@ -48,8 +74,12 @@ export function LibraryPage() {
   };
 
   const cancelSelect = () => {
+    selectModeRef.current = false;
     setSelectMode(false);
     setSelectedIds(new Set());
+    // Remove the dummy history entry pushed on long-press
+    cancellingHistoryRef.current = true;
+    window.history.back();
   };
 
   const selectedRecipes = recipes.filter((r) => selectedIds.has(r.id));
