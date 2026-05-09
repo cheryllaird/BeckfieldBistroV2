@@ -187,38 +187,47 @@ export function NewRecipePage() {
       {/* Upload mode */}
       {mode === 'upload' && (
         <div className="flex flex-col gap-3 animate-in">
-          <label className={[
-            'flex flex-col items-center gap-3 border-2 border-dashed rounded-2xl p-8 transition-colors',
-            isExtracting
-              ? 'border-amber-300 bg-amber-50 cursor-not-allowed'
-              : 'border-slate-200 cursor-pointer hover:border-amber-300 hover:bg-amber-50',
-          ].join(' ')}>
-            {isExtracting ? (
-              <>
-                <Loader size={32} className="text-amber-500 animate-spin" />
-                <div className="text-center">
-                  <p className="text-sm font-medium text-slate-700">Analysing photo…</p>
-                  <p className="text-xs text-slate-400 mt-0.5">This may take a few seconds</p>
-                </div>
-              </>
-            ) : (
-              <>
-                <Camera size={32} className="text-slate-400" />
-                <div className="text-center">
-                  <p className="text-sm font-medium text-slate-700">Snap or upload a photo</p>
-                  <p className="text-xs text-slate-400 mt-0.5">AI will extract the recipe details</p>
-                </div>
-              </>
-            )}
-            <input
-              type="file"
-              accept="image/*"
-              capture="environment"
-              className="hidden"
-              disabled={isExtracting}
-              onChange={handleFileUpload}
+          {cropSrc ? (
+            <ImageCropper
+              src={cropSrc}
+              variant="inline"
+              onConfirm={handleCropConfirm}
+              onCancel={() => setCropSrc(null)}
             />
-          </label>
+          ) : (
+            <label className={[
+              'flex flex-col items-center gap-3 border-2 border-dashed rounded-2xl p-8 transition-colors',
+              isExtracting
+                ? 'border-amber-300 bg-amber-50 cursor-not-allowed'
+                : 'border-slate-200 cursor-pointer hover:border-amber-300 hover:bg-amber-50',
+            ].join(' ')}>
+              {isExtracting ? (
+                <>
+                  <Loader size={32} className="text-amber-500 animate-spin" />
+                  <div className="text-center">
+                    <p className="text-sm font-medium text-slate-700">Analysing photo…</p>
+                    <p className="text-xs text-slate-400 mt-0.5">This may take a few seconds</p>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <Camera size={32} className="text-slate-400" />
+                  <div className="text-center">
+                    <p className="text-sm font-medium text-slate-700">Snap or upload a photo</p>
+                    <p className="text-xs text-slate-400 mt-0.5">AI will extract the recipe details</p>
+                  </div>
+                </>
+              )}
+              <input
+                type="file"
+                accept="image/*"
+                capture="environment"
+                className="hidden"
+                disabled={isExtracting}
+                onChange={handleFileUpload}
+              />
+            </label>
+          )}
           {extractError && <p className="text-xs text-red-500">{extractError}</p>}
         </div>
       )}
@@ -237,13 +246,6 @@ export function NewRecipePage() {
         </>
       )}
 
-      {cropSrc && (
-        <ImageCropper
-          src={cropSrc}
-          onConfirm={handleCropConfirm}
-          onCancel={() => setCropSrc(null)}
-        />
-      )}
     </div>
   );
 }
