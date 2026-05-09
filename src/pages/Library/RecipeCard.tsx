@@ -37,6 +37,7 @@ export function RecipeCard({ recipe, isSelectMode, isSelected, onLongPress, onSe
 
   const handleClick = () => {
     if (didFire()) return;
+    if (planModalOpen) return;
     if (isSelectMode) {
       onSelect?.();
       return;

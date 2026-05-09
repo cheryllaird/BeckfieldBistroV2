@@ -43,14 +43,15 @@ export function LibraryPage() {
   }, []);
 
   const filtered = useMemo(() => {
-    if (!query.trim()) return recipes;
-    const q = query.toLowerCase();
-    return recipes.filter(
-      (r) =>
-        r.title.toLowerCase().includes(q) ||
-        r.source.toLowerCase().includes(q) ||
-        r.ingredients.some((i) => i.name.toLowerCase().includes(q))
-    );
+    const list = query.trim()
+      ? recipes.filter(
+          (r) =>
+            r.title.toLowerCase().includes(query.toLowerCase()) ||
+            r.source.toLowerCase().includes(query.toLowerCase()) ||
+            r.ingredients.some((i) => i.name.toLowerCase().includes(query.toLowerCase()))
+        )
+      : [...recipes];
+    return list.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
   }, [recipes, query]);
 
   const handleLongPress = (recipeId: string) => {
