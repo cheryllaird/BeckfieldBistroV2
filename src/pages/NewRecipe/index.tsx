@@ -8,6 +8,7 @@ import { generateId } from '../../lib/utils';
 import { extractRecipeFromImage, extractRecipeFromUrl, resizeImage, RecipeExtractionError } from '../../lib/recipeExtraction';
 import type { Recipe } from '../../types';
 import { RecipeForm } from './RecipeForm';
+import { ImageCropper } from '../../components/ImageCropper';
 
 type CaptureMode = 'url' | 'upload' | 'manual';
 
@@ -28,6 +29,8 @@ export function NewRecipePage() {
 
   const [isSaving, setIsSaving] = useState(false);
   const [saveError, setSaveError] = useState('');
+
+  const [cropSrc, setCropSrc] = useState<string | null>(null);
 
   const [draft, setDraft] = useState<Partial<Recipe>>(
     existingRecipe ?? {
@@ -64,29 +67,32 @@ export function NewRecipePage() {
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+    e.target.value = '';
     const reader = new FileReader();
-    reader.onload = async () => {
-      const dataUrl = reader.result as string;
-      setIsExtracting(true);
-      setExtractError('');
-      try {
-        const [extracted, resizedDataUrl] = await Promise.all([
-          extractRecipeFromImage(dataUrl),
-          resizeImage(dataUrl),
-        ]);
-        setDraft({ ...extracted, coverImage: resizedDataUrl });
-        setMode('manual');
-      } catch (err) {
-        setExtractError(
-          err instanceof RecipeExtractionError
-            ? err.message
-            : 'Failed to extract recipe. Please check your API key and try again.'
-        );
-      } finally {
-        setIsExtracting(false);
-      }
-    };
+    reader.onload = () => setCropSrc(reader.result as string);
     reader.readAsDataURL(file);
+  };
+
+  const handleCropConfirm = async (croppedDataUrl: string) => {
+    setCropSrc(null);
+    setIsExtracting(true);
+    setExtractError('');
+    try {
+      const [extracted, resizedDataUrl] = await Promise.all([
+        extractRecipeFromImage(croppedDataUrl),
+        resizeImage(croppedDataUrl),
+      ]);
+      setDraft({ ...extracted, coverImage: resizedDataUrl });
+      setMode('manual');
+    } catch (err) {
+      setExtractError(
+        err instanceof RecipeExtractionError
+          ? err.message
+          : 'Failed to extract recipe. Please check your API key and try again.'
+      );
+    } finally {
+      setIsExtracting(false);
+    }
   };
 
   const handleSave = async (recipe: Omit<Recipe, 'id' | 'createdAt' | 'updatedAt' | 'userId'>) => {
@@ -181,38 +187,47 @@ export function NewRecipePage() {
       {/* Upload mode */}
       {mode === 'upload' && (
         <div className="flex flex-col gap-3 animate-in">
-          <label className={[
-            'flex flex-col items-center gap-3 border-2 border-dashed rounded-2xl p-8 transition-colors',
-            isExtracting
-              ? 'border-amber-300 bg-amber-50 cursor-not-allowed'
-              : 'border-slate-200 cursor-pointer hover:border-amber-300 hover:bg-amber-50',
-          ].join(' ')}>
-            {isExtracting ? (
-              <>
-                <Loader size={32} className="text-amber-500 animate-spin" />
-                <div className="text-center">
-                  <p className="text-sm font-medium text-slate-700">Analysing photo…</p>
-                  <p className="text-xs text-slate-400 mt-0.5">This may take a few seconds</p>
-                </div>
-              </>
-            ) : (
-              <>
-                <Camera size={32} className="text-slate-400" />
-                <div className="text-center">
-                  <p className="text-sm font-medium text-slate-700">Snap or upload a photo</p>
-                  <p className="text-xs text-slate-400 mt-0.5">AI will extract the recipe details</p>
-                </div>
-              </>
-            )}
-            <input
-              type="file"
-              accept="image/*"
-              capture="environment"
-              className="hidden"
-              disabled={isExtracting}
-              onChange={handleFileUpload}
+          {cropSrc ? (
+            <ImageCropper
+              src={cropSrc}
+              variant="inline"
+              onConfirm={handleCropConfirm}
+              onCancel={() => setCropSrc(null)}
             />
-          </label>
+          ) : (
+            <label className={[
+              'flex flex-col items-center gap-3 border-2 border-dashed rounded-2xl p-8 transition-colors',
+              isExtracting
+                ? 'border-amber-300 bg-amber-50 cursor-not-allowed'
+                : 'border-slate-200 cursor-pointer hover:border-amber-300 hover:bg-amber-50',
+            ].join(' ')}>
+              {isExtracting ? (
+                <>
+                  <Loader size={32} className="text-amber-500 animate-spin" />
+                  <div className="text-center">
+                    <p className="text-sm font-medium text-slate-700">Analysing photo…</p>
+                    <p className="text-xs text-slate-400 mt-0.5">This may take a few seconds</p>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <Camera size={32} className="text-slate-400" />
+                  <div className="text-center">
+                    <p className="text-sm font-medium text-slate-700">Snap or upload a photo</p>
+                    <p className="text-xs text-slate-400 mt-0.5">AI will extract the recipe details</p>
+                  </div>
+                </>
+              )}
+              <input
+                type="file"
+                accept="image/*"
+                capture="environment"
+                className="hidden"
+                disabled={isExtracting}
+                onChange={handleFileUpload}
+              />
+            </label>
+          )}
           {extractError && <p className="text-xs text-red-500">{extractError}</p>}
         </div>
       )}
@@ -230,6 +245,7 @@ export function NewRecipePage() {
           {saveError && <p className="text-xs text-red-500">{saveError}</p>}
         </>
       )}
+
     </div>
   );
 }
