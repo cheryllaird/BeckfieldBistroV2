@@ -1,17 +1,46 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Search, Plus, X } from 'lucide-react';
+import { Search, Plus, X, Share2 } from 'lucide-react';
 import { useStore } from '../../store';
 import { RecipeCard } from './RecipeCard';
 import { IncomingShareCard } from './IncomingShareCard';
+import { BulkShareModal } from './BulkShareModal';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
+import { ModalPortal } from '../../components/ui/ModalPortal';
 
 export function LibraryPage() {
   const navigate = useNavigate();
   const recipes = useStore((s) => s.recipes);
   const incomingShares = useStore((s) => s.incomingShares);
   const [query, setQuery] = useState('');
+
+  const [selectMode, setSelectMode] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [bulkShareOpen, setBulkShareOpen] = useState(false);
+
+  // Refs let the popstate handler read current values without stale closures
+  const selectModeRef = useRef(false);
+  const cancellingHistoryRef = useRef(false);
+
+  // Intercept browser back while in select mode
+  useEffect(() => {
+    const onPopstate = () => {
+      if (cancellingHistoryRef.current) {
+        // Triggered by our own history.back() in cancelSelect — ignore
+        cancellingHistoryRef.current = false;
+        return;
+      }
+      if (selectModeRef.current) {
+        // User pressed the browser back button — cancel selection instead of navigating
+        selectModeRef.current = false;
+        setSelectMode(false);
+        setSelectedIds(new Set());
+      }
+    };
+    window.addEventListener('popstate', onPopstate);
+    return () => window.removeEventListener('popstate', onPopstate);
+  }, []);
 
   const filtered = useMemo(() => {
     if (!query.trim()) return recipes;
@@ -23,6 +52,37 @@ export function LibraryPage() {
         r.ingredients.some((i) => i.name.toLowerCase().includes(q))
     );
   }, [recipes, query]);
+
+  const handleLongPress = (recipeId: string) => {
+    // Push a dummy history entry so the back button can be intercepted
+    window.history.pushState({ bulkSelect: true }, '');
+    selectModeRef.current = true;
+    setSelectMode(true);
+    setSelectedIds(new Set([recipeId]));
+  };
+
+  const handleSelect = (recipeId: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(recipeId)) {
+        next.delete(recipeId);
+      } else {
+        next.add(recipeId);
+      }
+      return next;
+    });
+  };
+
+  const cancelSelect = () => {
+    selectModeRef.current = false;
+    setSelectMode(false);
+    setSelectedIds(new Set());
+    // Remove the dummy history entry pushed on long-press
+    cancellingHistoryRef.current = true;
+    window.history.back();
+  };
+
+  const selectedRecipes = recipes.filter((r) => selectedIds.has(r.id));
 
   return (
     <div className="flex flex-col gap-5">
@@ -80,7 +140,14 @@ export function LibraryPage() {
       {filtered.length > 0 ? (
         <div className="grid grid-cols-2 gap-3 animate-in">
           {filtered.map((recipe) => (
-            <RecipeCard key={recipe.id} recipe={recipe} />
+            <RecipeCard
+              key={recipe.id}
+              recipe={recipe}
+              isSelectMode={selectMode}
+              isSelected={selectedIds.has(recipe.id)}
+              onLongPress={() => handleLongPress(recipe.id)}
+              onSelect={() => handleSelect(recipe.id)}
+            />
           ))}
         </div>
       ) : (
@@ -103,6 +170,45 @@ export function LibraryPage() {
             </Button>
           )}
         </div>
+      )}
+
+      {/* Bulk select action bar — portalled to body to escape main's transform stacking context */}
+      {selectMode && (
+        <ModalPortal>
+          <div className="fixed bottom-0 left-0 right-0 z-50 bg-white border-t border-slate-200 shadow-lg px-4 py-3">
+            <div className="max-w-md mx-auto flex items-center gap-3">
+              <button
+                onClick={cancelSelect}
+                className="p-2 rounded-xl text-slate-500 hover:text-slate-700 hover:bg-slate-100 transition-colors"
+                aria-label="Cancel selection"
+              >
+                <X size={20} />
+              </button>
+              <span className="flex-1 text-sm font-semibold text-slate-700">
+                {selectedIds.size} selected
+              </span>
+              <Button
+                size="sm"
+                onClick={() => setBulkShareOpen(true)}
+                disabled={selectedIds.size === 0}
+              >
+                <Share2 size={14} />
+                Share {selectedIds.size > 0 ? selectedIds.size : ''}
+              </Button>
+            </div>
+          </div>
+        </ModalPortal>
+      )}
+
+      {bulkShareOpen && (
+        <BulkShareModal
+          recipes={selectedRecipes}
+          onClose={() => setBulkShareOpen(false)}
+          onDone={() => {
+            setBulkShareOpen(false);
+            cancelSelect();
+          }}
+        />
       )}
     </div>
   );
