@@ -7,11 +7,9 @@ import {
   writeBatch,
   getDocs,
   addDoc,
-  query,
-  where,
   enableNetwork,
 } from 'firebase/firestore';
-import { db } from './firebase';
+import { db, auth } from './firebase';
 import type { Recipe, MealEntry, ShoppingItem, SharedRecipe, CategoryOverrideLog } from '../types';
 
 // ── helpers ──────────────────────────────────────────────────────────────────
@@ -152,24 +150,49 @@ export function saveKnownSources(uid: string, sources: string[]): void {
 }
 
 // ── recipe sharing ────────────────────────────────────────────────────────────
+// All sharedRecipes writes go through /api/share-recipe (firebase-admin) so
+// that the feature works without having to deploy Firestore security rules for
+// the top-level sharedRecipes collection.
 
-const sharedRecipesCol = () => collection(db!, 'sharedRecipes');
+async function sharingToken(): Promise<string> {
+  if (!auth?.currentUser) throw new Error('Not authenticated');
+  return auth.currentUser.getIdToken();
+}
 
 export async function sendRecipeShare(share: Omit<SharedRecipe, 'id'>): Promise<string> {
-  const ref = await addDoc(sharedRecipesCol(), stripUndefined(share));
-  return ref.id;
+  const token = await sharingToken();
+  const res = await fetch('/api/share-recipe', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+    body: JSON.stringify(share),
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({})) as { error?: string };
+    throw new Error(body.error ?? 'Failed to send');
+  }
+  return ((await res.json()) as { id: string }).id;
 }
 
 export function subscribeToIncomingShares(
-  email: string,
+  _email: string,
   callback: (shares: SharedRecipe[]) => void
 ): () => void {
-  const q = query(sharedRecipesCol(), where('toEmail', '==', email));
-  return onSnapshot(
-    q,
-    (snap) => callback(snap.docs.map((d) => ({ id: d.id, ...d.data() } as SharedRecipe))),
-    console.error
-  );
+  if (!auth?.currentUser) return () => {};
+  let cancelled = false;
+  auth.currentUser.getIdToken()
+    .then((token) => fetch('/api/share-recipe', { headers: { Authorization: `Bearer ${token}` } }))
+    .then((r) => (r.ok ? r.json() : { shares: [] }) as Promise<{ shares: SharedRecipe[] }>)
+    .then((data) => { if (!cancelled) callback(data.shares ?? []); })
+    .catch(() => { if (!cancelled) callback([]); });
+  return () => { cancelled = true; };
+}
+
+async function deleteShare(shareId: string): Promise<void> {
+  const token = await sharingToken();
+  await fetch(`/api/share-recipe?id=${encodeURIComponent(shareId)}`, {
+    method: 'DELETE',
+    headers: { Authorization: `Bearer ${token}` },
+  });
 }
 
 export async function acceptShare(
@@ -188,10 +211,10 @@ export async function acceptShare(
     updatedAt: now,
   };
   await setDoc(doc(recipesCol(toUid), newId), stripUndefined(newRecipe));
-  await deleteDoc(doc(sharedRecipesCol(), shareId));
+  await deleteShare(shareId);
   return newId;
 }
 
 export async function dismissShare(shareId: string): Promise<void> {
-  await deleteDoc(doc(sharedRecipesCol(), shareId));
+  await deleteShare(shareId);
 }
