@@ -48,8 +48,8 @@ export function canonicalizeIngredientName(name: string): string {
     return words.join(' ');
   });
 
-  // Strip " juice" from citrus fruits so "lemon juice" / "1 lemon juice" consolidates with "lemon"
-  s = s.replace(/^(lemon|lime|orange|grapefruit|mandarin|tangerine|clementine)s?\s+juice$/, '$1');
+  // Strip " juice" from lemons and limes so "lemon juice" / "1 lemon juice" consolidates with "lemon"
+  s = s.replace(/^(lemon|lime)s?\s+juice$/, '$1');
 
   // Strip leading quality/preparation modifiers
   s = s.replace(/^extra[- ]virgin\s+/, '');
