@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { X } from 'lucide-react';
 
 interface Props {
@@ -54,23 +55,19 @@ export function CameraCapture({ onCapture, onCancel }: Props) {
     onCapture(canvas.toDataURL('image/jpeg', 0.92));
   };
 
-  if (error) {
-    return (
-      <div className="fixed inset-0 z-50 bg-black/90 flex flex-col items-center justify-center gap-4 p-8 text-center">
-        <p className="text-white text-sm">{error}</p>
-        <button
-          type="button"
-          onClick={onCancel}
-          className="px-6 py-2.5 bg-white text-black rounded-full text-sm font-medium"
-        >
-          Go Back
-        </button>
-      </div>
-    );
-  }
-
-  return (
-    <div className="fixed inset-0 z-50 bg-black overflow-hidden">
+  const ui = error ? (
+    <div className="fixed inset-0 z-[200] bg-black/90 flex flex-col items-center justify-center gap-4 p-8 text-center">
+      <p className="text-white text-sm">{error}</p>
+      <button
+        type="button"
+        onClick={onCancel}
+        className="px-6 py-2.5 bg-white text-black rounded-full text-sm font-medium"
+      >
+        Go Back
+      </button>
+    </div>
+  ) : (
+    <div className="fixed inset-0 z-[200] bg-black overflow-hidden">
       <video
         ref={videoRef}
         autoPlay
@@ -79,7 +76,7 @@ export function CameraCapture({ onCapture, onCancel }: Props) {
         className="absolute inset-0 w-full h-full object-cover"
         onCanPlay={() => setReady(true)}
       />
-      <div className="absolute bottom-0 inset-x-0 flex items-center justify-between px-8 py-8 pb-safe">
+      <div className="absolute bottom-0 inset-x-0 flex items-center justify-between px-8 py-8">
         <button
           type="button"
           onClick={onCancel}
@@ -99,4 +96,6 @@ export function CameraCapture({ onCapture, onCancel }: Props) {
       </div>
     </div>
   );
+
+  return createPortal(ui, document.body);
 }
