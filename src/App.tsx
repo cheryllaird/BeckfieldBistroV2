@@ -30,53 +30,58 @@ function FirebaseSetupScreen() {
 
 // Separated so hooks are always called in the same order (Rules of Hooks).
 function AuthenticatedApp() {
-  const { splashDone, isAuthenticated, signIn, signOut } = useStore();
-  const [authChecked, setAuthChecked] = useState(false);
+  const { splashDone, isAuthenticated, signIn, signOut, resubscribe } = useStore();
   const [redirectError, setRedirectError] = useState<string | null>(null);
+
+  // If the user was previously signed in (persisted to localStorage), skip
+  // the Firebase auth wait entirely — we already know who they are.
+  const [authChecked, setAuthChecked] = useState(
+    () => useStore.getState().isAuthenticated
+  );
 
   useEffect(() => {
     const unsubRef = { current: null as (() => void) | null };
     let safetyTimer: ReturnType<typeof setTimeout> | null = null;
 
-    const init = async () => {
-      // getRedirectResult needs a network round-trip to finalise OAuth redirects.
-      // Offline or in airplane mode it never resolves, permanently blocking
-      // onAuthStateChanged and freezing the splash screen.
-      // navigator.onLine is not reliable (iOS reports true in airplane mode when
-      // Wi-Fi is enabled), so we always race against a 2 s timeout — short
-      // enough to clear within the 2.2 s splash window on any connection.
-      try {
-        await Promise.race([
-          getRedirectResult(auth!),
-          new Promise<null>((resolve) => setTimeout(resolve, 2000)),
-        ]);
-      } catch (e: any) {
-        const code = e?.code ?? '';
-        console.error('Redirect result error:', e);
-        setRedirectError(authErrorMessage(code));
-      }
-
-      // Safety net: force authChecked after 5 s in case onAuthStateChanged
-      // never fires (e.g. Firebase SDK stuck waiting for a token refresh).
+    // Fast path: cached user — reattach Firestore listeners immediately so
+    // IndexedDB data is available while Firebase validates in the background.
+    if (useStore.getState().isAuthenticated) {
+      resubscribe();
+    } else {
+      // No cached user — wait for Firebase, cap at 5 s.
       safetyTimer = setTimeout(() => setAuthChecked(true), 5000);
+    }
 
-      unsubRef.current = onAuthStateChanged(auth!, async (firebaseUser) => {
-        if (safetyTimer) { clearTimeout(safetyTimer); safetyTimer = null; }
-        try {
-          if (firebaseUser) {
-            signIn(firebaseUser);
-          } else if (useStore.getState().isAuthenticated) {
-            await signOut();
-          }
-        } catch (e) {
-          console.error('Auth state change error:', e);
-        } finally {
-          setAuthChecked(true);
+    // Subscribe to auth state BEFORE getRedirectResult so the cached user
+    // is received from IndexedDB as soon as Firebase reads it.
+    unsubRef.current = onAuthStateChanged(auth!, async (firebaseUser) => {
+      if (safetyTimer) { clearTimeout(safetyTimer); safetyTimer = null; }
+      try {
+        if (firebaseUser) {
+          signIn(firebaseUser);
+        } else if (!useStore.getState().isAuthenticated) {
+          // Not signed in at all — nothing to clear.
         }
-      });
-    };
+        // If isAuthenticated is true but Firebase returned null, the SDK
+        // couldn't restore the session (offline token refresh failure). Keep
+        // the cached user; Firebase will re-evaluate once back online and
+        // call onAuthStateChanged again with the real user.
+      } catch (e) {
+        console.error('Auth state change error:', e);
+      } finally {
+        setAuthChecked(true);
+      }
+    });
 
-    init();
+    // Handle OAuth redirect results in the background — don't block
+    // onAuthStateChanged. Races with a 5 s timeout so it can't hang.
+    Promise.race([
+      getRedirectResult(auth!).catch((e: any) => {
+        setRedirectError(authErrorMessage(e?.code ?? ''));
+      }),
+      new Promise<void>((resolve) => setTimeout(resolve, 5000)),
+    ]);
+
     return () => {
       unsubRef.current?.();
       if (safetyTimer) clearTimeout(safetyTimer);
