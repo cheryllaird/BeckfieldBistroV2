@@ -178,7 +178,7 @@ const CATEGORY_KEYWORDS: Record<ShoppingCategory, string[]> = {
     'brown sugar', 'capers', 'cardamom', 'cashew', 'cayenne', 'chickpea', 'chili powder',
     'chocolate', 'cinnamon', 'clove', 'cocoa', 'coconut milk', 'cornmeal', 'cornstarch',
     'cracker', 'cumin', 'dried', 'fish sauce', 'flour', 'garbanzo', 'granola', 'hazelnut',
-    'honey', 'hot sauce', 'jam', 'jelly', 'ketchup', 'kidney bean', 'lentil', 'maple syrup',
+    'egg noodle', 'honey', 'hot sauce', 'jam', 'jelly', 'ketchup', 'kidney bean', 'lentil', 'maple syrup',
     'marmalade', 'mayonnaise', 'molasses', 'mustard', 'noodle', 'nut', 'nutmeg', 'oat',
     'oil', 'olive', 'oyster sauce', 'paprika', 'pasta', 'peanut', 'peanut butter', 'penne', 'pickle',
     'pine nut', 'pistachio', 'powder', 'preserve', 'rice', 'risotto', 'salt', 'sauce',
