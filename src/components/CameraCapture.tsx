@@ -70,20 +70,20 @@ export function CameraCapture({ onCapture, onCancel }: Props) {
   }
 
   return (
-    <div className="fixed inset-0 z-50 bg-black flex flex-col overflow-hidden">
+    <div className="fixed inset-0 z-50 bg-black overflow-hidden">
       <video
         ref={videoRef}
         autoPlay
         playsInline
         muted
-        className="flex-1 min-h-0 object-cover w-full"
+        className="absolute inset-0 w-full h-full object-cover"
         onCanPlay={() => setReady(true)}
       />
-      <div className="flex items-center justify-between px-8 py-6 bg-black">
+      <div className="absolute bottom-0 inset-x-0 flex items-center justify-between px-8 py-8 pb-safe">
         <button
           type="button"
           onClick={onCancel}
-          className="text-white w-12 h-12 flex items-center justify-center"
+          className="text-white w-12 h-12 flex items-center justify-center rounded-full bg-black/40"
           aria-label="Cancel"
         >
           <X size={24} />
@@ -92,7 +92,7 @@ export function CameraCapture({ onCapture, onCancel }: Props) {
           type="button"
           onClick={handleCapture}
           disabled={!ready}
-          className="w-16 h-16 rounded-full bg-white disabled:opacity-50 ring-4 ring-white/30 flex-shrink-0"
+          className="w-18 h-18 rounded-full bg-white disabled:opacity-50 ring-4 ring-white/40 flex-shrink-0"
           aria-label="Take photo"
         />
         <div className="w-12 h-12" />
