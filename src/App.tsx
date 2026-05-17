@@ -36,30 +36,32 @@ function AuthenticatedApp() {
 
   useEffect(() => {
     const unsubRef = { current: null as (() => void) | null };
+    let safetyTimer: ReturnType<typeof setTimeout> | null = null;
 
-    // Await getRedirectResult BEFORE subscribing to onAuthStateChanged.
-    // This ensures any pending redirect sign-in is fully processed by Firebase
-    // before we read auth state, preventing the race that left users on the
-    // login page.
     const init = async () => {
-      // getRedirectResult requires a network round-trip. When offline it never
-      // resolves, blocking onAuthStateChanged indefinitely and freezing the
-      // splash screen. Skip it when offline; add a 5 s safety timeout when
-      // online in case connectivity drops mid-call.
-      if (navigator.onLine) {
-        try {
-          await Promise.race([
-            getRedirectResult(auth!),
-            new Promise<null>((resolve) => setTimeout(resolve, 5000)),
-          ]);
-        } catch (e: any) {
-          const code = e?.code ?? '';
-          console.error('Redirect result error:', e);
-          setRedirectError(authErrorMessage(code));
-        }
+      // getRedirectResult needs a network round-trip to finalise OAuth redirects.
+      // Offline or in airplane mode it never resolves, permanently blocking
+      // onAuthStateChanged and freezing the splash screen.
+      // navigator.onLine is not reliable (iOS reports true in airplane mode when
+      // Wi-Fi is enabled), so we always race against a 2 s timeout — short
+      // enough to clear within the 2.2 s splash window on any connection.
+      try {
+        await Promise.race([
+          getRedirectResult(auth!),
+          new Promise<null>((resolve) => setTimeout(resolve, 2000)),
+        ]);
+      } catch (e: any) {
+        const code = e?.code ?? '';
+        console.error('Redirect result error:', e);
+        setRedirectError(authErrorMessage(code));
       }
 
+      // Safety net: force authChecked after 5 s in case onAuthStateChanged
+      // never fires (e.g. Firebase SDK stuck waiting for a token refresh).
+      safetyTimer = setTimeout(() => setAuthChecked(true), 5000);
+
       unsubRef.current = onAuthStateChanged(auth!, async (firebaseUser) => {
+        if (safetyTimer) { clearTimeout(safetyTimer); safetyTimer = null; }
         try {
           if (firebaseUser) {
             signIn(firebaseUser);
@@ -75,7 +77,10 @@ function AuthenticatedApp() {
     };
 
     init();
-    return () => unsubRef.current?.();
+    return () => {
+      unsubRef.current?.();
+      if (safetyTimer) clearTimeout(safetyTimer);
+    };
   }, []);
 
   // Keep splash up until both the timer fires AND the auth check resolves
