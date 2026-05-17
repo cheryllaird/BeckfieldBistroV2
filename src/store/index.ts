@@ -56,6 +56,7 @@ interface Store extends AppState {
 
   // Auth actions
   signIn: (firebaseUser: FirebaseUser) => void;
+  resubscribe: () => void;
   signOut: () => Promise<void>;
   setSplashDone: () => void;
 
@@ -203,7 +204,8 @@ export const useStore = create<Store>()(
         _unsubscribeUserData?.();
         _unsubscribeShares?.();
 
-        // Authenticate immediately so the app opens at once — data streams in via onSnapshot.
+        const existingUid = get().user?.uid;
+
         set({
           isAuthenticated: true,
           user: {
@@ -212,12 +214,16 @@ export const useStore = create<Store>()(
             email: firebaseUser.email ?? '',
             avatar: firebaseUser.photoURL ?? undefined,
           },
-          recipes: [],
-          mealEntries: [],
-          shoppingItems: [],
-          pantryItems: [],
-          knownSources: [],
-          incomingShares: [],
+          // Only wipe collections when switching accounts — avoids a flicker
+          // when re-authenticating the same user after an offline session.
+          ...(existingUid !== firebaseUser.uid && {
+            recipes: [],
+            mealEntries: [],
+            shoppingItems: [],
+            pantryItems: [],
+            knownSources: [],
+            incomingShares: [],
+          }),
         });
 
         // Subscribe to real-time updates. First emission loads initial data;
@@ -233,6 +239,26 @@ export const useStore = create<Store>()(
         // Subscribe to incoming recipe shares for this user's email
         if (firebaseUser.email) {
           _unsubscribeShares = subscribeToIncomingShares(firebaseUser.email, (incomingShares) =>
+            set({ incomingShares })
+          );
+        }
+      },
+
+      // Re-attaches Firestore listeners for a cached user without resetting
+      // auth state. Called on page load when persisted auth exists so that
+      // IndexedDB data is available immediately, before Firebase validates.
+      resubscribe: () => {
+        const { user } = get();
+        if (!user || _unsubscribeUserData) return;
+        _unsubscribeUserData = subscribeToUserData(user.uid, {
+          onRecipes: (recipes) => set({ recipes }),
+          onMealEntries: (mealEntries) => set({ mealEntries }),
+          onShoppingItems: (shoppingItems) => set({ shoppingItems }),
+          onPantryItems: (pantryItems) => set({ pantryItems }),
+          onKnownSources: (knownSources) => set({ knownSources }),
+        });
+        if (user.email) {
+          _unsubscribeShares = subscribeToIncomingShares(user.email, (incomingShares) =>
             set({ incomingShares })
           );
         }
@@ -326,8 +352,9 @@ export const useStore = create<Store>()(
     }),
     {
       name: 'bistro-storage-v2',
-      // Only persist the splash-done flag — auth and data are restored by Firebase
-      partialize: (s) => ({ splashDone: s.splashDone }),
+      // Persist auth identity so the app can load from IndexedDB cache while
+      // Firebase validates the session in the background (critical for offline).
+      partialize: (s) => ({ splashDone: s.splashDone, user: s.user, isAuthenticated: s.isAuthenticated }),
     }
   )
 );
