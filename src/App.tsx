@@ -43,29 +43,35 @@ function AuthenticatedApp() {
     const unsubRef = { current: null as (() => void) | null };
     let safetyTimer: ReturnType<typeof setTimeout> | null = null;
 
-    // Fast path: cached user — reattach Firestore listeners immediately so
-    // IndexedDB data is available while Firebase validates in the background.
-    if (useStore.getState().isAuthenticated) {
-      resubscribe();
-    } else {
-      // No cached user — wait for Firebase, cap at 5 s.
+    const hasCachedAuth = useStore.getState().isAuthenticated;
+
+    // No cached user — wait for Firebase, cap at 5 s so the splash can't hang.
+    if (!hasCachedAuth) {
       safetyTimer = setTimeout(() => setAuthChecked(true), 5000);
     }
 
-    // Subscribe to auth state BEFORE getRedirectResult so the cached user
-    // is received from IndexedDB as soon as Firebase reads it.
+    // Do NOT call resubscribe() here. Firestore evaluates its security rules
+    // using Firebase Auth's internal state, which is null until
+    // onAuthStateChanged fires (it reads from its own IndexedDB asynchronously).
+    // Calling onSnapshot before auth is ready returns empty results / permission
+    // errors, leaving the library blank. Let onAuthStateChanged control all
+    // Firestore setup so the auth context is always ready first.
+
     unsubRef.current = onAuthStateChanged(auth!, async (firebaseUser) => {
       if (safetyTimer) { clearTimeout(safetyTimer); safetyTimer = null; }
       try {
         if (firebaseUser) {
+          // Firebase Auth has loaded the cached user — set up Firestore
+          // subscriptions now that auth context is available.
           signIn(firebaseUser);
-        } else if (!useStore.getState().isAuthenticated) {
-          // Not signed in at all — nothing to clear.
+        } else if (hasCachedAuth) {
+          // Firebase returned null (offline token-refresh failure) but we have
+          // a persisted identity. Try attaching Firestore listeners anyway —
+          // Firebase Auth has at least finished initialising at this point so
+          // the local cache may be served even with a stale/missing token.
+          resubscribe();
         }
-        // If isAuthenticated is true but Firebase returned null, the SDK
-        // couldn't restore the session (offline token refresh failure). Keep
-        // the cached user; Firebase will re-evaluate once back online and
-        // call onAuthStateChanged again with the real user.
+        // else: no cached auth and not signed in — show the login page.
       } catch (e) {
         console.error('Auth state change error:', e);
       } finally {
