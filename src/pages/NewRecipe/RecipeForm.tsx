@@ -1,10 +1,11 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Plus, Trash2, Loader, Camera, X, Link, UtensilsCrossed } from 'lucide-react';
 import type { Recipe, Ingredient, IngredientSection } from '../../types';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
 import { resizeImage } from '../../lib/recipeExtraction';
 import { ImageCropper } from '../../components/ImageCropper';
+import { CameraCapture } from '../../components/CameraCapture';
 
 interface Props {
   initial: Partial<Recipe>;
@@ -33,19 +34,10 @@ export function RecipeForm({ initial, knownSources, onSave, onCancel, isSaving }
   const [coverPhotoLoading, setCoverPhotoLoading] = useState(false);
   const [coverCropSrc, setCoverCropSrc] = useState<string | null>(null);
   const [showCoverActions, setShowCoverActions] = useState(false);
+  const [showCoverCamera, setShowCoverCamera] = useState(false);
   const [showUrlEntry, setShowUrlEntry] = useState(false);
   const [imgError, setImgError] = useState(false);
   useEffect(() => { setImgError(false); }, [coverImage]);
-  const coverPhotoRef = useRef<HTMLInputElement>(null);
-
-  const handleCoverPhotoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    if (coverPhotoRef.current) coverPhotoRef.current.value = '';
-    const reader = new FileReader();
-    reader.onload = () => setCoverCropSrc(reader.result as string);
-    reader.readAsDataURL(file);
-  };
 
   const handleCoverCropConfirm = async (croppedDataUrl: string) => {
     setCoverCropSrc(null);
@@ -222,15 +214,6 @@ export function RecipeForm({ initial, knownSources, onSave, onCancel, isSaving }
             </div>
           )}
 
-          <input
-            ref={coverPhotoRef}
-            type="file"
-            accept="image/*"
-            capture="environment"
-            className="hidden"
-            onChange={handleCoverPhotoChange}
-          />
-
           {/* Main action button — expands to two choices */}
           {!showCoverActions && !showUrlEntry && (
             <Button
@@ -258,7 +241,7 @@ export function RecipeForm({ initial, knownSources, onSave, onCancel, isSaving }
                 className="flex-1"
                 onClick={() => {
                   setShowCoverActions(false);
-                  coverPhotoRef.current?.click();
+                  setShowCoverCamera(true);
                 }}
               >
                 <Camera size={13} /> Take Photo
@@ -423,6 +406,15 @@ export function RecipeForm({ initial, knownSources, onSave, onCancel, isSaving }
         </Button>
       </div>
 
+      {showCoverCamera && (
+        <CameraCapture
+          onCapture={(dataUrl) => {
+            setShowCoverCamera(false);
+            setCoverCropSrc(dataUrl);
+          }}
+          onCancel={() => setShowCoverCamera(false)}
+        />
+      )}
       {coverCropSrc && (
         <ImageCropper
           src={coverCropSrc}
