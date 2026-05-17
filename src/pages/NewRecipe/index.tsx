@@ -9,6 +9,7 @@ import { extractRecipeFromImage, extractRecipeFromUrl, resizeImage, RecipeExtrac
 import type { Recipe } from '../../types';
 import { RecipeForm } from './RecipeForm';
 import { ImageCropper } from '../../components/ImageCropper';
+import { CameraCapture } from '../../components/CameraCapture';
 
 type CaptureMode = 'url' | 'upload' | 'manual';
 
@@ -31,6 +32,7 @@ export function NewRecipePage() {
   const [saveError, setSaveError] = useState('');
 
   const [cropSrc, setCropSrc] = useState<string | null>(null);
+  const [showCamera, setShowCamera] = useState(false);
 
   const [draft, setDraft] = useState<Partial<Recipe>>(
     existingRecipe ?? {
@@ -187,6 +189,15 @@ export function NewRecipePage() {
       {/* Upload mode */}
       {mode === 'upload' && (
         <div className="flex flex-col gap-3 animate-in">
+          {showCamera && (
+            <CameraCapture
+              onCapture={(dataUrl) => {
+                setShowCamera(false);
+                setCropSrc(dataUrl);
+              }}
+              onCancel={() => setShowCamera(false)}
+            />
+          )}
           {cropSrc ? (
             <ImageCropper
               src={cropSrc}
@@ -195,11 +206,11 @@ export function NewRecipePage() {
               onCancel={() => setCropSrc(null)}
             />
           ) : (
-            <label className={[
-              'flex flex-col items-center gap-3 border-2 border-dashed rounded-2xl p-8 transition-colors',
+            <div className={[
+              'flex flex-col items-center gap-4 border-2 border-dashed rounded-2xl p-8',
               isExtracting
-                ? 'border-amber-300 bg-amber-50 cursor-not-allowed'
-                : 'border-slate-200 cursor-pointer hover:border-amber-300 hover:bg-amber-50',
+                ? 'border-amber-300 bg-amber-50'
+                : 'border-slate-200',
             ].join(' ')}>
               {isExtracting ? (
                 <>
@@ -213,20 +224,30 @@ export function NewRecipePage() {
                 <>
                   <Camera size={32} className="text-slate-400" />
                   <div className="text-center">
-                    <p className="text-sm font-medium text-slate-700">Snap or upload a photo</p>
+                    <p className="text-sm font-medium text-slate-700">Add a recipe photo</p>
                     <p className="text-xs text-slate-400 mt-0.5">AI will extract the recipe details</p>
+                  </div>
+                  <div className="flex gap-2 w-full">
+                    <button
+                      type="button"
+                      className="flex-1 flex items-center justify-center gap-1.5 py-2.5 text-sm font-medium bg-amber-50 hover:bg-amber-100 text-amber-700 rounded-xl border border-amber-200 transition-colors"
+                      onClick={() => setShowCamera(true)}
+                    >
+                      <Camera size={14} /> Take Photo
+                    </button>
+                    <label className="flex-1 flex items-center justify-center gap-1.5 py-2.5 text-sm font-medium bg-slate-50 hover:bg-slate-100 text-slate-600 rounded-xl border border-slate-200 transition-colors cursor-pointer">
+                      <Upload size={14} /> From Gallery
+                      <input
+                        type="file"
+                        accept="image/*"
+                        className="hidden"
+                        onChange={handleFileUpload}
+                      />
+                    </label>
                   </div>
                 </>
               )}
-              <input
-                type="file"
-                accept="image/*"
-                capture="environment"
-                className="hidden"
-                disabled={isExtracting}
-                onChange={handleFileUpload}
-              />
-            </label>
+            </div>
           )}
           {extractError && <p className="text-xs text-red-500">{extractError}</p>}
         </div>

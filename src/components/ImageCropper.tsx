@@ -181,7 +181,7 @@ export function ImageCropper({ src, onConfirm, onCancel, variant = 'modal' }: Pr
             <X size={14} /> Cancel
           </Button>
           <Button fullWidth onClick={applyCrop}>
-            <Check size={14} /> Crop & Use
+            <Check size={14} /> Accept
           </Button>
         </div>
       </div>
@@ -201,7 +201,7 @@ export function ImageCropper({ src, onConfirm, onCancel, variant = 'modal' }: Pr
           <X size={14} /> Cancel
         </Button>
         <Button fullWidth onClick={applyCrop}>
-          <Check size={14} /> Crop & Use
+          <Check size={14} /> Accept
         </Button>
       </div>
     </div>
