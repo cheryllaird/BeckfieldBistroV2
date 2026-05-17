@@ -96,6 +96,7 @@ export interface PantryItem {
   name: string;           // display name e.g. "olive oil"
   normalizedName: string; // normalizeIngredientName(name) for matching
   category: ShoppingCategory;
+  order?: number;
   createdAt: string;
 }
 

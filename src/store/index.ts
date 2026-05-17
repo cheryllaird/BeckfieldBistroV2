@@ -13,6 +13,7 @@ import {
   saveShoppingItems,
   deleteShoppingItemDoc,
   savePantryItem,
+  savePantryItems,
   deletePantryItemDoc,
   saveKnownSources,
   sendRecipeShare,
@@ -51,6 +52,7 @@ interface Store extends AppState {
   addPantryItem: (item: PantryItem) => void;
   updatePantryItem: (item: PantryItem) => void;
   removePantryItem: (id: string) => void;
+  reorderPantryItems: (items: PantryItem[]) => void;
 
   // Auth actions
   signIn: (firebaseUser: FirebaseUser) => void;
@@ -188,6 +190,12 @@ export const useStore = create<Store>()(
         set((s) => ({ pantryItems: s.pantryItems.filter((i) => i.id !== id) }));
         const uid = get().user?.uid;
         if (uid) deletePantryItemDoc(uid, id);
+      },
+
+      reorderPantryItems: (items) => {
+        set({ pantryItems: items });
+        const uid = get().user?.uid;
+        if (uid) savePantryItems(uid, items);
       },
 
       signIn: (firebaseUser) => {

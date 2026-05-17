@@ -72,7 +72,11 @@ export function subscribeToUserData(uid: string, callbacks: UserDataCallbacks): 
 
   const unsubPantryItems = onSnapshot(
     pantryItemsCol(uid),
-    (snap) => callbacks.onPantryItems(snap.docs.map((d) => d.data() as PantryItem)),
+    (snap) => {
+      const items = snap.docs.map((d) => d.data() as PantryItem);
+      items.sort((a, b) => (a.order ?? Infinity) - (b.order ?? Infinity));
+      callbacks.onPantryItems(items);
+    },
     handleError
   );
 
@@ -151,6 +155,15 @@ export function savePantryItem(uid: string, item: PantryItem): void {
 
 export function deletePantryItemDoc(uid: string, id: string): void {
   deleteDoc(doc(pantryItemsCol(uid), id)).catch(console.error);
+}
+
+export async function savePantryItems(uid: string, items: PantryItem[]): Promise<void> {
+  const col = pantryItemsCol(uid);
+  const existing = await getDocs(col);
+  const batch = writeBatch(db!);
+  existing.docs.forEach((d) => batch.delete(d.ref));
+  items.forEach((item, index) => batch.set(doc(col, item.id), stripUndefined({ ...item, order: index })));
+  batch.commit().catch(console.error);
 }
 
 // ── category override log ─────────────────────────────────────────────────────

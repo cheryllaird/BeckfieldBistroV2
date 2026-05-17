@@ -235,11 +235,6 @@ export function ShoppingListPage() {
               <Undo2 size={14} />
             </Button>
           )}
-          {mode === 'edit' && (
-            <Button variant="ghost" size="sm" onClick={handleAutoSort} aria-label="Auto-sort">
-              <ArrowUpDown size={14} />
-            </Button>
-          )}
           {/* Tab switcher */}
           <div className="flex gap-1 bg-slate-100 rounded-xl p-0.5">
             <button
@@ -310,6 +305,16 @@ export function ShoppingListPage() {
 
       {/* Unchecked items */}
       <div className="flex flex-col gap-1">
+        {mode === 'edit' && unchecked.length > 1 && (
+          <div className="flex justify-end">
+            <button
+              onClick={handleAutoSort}
+              className="flex items-center gap-1 text-xs text-slate-400 hover:text-amber-600 transition-colors py-0.5"
+            >
+              <ArrowUpDown size={11} /> Auto sort
+            </button>
+          </div>
+        )}
         {(mode === 'shop' ? unchecked : previewUnchecked).map((item, index) =>
           mode === 'shop' ? (
             <ShopItem key={item.id} item={item} onToggle={() => handleToggle(item.id)} />
