@@ -34,6 +34,8 @@ export interface UserDataCallbacks {
   onPantryItems: (items: PantryItem[]) => void;
   onKnownSources: (sources: string[]) => void;
   onError?: (err: Error) => void;
+  /** Called once after the first recipes snapshot resolves (data, cache-miss, or error). */
+  onDataReady?: () => void;
 }
 
 /**
@@ -55,13 +57,24 @@ export function subscribeToUserData(uid: string, callbacks: UserDataCallbacks): 
   const skipIfCacheMiss = (snap: { empty: boolean; metadata: { fromCache: boolean } }) =>
     snap.metadata.fromCache && snap.empty;
 
+  let recipesFirstEmission = false;
   const unsubRecipes = onSnapshot(
     recipesCol(uid),
     (snap) => {
+      if (!recipesFirstEmission) {
+        recipesFirstEmission = true;
+        callbacks.onDataReady?.();
+      }
       if (skipIfCacheMiss(snap)) return;
       callbacks.onRecipes(snap.docs.map((d) => d.data() as Recipe));
     },
-    handleError
+    (err) => {
+      if (!recipesFirstEmission) {
+        recipesFirstEmission = true;
+        callbacks.onDataReady?.();
+      }
+      handleError(err);
+    }
   );
 
   const unsubMealEntries = onSnapshot(

@@ -12,6 +12,7 @@ import { ModalPortal } from '../../components/ui/ModalPortal';
 export function LibraryPage() {
   const navigate = useNavigate();
   const recipes = useStore((s) => s.recipes);
+  const recipesLoading = useStore((s) => s.recipesLoading);
   const incomingShares = useStore((s) => s.incomingShares);
   const [query, setQuery] = useState('');
 
@@ -187,6 +188,18 @@ export function LibraryPage() {
               onSelect={() => handleSelect(recipe.id)}
             />
           ))}
+        </div>
+      ) : recipesLoading && !query ? (
+        <div className="flex flex-col items-center gap-3 py-16 animate-fade">
+          <div className="flex gap-1.5">
+            {[0, 1, 2].map((i) => (
+              <div
+                key={i}
+                className="w-2 h-2 rounded-full bg-amber-400"
+                style={{ animation: `fadeOnly 0.8s ease-in-out ${i * 0.2}s infinite alternate` }}
+              />
+            ))}
+          </div>
         </div>
       ) : (
         <div className="flex flex-col items-center gap-4 py-16 text-center animate-fade">
