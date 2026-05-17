@@ -186,13 +186,13 @@ export function ShoppingListPage() {
   if (shoppingItems.length === 0) {
     return (
       <div className="flex flex-col gap-5">
-        <div className="flex items-center justify-between">
+        <div className="flex flex-col gap-1">
           <h2 className="text-xl font-bold text-slate-800">Shopping List</h2>
           <button
             onClick={() => navigate('/pantry')}
-            className="flex items-center gap-1.5 text-xs text-slate-400 hover:text-amber-600 transition-colors"
+            className="flex items-center gap-1.5 text-xs text-slate-400 hover:text-amber-600 transition-colors self-start"
           >
-            <Package size={13} /> Store Cupboard
+            <Package size={12} /> Store Cupboard
           </button>
         </div>
         <div className="flex flex-col items-center gap-4 py-10 text-center animate-fade">
@@ -226,17 +226,10 @@ export function ShoppingListPage() {
   return (
     <div className="flex flex-col gap-4">
       {/* Header */}
-      <div className="flex items-center justify-between gap-2">
-        <div className="flex items-center gap-3 min-w-0">
+      <div className="flex flex-col gap-1">
+        <div className="flex items-center justify-between gap-2">
           <h2 className="text-xl font-bold text-slate-800 shrink-0">Shopping List</h2>
-          <button
-            onClick={() => navigate('/pantry')}
-            className="flex items-center gap-1 text-xs text-slate-400 hover:text-amber-600 transition-colors shrink-0"
-          >
-            <Package size={12} /> Cupboard
-          </button>
-        </div>
-        <div className="flex items-center gap-1.5">
+          <div className="flex items-center gap-1.5">
           {history.length > 0 && (
             <Button variant="ghost" size="sm" onClick={handleUndo} aria-label="Undo">
               <Undo2 size={14} />
@@ -273,6 +266,13 @@ export function ShoppingListPage() {
             </button>
           </div>
         </div>
+        </div>
+        <button
+          onClick={() => navigate('/pantry')}
+          className="flex items-center gap-1.5 text-xs text-slate-400 hover:text-amber-600 transition-colors self-start"
+        >
+          <Package size={12} /> Store Cupboard
+        </button>
       </div>
 
       {/* Progress (shop mode only) */}
