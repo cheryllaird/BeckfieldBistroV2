@@ -70,13 +70,13 @@ export function CameraCapture({ onCapture, onCancel }: Props) {
   }
 
   return (
-    <div className="fixed inset-0 z-50 bg-black flex flex-col">
+    <div className="fixed inset-0 z-50 bg-black flex flex-col overflow-hidden">
       <video
         ref={videoRef}
         autoPlay
         playsInline
         muted
-        className="flex-1 object-cover w-full"
+        className="flex-1 min-h-0 object-cover w-full"
         onCanPlay={() => setReady(true)}
       />
       <div className="flex items-center justify-between px-8 py-6 bg-black">
