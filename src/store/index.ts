@@ -12,13 +12,16 @@ import {
   saveShoppingItem,
   saveShoppingItems,
   deleteShoppingItemDoc,
+  savePantryItem,
+  savePantryItems,
+  deletePantryItemDoc,
   saveKnownSources,
   sendRecipeShare,
   subscribeToIncomingShares,
   acceptShare as firestoreAcceptShare,
   dismissShare as firestoreDismissShare,
 } from '../lib/firestore';
-import type { Recipe, MealEntry, ShoppingItem, AppState, SharedRecipe } from '../types';
+import type { Recipe, MealEntry, ShoppingItem, PantryItem, AppState, SharedRecipe } from '../types';
 
 // Module-level ref so it's never serialized into Zustand state or localStorage
 let _unsubscribeUserData: (() => void) | null = null;
@@ -45,6 +48,12 @@ interface Store extends AppState {
   reorderShoppingItems: (items: ShoppingItem[]) => void;
   clearCheckedItems: () => void;
 
+  // Pantry actions
+  addPantryItem: (item: PantryItem) => void;
+  updatePantryItem: (item: PantryItem) => void;
+  removePantryItem: (id: string) => void;
+  reorderPantryItems: (items: PantryItem[]) => void;
+
   // Auth actions
   signIn: (firebaseUser: FirebaseUser) => void;
   signOut: () => Promise<void>;
@@ -67,6 +76,7 @@ export const useStore = create<Store>()(
       recipes: [],
       mealEntries: [],
       shoppingItems: [],
+      pantryItems: [],
       knownSources: [],
       isAuthenticated: false,
       user: null,
@@ -164,6 +174,30 @@ export const useStore = create<Store>()(
         if (uid) removed.forEach((i) => deleteShoppingItemDoc(uid, i.id));
       },
 
+      addPantryItem: (item) => {
+        set((s) => ({ pantryItems: [...s.pantryItems, item] }));
+        const uid = get().user?.uid;
+        if (uid) savePantryItem(uid, item);
+      },
+
+      updatePantryItem: (item) => {
+        set((s) => ({ pantryItems: s.pantryItems.map((p) => (p.id === item.id ? item : p)) }));
+        const uid = get().user?.uid;
+        if (uid) savePantryItem(uid, item);
+      },
+
+      removePantryItem: (id) => {
+        set((s) => ({ pantryItems: s.pantryItems.filter((i) => i.id !== id) }));
+        const uid = get().user?.uid;
+        if (uid) deletePantryItemDoc(uid, id);
+      },
+
+      reorderPantryItems: (items) => {
+        set({ pantryItems: items });
+        const uid = get().user?.uid;
+        if (uid) savePantryItems(uid, items);
+      },
+
       signIn: (firebaseUser) => {
         // Tear down any previous listeners (e.g. if signIn is called twice)
         _unsubscribeUserData?.();
@@ -181,6 +215,7 @@ export const useStore = create<Store>()(
           recipes: [],
           mealEntries: [],
           shoppingItems: [],
+          pantryItems: [],
           knownSources: [],
           incomingShares: [],
         });
@@ -191,6 +226,7 @@ export const useStore = create<Store>()(
           onRecipes: (recipes) => set({ recipes }),
           onMealEntries: (mealEntries) => set({ mealEntries }),
           onShoppingItems: (shoppingItems) => set({ shoppingItems }),
+          onPantryItems: (pantryItems) => set({ pantryItems }),
           onKnownSources: (knownSources) => set({ knownSources }),
         });
 
@@ -215,6 +251,7 @@ export const useStore = create<Store>()(
           recipes: [],
           mealEntries: [],
           shoppingItems: [],
+          pantryItems: [],
           knownSources: [],
           incomingShares: [],
         });

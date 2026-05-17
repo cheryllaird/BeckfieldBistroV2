@@ -1,4 +1,5 @@
 import { useState, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   ShoppingCart,
   Plus,
@@ -12,6 +13,7 @@ import {
   Pencil,
   UtensilsCrossed,
   ChevronDown,
+  ChevronRight,
 } from 'lucide-react';
 import { useStore } from '../../store';
 import { Button } from '../../components/ui/Button';
@@ -37,6 +39,7 @@ const CATEGORY_ORDER: ShoppingCategory[] = [
 ];
 
 export function ShoppingListPage() {
+  const navigate = useNavigate();
   const {
     shoppingItems,
     toggleShoppingItem,
@@ -183,8 +186,14 @@ export function ShoppingListPage() {
   if (shoppingItems.length === 0) {
     return (
       <div className="flex flex-col gap-5">
-        <div className="flex items-center justify-between">
+        <div className="flex flex-col gap-1">
           <h2 className="text-xl font-bold text-slate-800">Shopping List</h2>
+          <button
+            onClick={() => navigate('/pantry')}
+            className="flex items-center gap-1.5 text-xs text-slate-400 hover:text-amber-600 transition-colors self-start"
+          >
+            View store cupboard <ChevronRight size={12} />
+          </button>
         </div>
         <div className="flex flex-col items-center gap-4 py-10 text-center animate-fade">
           <ShoppingCart size={48} className="text-slate-200" />
@@ -209,6 +218,7 @@ export function ShoppingListPage() {
           </Button>
         </div>
         {generateOpen && <GenerateListModal onClose={() => setGenerateOpen(false)} />}
+
       </div>
     );
   }
@@ -216,17 +226,13 @@ export function ShoppingListPage() {
   return (
     <div className="flex flex-col gap-4">
       {/* Header */}
-      <div className="flex items-center justify-between gap-2">
-        <h2 className="text-xl font-bold text-slate-800 shrink-0">Shopping List</h2>
-        <div className="flex items-center gap-1.5">
+      <div className="flex flex-col gap-1">
+        <div className="flex items-center justify-between gap-2">
+          <h2 className="text-xl font-bold text-slate-800 shrink-0">Shopping List</h2>
+          <div className="flex items-center gap-1.5">
           {history.length > 0 && (
             <Button variant="ghost" size="sm" onClick={handleUndo} aria-label="Undo">
               <Undo2 size={14} />
-            </Button>
-          )}
-          {mode === 'edit' && (
-            <Button variant="ghost" size="sm" onClick={handleAutoSort} aria-label="Auto-sort">
-              <ArrowUpDown size={14} />
             </Button>
           )}
           {/* Tab switcher */}
@@ -255,6 +261,13 @@ export function ShoppingListPage() {
             </button>
           </div>
         </div>
+        </div>
+        <button
+          onClick={() => navigate('/pantry')}
+          className="flex items-center gap-1.5 text-xs text-slate-400 hover:text-amber-600 transition-colors self-start"
+        >
+          View store cupboard <ChevronRight size={12} />
+        </button>
       </div>
 
       {/* Progress (shop mode only) */}
@@ -292,6 +305,16 @@ export function ShoppingListPage() {
 
       {/* Unchecked items */}
       <div className="flex flex-col gap-1">
+        {mode === 'edit' && unchecked.length > 1 && (
+          <div className="flex justify-end">
+            <button
+              onClick={handleAutoSort}
+              className="flex items-center gap-1 text-xs text-slate-400 hover:text-amber-600 transition-colors py-0.5"
+            >
+              <ArrowUpDown size={11} /> Auto sort
+            </button>
+          </div>
+        )}
         {(mode === 'shop' ? unchecked : previewUnchecked).map((item, index) =>
           mode === 'shop' ? (
             <ShopItem key={item.id} item={item} onToggle={() => handleToggle(item.id)} />
