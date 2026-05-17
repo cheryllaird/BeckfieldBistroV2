@@ -148,6 +148,12 @@ const CATEGORY_KEYWORDS: Record<ShoppingCategory, string[]> = {
     'flatbread', 'focaccia', 'muffin', 'naan', 'pita', 'pitta', 'pretzel', 'roll',
     'scone', 'sourdough', 'tortilla', 'waffle', 'wrap',
   ],
+  Fruit: [
+    'apple', 'apricot', 'banana', 'berry', 'blueberr', 'cantaloupe', 'cherry', 'coconut',
+    'currant', 'fig', 'grape', 'grapefruit', 'kiwi', 'lemon', 'lime', 'mango', 'melon',
+    'nectarine', 'orange', 'peach', 'pear', 'pineapple', 'plum', 'pomegranate', 'raspberry',
+    'strawberry', 'tangerine', 'watermelon',
+  ],
   Beverages: [
     'beer', 'cider', 'coffee', 'espresso', 'gin', 'juice', 'kombucha', 'lemonade',
     'prosecco', 'rum', 'seltzer', 'smoothie', 'soda', 'sparkling water', 'spirits',
@@ -159,14 +165,8 @@ const CATEGORY_KEYWORDS: Record<ShoppingCategory, string[]> = {
     'cauliflower', 'celery', 'courgette', 'cucumber', 'eggplant', 'endive', 'fennel',
     'green bean', 'green onion', 'jalapeño', 'kale', 'leek', 'lettuce', 'mushroom', 'okra',
     'onion', 'parsnip', 'pea', 'pepper', 'potato', 'pumpkin', 'radish', 'rhubarb', 'scallion',
-    'shallot', 'spinach', 'spring onion', 'squash', 'sweet potato', 'swiss chard', 'tomato',
-    'turnip', 'yam', 'zucchini',
-  ],
-  Fruit: [
-    'apple', 'apricot', 'banana', 'berry', 'blueberr', 'cantaloupe', 'cherry', 'coconut',
-    'currant', 'fig', 'grape', 'grapefruit', 'kiwi', 'lemon', 'lime', 'mango', 'melon',
-    'nectarine', 'orange', 'peach', 'pear', 'pineapple', 'plum', 'pomegranate', 'raspberry',
-    'strawberry', 'tangerine', 'watermelon',
+    'shallot', 'spinach', 'spring onion', 'squash', 'sweet potato', 'sweetcorn', 'swiss chard',
+    'tomato', 'turnip', 'yam', 'zucchini',
   ],
   'Herbs & Spices': [
     'basil', 'chilli', 'chive', 'cilantro', 'coriander', 'dill', 'garlic', 'ginger', 'mint',
@@ -179,7 +179,7 @@ const CATEGORY_KEYWORDS: Record<ShoppingCategory, string[]> = {
     'cracker', 'cumin', 'dried', 'fish sauce', 'flour', 'garbanzo', 'granola', 'hazelnut',
     'honey', 'hot sauce', 'jam', 'jelly', 'ketchup', 'kidney bean', 'lentil', 'maple syrup',
     'marmalade', 'mayonnaise', 'molasses', 'mustard', 'noodle', 'nut', 'nutmeg', 'oat',
-    'oil', 'oyster sauce', 'paprika', 'pasta', 'peanut', 'peanut butter', 'penne', 'pickle',
+    'oil', 'olive', 'oyster sauce', 'paprika', 'pasta', 'peanut', 'peanut butter', 'penne', 'pickle',
     'pine nut', 'pistachio', 'powder', 'preserve', 'rice', 'risotto', 'salt', 'sauce',
     'sesame', 'soy sauce', 'spaghetti', 'spice', 'stock', 'sugar', 'sunflower seed', 'syrup',
     'tahini', 'tapioca', 'teriyaki', 'tomato paste', 'turmeric', 'vanilla', 'vinegar', 'walnut',
