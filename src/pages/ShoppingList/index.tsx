@@ -24,7 +24,9 @@ import { ModalPortal } from '../../components/ui/ModalPortal';
 type Mode = 'shop' | 'edit';
 
 const CATEGORY_ORDER: ShoppingCategory[] = [
-  'Produce',
+  'Vegetables',
+  'Fruit',
+  'Herbs & Spices',
   'Bakery',
   'Meat & Seafood',
   'Dairy & Eggs',

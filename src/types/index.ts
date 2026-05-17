@@ -62,7 +62,9 @@ export interface ShoppingItem {
 }
 
 export type ShoppingCategory =
-  | 'Produce'
+  | 'Vegetables'
+  | 'Fruit'
+  | 'Herbs & Spices'
   | 'Bakery'
   | 'Meat & Seafood'
   | 'Dairy & Eggs'
