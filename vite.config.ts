@@ -15,6 +15,8 @@ export default defineConfig({
       devOptions: { enabled: true },
       workbox: {
         globPatterns: ['**/*.{js,css,html,svg,png,ico,woff2}'],
+        navigateFallback: '/index.html',
+        navigateFallbackDenylist: [/^\/api\//],
       },
       manifest: {
         name: 'BeckfieldBistro',
