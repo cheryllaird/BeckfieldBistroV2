@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, Plus, Package, Trash2, ChevronDown } from 'lucide-react';
+import { ArrowLeft, Plus, Trash2, ChevronDown } from 'lucide-react';
 import { useStore } from '../../store';
 import { Button } from '../../components/ui/Button';
 import { categorize, generateId, normalizeIngredientName } from '../../lib/utils';
@@ -62,10 +62,7 @@ export function PantryPage() {
         >
           <ArrowLeft size={20} />
         </button>
-        <div className="flex items-center gap-2">
-          <Package size={18} className="text-amber-500" />
-          <h2 className="text-xl font-bold text-slate-800">Store Cupboard</h2>
-        </div>
+        <h2 className="text-xl font-bold text-slate-800">Store Cupboard</h2>
       </div>
 
       <p className="text-sm text-slate-400">
@@ -89,7 +86,6 @@ export function PantryPage() {
       {/* Pantry list */}
       {pantryItems.length === 0 ? (
         <div className="flex flex-col items-center gap-3 py-12 text-center">
-          <Package size={40} className="text-slate-200" />
           <div>
             <p className="text-base font-semibold text-slate-700">Nothing here yet</p>
             <p className="text-sm text-slate-400 mt-1">
