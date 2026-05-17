@@ -161,6 +161,7 @@ const CATEGORY_KEYWORDS: Record<ShoppingCategory, string[]> = {
   ],
   Vegetables: [
     'artichoke', 'arugula', 'asparagus', 'aubergine', 'avocado', 'bean sprout', 'beetroot',
+    'cherry tomato',
     'bell pepper', 'bok choy', 'broccoli', 'brussels sprout', 'cabbage', 'capsicum', 'carrot',
     'cauliflower', 'celery', 'courgette', 'cucumber', 'eggplant', 'endive', 'fennel',
     'green bean', 'green onion', 'jalapeño', 'kale', 'leek', 'lettuce', 'mushroom', 'okra',
