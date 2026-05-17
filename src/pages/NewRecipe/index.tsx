@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useNavigate, useSearchParams, useParams } from 'react-router-dom';
-import { ArrowLeft, Camera, Upload, Link, Plus, Loader } from 'lucide-react';
+import { ArrowLeft, Camera, Upload, Link, Plus, Loader, WifiOff } from 'lucide-react';
 import { useStore } from '../../store';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
@@ -10,6 +10,7 @@ import type { Recipe } from '../../types';
 import { RecipeForm } from './RecipeForm';
 import { ImageCropper } from '../../components/ImageCropper';
 import { CameraCapture } from '../../components/CameraCapture';
+import { useOnlineStatus } from '../../hooks/useOnlineStatus';
 
 type CaptureMode = 'url' | 'upload' | 'manual';
 
@@ -21,6 +22,8 @@ export function NewRecipePage() {
 
   const existingRecipe = editId ? recipes.find((r) => r.id === editId) : undefined;
   const isEditMode = !!existingRecipe;
+
+  const { isOnline } = useOnlineStatus();
 
   const prefillTitle = searchParams.get('title') ?? '';
   const [mode, setMode] = useState<CaptureMode>(prefillTitle || isEditMode ? 'manual' : 'upload');
@@ -140,39 +143,54 @@ export function NewRecipePage() {
       {!prefillTitle && !isEditMode && (
         <div className="flex bg-slate-100 rounded-xl p-1 gap-0">
           {[
-            { key: 'url', label: 'URL', icon: Link },
-            { key: 'upload', label: 'Photo', icon: Upload },
-            { key: 'manual', label: 'Manual', icon: Plus },
-          ].map(({ key, label, icon: Icon }) => (
-            <button
-              key={key}
-              onClick={() => setMode(key as CaptureMode)}
-              className={[
-                'flex-1 flex items-center justify-center gap-1.5 py-2 text-xs font-medium rounded-lg transition-all duration-150',
-                mode === key
-                  ? 'bg-white text-slate-800 shadow-sm'
-                  : 'text-slate-500 hover:text-slate-700',
-              ].join(' ')}
-            >
-              <Icon size={13} />
-              {label}
-            </button>
-          ))}
+            { key: 'url', label: 'URL', icon: Link, requiresOnline: true },
+            { key: 'upload', label: 'Photo', icon: Upload, requiresOnline: true },
+            { key: 'manual', label: 'Manual', icon: Plus, requiresOnline: false },
+          ].map(({ key, label, icon: Icon, requiresOnline }) => {
+            const disabled = requiresOnline && !isOnline;
+            return (
+              <button
+                key={key}
+                onClick={() => !disabled && setMode(key as CaptureMode)}
+                disabled={disabled}
+                aria-disabled={disabled}
+                title={disabled ? 'Requires internet connection' : undefined}
+                className={[
+                  'flex-1 flex items-center justify-center gap-1.5 py-2 text-xs font-medium rounded-lg transition-all duration-150',
+                  disabled
+                    ? 'text-slate-300 cursor-not-allowed'
+                    : mode === key
+                    ? 'bg-white text-slate-800 shadow-sm'
+                    : 'text-slate-500 hover:text-slate-700',
+                ].join(' ')}
+              >
+                <Icon size={13} />
+                {label}
+              </button>
+            );
+          })}
         </div>
       )}
 
       {/* URL mode */}
       {mode === 'url' && (
         <div className="flex flex-col gap-3 animate-in">
+          {!isOnline && (
+            <div className="flex items-center gap-2 rounded-xl bg-slate-100 px-4 py-3 text-sm text-slate-500">
+              <WifiOff size={15} className="shrink-0" />
+              Recipe extraction requires an internet connection. Switch to Manual to add a recipe offline.
+            </div>
+          )}
           <Input
             label="Recipe URL"
             placeholder="https://cooking.nytimes.com/recipes/…"
             value={urlInput}
             onChange={(e) => setUrlInput(e.target.value)}
             type="url"
+            disabled={!isOnline}
           />
           {extractError && <p className="text-xs text-red-500">{extractError}</p>}
-          <Button fullWidth onClick={handleUrlExtract} disabled={isExtracting || !urlInput.trim()}>
+          <Button fullWidth onClick={handleUrlExtract} disabled={isExtracting || !urlInput.trim() || !isOnline}>
             {isExtracting ? (
               <>
                 <Loader size={14} className="animate-spin" /> Extracting…
@@ -189,7 +207,13 @@ export function NewRecipePage() {
       {/* Upload mode */}
       {mode === 'upload' && (
         <div className="flex flex-col gap-3 animate-in">
-          {showCamera && (
+          {!isOnline && (
+            <div className="flex items-center gap-2 rounded-xl bg-slate-100 px-4 py-3 text-sm text-slate-500">
+              <WifiOff size={15} className="shrink-0" />
+              Photo extraction requires an internet connection. Switch to Manual to add a recipe offline.
+            </div>
+          )}
+          {isOnline && showCamera && (
             <CameraCapture
               onCapture={(dataUrl) => {
                 setShowCamera(false);
@@ -198,7 +222,7 @@ export function NewRecipePage() {
               onCancel={() => setShowCamera(false)}
             />
           )}
-          {cropSrc ? (
+          {isOnline && (cropSrc ? (
             <ImageCropper
               src={cropSrc}
               onConfirm={handleCropConfirm}
@@ -247,7 +271,7 @@ export function NewRecipePage() {
                 </>
               )}
             </div>
-          )}
+          ))}
           {extractError && <p className="text-xs text-red-500">{extractError}</p>}
         </div>
       )}
