@@ -19,10 +19,20 @@ const CATEGORY_ORDER: ShoppingCategory[] = [
   'Other',
 ];
 
+type SortKey = 'name' | 'category' | 'newest' | 'oldest';
+
+const SORT_LABELS: Record<SortKey, string> = {
+  name: 'Name',
+  category: 'Category',
+  newest: 'Newest',
+  oldest: 'Oldest',
+};
+
 export function PantryPage() {
   const navigate = useNavigate();
   const { pantryItems, addPantryItem, updatePantryItem, removePantryItem } = useStore();
   const [input, setInput] = useState('');
+  const [sortKey, setSortKey] = useState<SortKey>('name');
 
   const handleAdd = () => {
     const name = input.trim();
@@ -47,9 +57,14 @@ export function PantryPage() {
     updatePantryItem({ ...item, category });
   };
 
-  const sorted = [...pantryItems].sort((a, b) =>
-    a.category.localeCompare(b.category) || a.name.localeCompare(b.name)
-  );
+  const sorted = [...pantryItems].sort((a, b) => {
+    switch (sortKey) {
+      case 'name':     return a.name.localeCompare(b.name);
+      case 'category': return a.category.localeCompare(b.category) || a.name.localeCompare(b.name);
+      case 'newest':   return b.createdAt.localeCompare(a.createdAt);
+      case 'oldest':   return a.createdAt.localeCompare(b.createdAt);
+    }
+  });
 
   return (
     <div className="flex flex-col gap-4">
@@ -95,43 +110,66 @@ export function PantryPage() {
           </div>
         </div>
       ) : (
-        <div className="flex flex-col gap-1">
-          {sorted.map((item) => (
-            <div
-              key={item.id}
-              className="flex items-center gap-3 px-3 py-2.5 rounded-xl bg-white border border-slate-100"
-            >
-              <span className="text-sm text-slate-700 capitalize flex-1 min-w-0 truncate">
-                {item.name}
-              </span>
-
-              <div className="relative inline-flex items-center shrink-0">
-                <div className="flex items-center gap-1 pl-2.5 pr-2 py-1 rounded-full text-[10px] font-semibold pointer-events-none bg-slate-100 text-slate-500">
-                  {item.category}
-                  <ChevronDown size={9} />
-                </div>
-                <select
-                  value={item.category}
-                  onChange={(e) => handleCategoryChange(item.id, e.target.value as ShoppingCategory)}
-                  className="absolute inset-0 opacity-0 w-full h-full cursor-pointer"
-                  aria-label="Item category"
+        <>
+          {/* Sort control */}
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-slate-400 shrink-0">Sort by</span>
+            <div className="flex gap-1">
+              {(Object.keys(SORT_LABELS) as SortKey[]).map((key) => (
+                <button
+                  key={key}
+                  onClick={() => setSortKey(key)}
+                  className={[
+                    'px-2.5 py-1 rounded-full text-xs font-medium transition-all',
+                    sortKey === key
+                      ? 'bg-amber-500 text-white'
+                      : 'bg-slate-100 text-slate-500 hover:bg-slate-200',
+                  ].join(' ')}
                 >
-                  {CATEGORY_ORDER.map((cat) => (
-                    <option key={cat} value={cat}>{cat}</option>
-                  ))}
-                </select>
-              </div>
-
-              <button
-                onClick={() => removePantryItem(item.id)}
-                className="text-slate-300 hover:text-red-400 transition-colors shrink-0"
-                aria-label={`Remove ${item.name}`}
-              >
-                <Trash2 size={14} />
-              </button>
+                  {SORT_LABELS[key]}
+                </button>
+              ))}
             </div>
-          ))}
-        </div>
+          </div>
+
+          <div className="flex flex-col gap-1">
+            {sorted.map((item) => (
+              <div
+                key={item.id}
+                className="flex items-center gap-3 px-3 py-2.5 rounded-xl bg-white border border-slate-100"
+              >
+                <span className="text-sm text-slate-700 capitalize flex-1 min-w-0 truncate">
+                  {item.name}
+                </span>
+
+                <div className="relative inline-flex items-center shrink-0">
+                  <div className="flex items-center gap-1 pl-2.5 pr-2 py-1 rounded-full text-[10px] font-semibold pointer-events-none bg-slate-100 text-slate-500">
+                    {item.category}
+                    <ChevronDown size={9} />
+                  </div>
+                  <select
+                    value={item.category}
+                    onChange={(e) => handleCategoryChange(item.id, e.target.value as ShoppingCategory)}
+                    className="absolute inset-0 opacity-0 w-full h-full cursor-pointer"
+                    aria-label="Item category"
+                  >
+                    {CATEGORY_ORDER.map((cat) => (
+                      <option key={cat} value={cat}>{cat}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <button
+                  onClick={() => removePantryItem(item.id)}
+                  className="text-slate-300 hover:text-red-400 transition-colors shrink-0"
+                  aria-label={`Remove ${item.name}`}
+                >
+                  <Trash2 size={14} />
+                </button>
+              </div>
+            ))}
+          </div>
+        </>
       )}
     </div>
   );
