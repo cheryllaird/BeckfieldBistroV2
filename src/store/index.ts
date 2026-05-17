@@ -29,6 +29,7 @@ let _unsubscribeShares: (() => void) | null = null;
 
 interface Store extends AppState {
   incomingShares: SharedRecipe[];
+  recipesLoading: boolean;
 
   // Recipe actions
   addRecipe: (recipe: Omit<Recipe, 'userId'>) => Promise<void>;
@@ -83,6 +84,7 @@ export const useStore = create<Store>()(
       user: null,
       splashDone: false,
       incomingShares: [],
+      recipesLoading: true,
 
       addRecipe: async (recipe) => {
         const uid = get().user?.uid ?? '';
@@ -208,6 +210,7 @@ export const useStore = create<Store>()(
 
         set({
           isAuthenticated: true,
+          recipesLoading: true,
           user: {
             uid: firebaseUser.uid,
             name: firebaseUser.displayName ?? 'User',
@@ -235,6 +238,7 @@ export const useStore = create<Store>()(
           onShoppingItems: (shoppingItems) => set({ shoppingItems }),
           onPantryItems: (pantryItems) => set({ pantryItems }),
           onKnownSources: (knownSources) => set({ knownSources }),
+          onDataReady: () => set({ recipesLoading: false }),
         });
 
         // Subscribe to incoming recipe shares for this user's email
@@ -251,12 +255,14 @@ export const useStore = create<Store>()(
       resubscribe: () => {
         const { user } = get();
         if (!user || _unsubscribeUserData) return;
+        set({ recipesLoading: true });
         _unsubscribeUserData = subscribeToUserData(user.uid, {
           onRecipes: (recipes) => set({ recipes }),
           onMealEntries: (mealEntries) => set({ mealEntries }),
           onShoppingItems: (shoppingItems) => set({ shoppingItems }),
           onPantryItems: (pantryItems) => set({ pantryItems }),
           onKnownSources: (knownSources) => set({ knownSources }),
+          onDataReady: () => set({ recipesLoading: false }),
         });
         if (user.email) {
           _unsubscribeShares = subscribeToIncomingShares(user.email, (incomingShares) =>
