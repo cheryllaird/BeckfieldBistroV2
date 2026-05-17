@@ -387,7 +387,6 @@ export function ShoppingListPage() {
       )}
 
       {generateOpen && <GenerateListModal onClose={() => setGenerateOpen(false)} />}
-      {pantryOpen && <PantryModal onClose={() => setPantryOpen(false)} />}
     </div>
   );
 }
