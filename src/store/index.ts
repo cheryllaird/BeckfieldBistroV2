@@ -352,9 +352,22 @@ export const useStore = create<Store>()(
     }),
     {
       name: 'bistro-storage-v2',
-      // Persist auth identity so the app can load from IndexedDB cache while
-      // Firebase validates the session in the background (critical for offline).
-      partialize: (s) => ({ splashDone: s.splashDone, user: s.user, isAuthenticated: s.isAuthenticated }),
+      // Persist auth identity AND data collections so the library loads
+      // immediately from localStorage when offline, without waiting for
+      // Firestore's IndexedDB cache (which requires a live auth token to
+      // initialise and can be absent on the first offline session).
+      // incomingShares is excluded: it requires a network fetch and is stale
+      // as soon as a share is accepted/dismissed on another device.
+      partialize: (s) => ({
+        splashDone: s.splashDone,
+        user: s.user,
+        isAuthenticated: s.isAuthenticated,
+        recipes: s.recipes,
+        mealEntries: s.mealEntries,
+        shoppingItems: s.shoppingItems,
+        pantryItems: s.pantryItems,
+        knownSources: s.knownSources,
+      }),
     }
   )
 );
