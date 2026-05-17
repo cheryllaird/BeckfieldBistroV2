@@ -42,6 +42,9 @@ export function normalizeUnit(unit: string): string {
 export function canonicalizeIngredientName(name: string): string {
   let s = name.toLowerCase().trim();
 
+  // Strip prep instructions after a comma (e.g. "broccoli, cut into florets" → "broccoli")
+  s = s.replace(/\s*,.*$/, '');
+
   // Rewrite "juice of [N] ingredient" → "[ingredient]" so it consolidates with the whole fruit/veg
   s = s.replace(/^juice of (?:\d+(?:[./]\d+)?\s+)?(.+)$/, (_, ingredient) => {
     const words = ingredient.trim().split(/\s+/);
@@ -51,6 +54,12 @@ export function canonicalizeIngredientName(name: string): string {
 
   // Strip " juice" from lemons and limes so "lemon juice" / "1 lemon juice" consolidates with "lemon"
   s = s.replace(/^(lemon|lime)s?\s+juice$/, '$1');
+
+  // Strip leading prep-method descriptors (e.g. "diced onion" → "onion", "finely chopped parsley" → "parsley")
+  s = s.replace(
+    /^(?:(?:very|finely|coarsely|roughly|thinly|freshly|lightly|well)\s+)?(?:diced|chopped|minced|cubed|julienned|blanched|trimmed|quartered|halved|pitted|seeded|de-?seeded|peeled|cored|crumbled|torn)\s+/,
+    ''
+  );
 
   // Strip leading quality/preparation modifiers
   s = s.replace(/^extra[- ]virgin\s+/, '');
