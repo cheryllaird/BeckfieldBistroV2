@@ -42,10 +42,21 @@ function AuthenticatedApp() {
     // before we read auth state, preventing the race that left users on the
     // login page.
     const init = async () => {
-      try { await getRedirectResult(auth!); } catch (e: any) {
-        const code = e?.code ?? '';
-        console.error('Redirect result error:', e);
-        setRedirectError(authErrorMessage(code));
+      // getRedirectResult requires a network round-trip. When offline it never
+      // resolves, blocking onAuthStateChanged indefinitely and freezing the
+      // splash screen. Skip it when offline; add a 5 s safety timeout when
+      // online in case connectivity drops mid-call.
+      if (navigator.onLine) {
+        try {
+          await Promise.race([
+            getRedirectResult(auth!),
+            new Promise<null>((resolve) => setTimeout(resolve, 5000)),
+          ]);
+        } catch (e: any) {
+          const code = e?.code ?? '';
+          console.error('Redirect result error:', e);
+          setRedirectError(authErrorMessage(code));
+        }
       }
 
       unsubRef.current = onAuthStateChanged(auth!, async (firebaseUser) => {
