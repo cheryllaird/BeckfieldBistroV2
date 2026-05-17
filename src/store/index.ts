@@ -49,6 +49,7 @@ interface Store extends AppState {
 
   // Pantry actions
   addPantryItem: (item: PantryItem) => void;
+  updatePantryItem: (item: PantryItem) => void;
   removePantryItem: (id: string) => void;
 
   // Auth actions
@@ -173,6 +174,12 @@ export const useStore = create<Store>()(
 
       addPantryItem: (item) => {
         set((s) => ({ pantryItems: [...s.pantryItems, item] }));
+        const uid = get().user?.uid;
+        if (uid) savePantryItem(uid, item);
+      },
+
+      updatePantryItem: (item) => {
+        set((s) => ({ pantryItems: s.pantryItems.map((p) => (p.id === item.id ? item : p)) }));
         const uid = get().user?.uid;
         if (uid) savePantryItem(uid, item);
       },

@@ -1,13 +1,27 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, Plus, Package, Trash2 } from 'lucide-react';
+import { ArrowLeft, Plus, Package, Trash2, ChevronDown } from 'lucide-react';
 import { useStore } from '../../store';
 import { Button } from '../../components/ui/Button';
 import { categorize, generateId, normalizeIngredientName } from '../../lib/utils';
+import type { ShoppingCategory } from '../../types';
+
+const CATEGORY_ORDER: ShoppingCategory[] = [
+  'Vegetables',
+  'Fruit',
+  'Herbs & Spices',
+  'Bakery',
+  'Meat & Seafood',
+  'Dairy & Eggs',
+  'Pantry',
+  'Frozen',
+  'Beverages',
+  'Other',
+];
 
 export function PantryPage() {
   const navigate = useNavigate();
-  const { pantryItems, addPantryItem, removePantryItem } = useStore();
+  const { pantryItems, addPantryItem, updatePantryItem, removePantryItem } = useStore();
   const [input, setInput] = useState('');
 
   const handleAdd = () => {
@@ -25,6 +39,12 @@ export function PantryPage() {
       createdAt: new Date().toISOString(),
     });
     setInput('');
+  };
+
+  const handleCategoryChange = (id: string, category: ShoppingCategory) => {
+    const item = pantryItems.find((p) => p.id === id);
+    if (!item || item.category === category) return;
+    updatePantryItem({ ...item, category });
   };
 
   const sorted = [...pantryItems].sort((a, b) =>
@@ -82,12 +102,29 @@ export function PantryPage() {
           {sorted.map((item) => (
             <div
               key={item.id}
-              className="flex items-center justify-between gap-2 px-3 py-2.5 rounded-xl bg-white border border-slate-100"
+              className="flex items-center gap-3 px-3 py-2.5 rounded-xl bg-white border border-slate-100"
             >
-              <div className="min-w-0 flex-1">
-                <span className="text-sm text-slate-700 capitalize">{item.name}</span>
-                <span className="ml-2 text-[10px] text-slate-400 font-medium">{item.category}</span>
+              <span className="text-sm text-slate-700 capitalize flex-1 min-w-0 truncate">
+                {item.name}
+              </span>
+
+              <div className="relative inline-flex items-center shrink-0">
+                <div className="flex items-center gap-1 pl-2.5 pr-2 py-1 rounded-full text-[10px] font-semibold pointer-events-none bg-slate-100 text-slate-500">
+                  {item.category}
+                  <ChevronDown size={9} />
+                </div>
+                <select
+                  value={item.category}
+                  onChange={(e) => handleCategoryChange(item.id, e.target.value as ShoppingCategory)}
+                  className="absolute inset-0 opacity-0 w-full h-full cursor-pointer"
+                  aria-label="Item category"
+                >
+                  {CATEGORY_ORDER.map((cat) => (
+                    <option key={cat} value={cat}>{cat}</option>
+                  ))}
+                </select>
               </div>
+
               <button
                 onClick={() => removePantryItem(item.id)}
                 className="text-slate-300 hover:text-red-400 transition-colors shrink-0"
