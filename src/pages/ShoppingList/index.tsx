@@ -13,7 +13,7 @@ import {
   Pencil,
   UtensilsCrossed,
   ChevronDown,
-  Package,
+  ChevronRight,
 } from 'lucide-react';
 import { useStore } from '../../store';
 import { Button } from '../../components/ui/Button';
@@ -192,7 +192,7 @@ export function ShoppingListPage() {
             onClick={() => navigate('/pantry')}
             className="flex items-center gap-1.5 text-xs text-slate-400 hover:text-amber-600 transition-colors self-start"
           >
-            <Package size={12} /> Store Cupboard
+            View store cupboard <ChevronRight size={12} />
           </button>
         </div>
         <div className="flex flex-col items-center gap-4 py-10 text-center animate-fade">
@@ -271,7 +271,7 @@ export function ShoppingListPage() {
           onClick={() => navigate('/pantry')}
           className="flex items-center gap-1.5 text-xs text-slate-400 hover:text-amber-600 transition-colors self-start"
         >
-          <Package size={12} /> Store Cupboard
+          View store cupboard <ChevronRight size={12} />
         </button>
       </div>
 
