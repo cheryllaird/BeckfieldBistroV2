@@ -28,6 +28,7 @@ const UNIT_NORMALIZE_MAP: Record<string, string> = {
   tablespoon: 'tbsp', tablespoons: 'tbsp',
   cups: 'cup',
   piece: '', pieces: '', each: '', whole: '',
+  clove: '', cloves: '',
 };
 
 export function normalizeUnit(unit: string): string {
@@ -55,10 +56,12 @@ export function canonicalizeIngredientName(name: string): string {
   s = s.replace(/^extra[- ]virgin\s+/, '');
   s = s.replace(/^flat[- ]leaf(?:ed)?\s+/, '');
 
-  // Strip trailing botanical descriptors
+  // Strip trailing preparation/portioning descriptors
   s = s.replace(/\s+leaves?$/, '');
   s = s.replace(/\s+stalks?$/, '');
   s = s.replace(/\s+sprigs?$/, '');
+  s = s.replace(/\s+cloves?$/, '');   // "garlic cloves" → "garlic"
+  s = s.replace(/\s+wedges?$/, '');   // "lemon wedges" → "lemon"
 
   // Apply regional/American-English synonyms
   for (const [pattern, replacement] of WORD_SYNONYMS) {
@@ -229,7 +232,7 @@ export function consolidateIngredients(
       } else {
         map.set(key, {
           quantity: scaled.quantity,
-          unit: scaled.unit,
+          unit: normalizeUnit(scaled.unit),
           name: canonicalizeIngredientName(scaled.name),
           category: categorize(scaled.name),
           sources: newSource ? [newSource] : [],
@@ -261,7 +264,8 @@ export function mergeIntoShoppingList(
 
   for (const ing of ingredients) {
     const scaledQty = Math.round(ing.quantity * scale * 100) / 100;
-    const key = `${normalizeIngredientName(ing.name)}__${normalizeUnit(ing.unit)}`;
+    const normUnit = normalizeUnit(ing.unit);
+    const key = `${normalizeIngredientName(ing.name)}__${normUnit}`;
     const canonicalName = canonicalizeIngredientName(ing.name);
 
     const existingIndex = result.findIndex((item) => item.ingredientKey === key);
@@ -283,12 +287,12 @@ export function mergeIntoShoppingList(
       const totalQty = Math.round(newSources.reduce((sum, s) => sum + s.scaledQuantity, 0) * 100) / 100;
       result[existingIndex] = {
         ...existingItem,
-        name: [totalQty > 0 ? formatQuantity(totalQty) : '', ing.unit, canonicalName].filter(Boolean).join(' '),
+        name: [totalQty > 0 ? formatQuantity(totalQty) : '', normUnit, canonicalName].filter(Boolean).join(' '),
         mealSources: newSources,
       };
     } else {
       // Fall back to text match for manually-added items without an ingredientKey
-      const text = [scaledQty > 0 ? formatQuantity(scaledQty) : '', ing.unit, canonicalName].filter(Boolean).join(' ');
+      const text = [scaledQty > 0 ? formatQuantity(scaledQty) : '', normUnit, canonicalName].filter(Boolean).join(' ');
       if (result.some((item) => item.name.toLowerCase() === text.toLowerCase() && !item.ingredientKey)) {
         continue;
       }
