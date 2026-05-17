@@ -30,7 +30,7 @@ function FirebaseSetupScreen() {
 
 // Separated so hooks are always called in the same order (Rules of Hooks).
 function AuthenticatedApp() {
-  const { splashDone, isAuthenticated, signIn, signOut, resubscribe } = useStore();
+  const { splashDone, isAuthenticated, signIn, resubscribe } = useStore();
   const [redirectError, setRedirectError] = useState<string | null>(null);
 
   // If the user was previously signed in (persisted to localStorage), skip
