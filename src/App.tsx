@@ -33,6 +33,19 @@ function AuthenticatedApp() {
   const { splashDone, isAuthenticated, signIn, resubscribe } = useStore();
   const [redirectError, setRedirectError] = useState<string | null>(null);
 
+  // Wait for Zustand's persist middleware to finish reading from localStorage
+  // before doing anything else. For synchronous storage this is nearly instant,
+  // but without this gate signIn() can run before the persisted user/recipes
+  // are in the store — causing the account-switch wipe to fire incorrectly.
+  const [hasHydrated, setHasHydrated] = useState(
+    () => useStore.persist.hasHydrated()
+  );
+  useEffect(() => {
+    if (!useStore.persist.hasHydrated()) {
+      return useStore.persist.onFinishHydration(() => setHasHydrated(true));
+    }
+  }, []);
+
   // If the user was previously signed in (persisted to localStorage), skip
   // the Firebase auth wait entirely — we already know who they are.
   const [authChecked, setAuthChecked] = useState(
@@ -94,8 +107,9 @@ function AuthenticatedApp() {
     };
   }, []);
 
-  // Keep splash up until both the timer fires AND the auth check resolves
-  if (!splashDone || !authChecked) return <SplashScreen />;
+  // Keep splash up until the store has hydrated from localStorage, the
+  // splash timer has fired, and auth state has been determined.
+  if (!hasHydrated || !splashDone || !authChecked) return <SplashScreen />;
   if (!isAuthenticated) return <AuthPage initialError={redirectError} />;
 
   return (

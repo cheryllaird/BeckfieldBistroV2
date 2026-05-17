@@ -214,9 +214,10 @@ export const useStore = create<Store>()(
             email: firebaseUser.email ?? '',
             avatar: firebaseUser.photoURL ?? undefined,
           },
-          // Only wipe collections when switching accounts — avoids a flicker
-          // when re-authenticating the same user after an offline session.
-          ...(existingUid !== firebaseUser.uid && {
+          // Only wipe collections when switching accounts. Require existingUid
+          // to be defined so an unhydrated store (existingUid === undefined)
+          // doesn't satisfy `undefined !== uid` and incorrectly wipe data.
+          ...(existingUid && existingUid !== firebaseUser.uid && {
             recipes: [],
             mealEntries: [],
             shoppingItems: [],
