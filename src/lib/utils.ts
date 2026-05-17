@@ -161,6 +161,7 @@ const CATEGORY_KEYWORDS: Record<ShoppingCategory, string[]> = {
   ],
   Vegetables: [
     'artichoke', 'arugula', 'asparagus', 'aubergine', 'avocado', 'bean sprout', 'beetroot',
+    'cherry tomato',
     'bell pepper', 'bok choy', 'broccoli', 'brussels sprout', 'cabbage', 'capsicum', 'carrot',
     'cauliflower', 'celery', 'courgette', 'cucumber', 'eggplant', 'endive', 'fennel',
     'green bean', 'green onion', 'jalapeño', 'kale', 'leek', 'lettuce', 'mushroom', 'okra',
@@ -169,32 +170,46 @@ const CATEGORY_KEYWORDS: Record<ShoppingCategory, string[]> = {
     'tomato', 'turnip', 'yam', 'zucchini',
   ],
   'Herbs & Spices': [
-    'basil', 'chilli', 'chive', 'cilantro', 'coriander', 'dill', 'garlic', 'ginger', 'mint',
-    'oregano', 'parsley', 'rosemary', 'sage', 'tarragon', 'thyme',
+    'allspice', 'anise', 'basil', 'bay leaf', 'black pepper', 'caraway', 'cardamom', 'cayenne',
+    'chili powder', 'chilli', 'chive', 'cilantro', 'cinnamon', 'clove', 'coriander', 'cumin',
+    'curry', 'dill', 'fennel seed', 'fenugreek', 'garlic', 'ginger', 'lemongrass', 'mace',
+    'marjoram', 'mint', 'mustard seed', 'nutmeg', 'onion powder', 'oregano', 'paprika', 'parsley',
+    'peppercorn', 'rosemary', 'saffron', 'sage', 'spice', 'star anise', 'sumac', 'tarragon',
+    'thyme', 'turmeric',
   ],
   Pantry: [
     'almond', 'arrowroot', 'baking', 'bean', 'black bean', 'breadcrumb', 'broth', 'brown rice',
-    'brown sugar', 'capers', 'cardamom', 'cashew', 'cayenne', 'chickpea', 'chili powder',
-    'chocolate', 'cinnamon', 'clove', 'cocoa', 'coconut milk', 'cornmeal', 'cornstarch',
-    'cracker', 'cumin', 'dried', 'fish sauce', 'flour', 'garbanzo', 'granola', 'hazelnut',
-    'honey', 'hot sauce', 'jam', 'jelly', 'ketchup', 'kidney bean', 'lentil', 'maple syrup',
-    'marmalade', 'mayonnaise', 'molasses', 'mustard', 'noodle', 'nut', 'nutmeg', 'oat',
-    'oil', 'olive', 'oyster sauce', 'paprika', 'pasta', 'peanut', 'peanut butter', 'penne', 'pickle',
-    'pine nut', 'pistachio', 'powder', 'preserve', 'rice', 'risotto', 'salt', 'sauce',
-    'sesame', 'soy sauce', 'spaghetti', 'spice', 'stock', 'sugar', 'sunflower seed', 'syrup',
-    'tahini', 'tapioca', 'teriyaki', 'tomato paste', 'turmeric', 'vanilla', 'vinegar', 'walnut',
-    'worcestershire',
+    'brown sugar', 'capers', 'cashew', 'chickpea', 'chocolate', 'cocoa', 'coconut milk',
+    'cornmeal', 'cornstarch', 'cracker', 'dried', 'egg noodle', 'fish sauce', 'flour',
+    'garbanzo', 'granola', 'hazelnut', 'honey', 'hot sauce', 'jam', 'jelly', 'ketchup',
+    'kidney bean', 'lentil', 'maple syrup', 'marmalade', 'mayonnaise', 'molasses', 'mustard',
+    'noodle', 'nut', 'oat', 'oil', 'olive', 'oyster sauce', 'pasta', 'peanut', 'peanut butter',
+    'penne', 'pickle', 'pine nut', 'pistachio', 'preserve', 'rice', 'risotto', 'salt', 'sauce',
+    'sesame', 'soy sauce', 'spaghetti', 'stock', 'sugar', 'sunflower seed', 'syrup', 'tahini',
+    'tapioca', 'teriyaki', 'tomato paste', 'vanilla', 'vinegar', 'walnut', 'worcestershire',
   ],
   Other: [],
 };
 
 export function categorize(name: string): ShoppingCategory {
   const lower = name.toLowerCase();
+  let bestMatch: { cat: ShoppingCategory; wordCount: number; charCount: number } | null = null;
   for (const [cat, keywords] of Object.entries(CATEGORY_KEYWORDS) as [ShoppingCategory, string[]][]) {
     if (cat === 'Other') continue;
-    if (keywords.some((kw) => lower.includes(kw))) return cat;
+    for (const kw of keywords) {
+      if (!lower.includes(kw)) continue;
+      const wordCount = kw.split(' ').length;
+      const charCount = kw.length;
+      if (
+        !bestMatch ||
+        wordCount > bestMatch.wordCount ||
+        (wordCount === bestMatch.wordCount && charCount > bestMatch.charCount)
+      ) {
+        bestMatch = { cat: cat as ShoppingCategory, wordCount, charCount };
+      }
+    }
   }
-  return 'Other';
+  return bestMatch?.cat ?? 'Other';
 }
 
 export function consolidateIngredients(
