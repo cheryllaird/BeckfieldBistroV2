@@ -91,10 +91,19 @@ export interface CategoryOverrideLog {
   timestamp: string; // ISO datetime
 }
 
+export interface PantryItem {
+  id: string;
+  name: string;           // display name e.g. "olive oil"
+  normalizedName: string; // normalizeIngredientName(name) for matching
+  category: ShoppingCategory;
+  createdAt: string;
+}
+
 export interface AppState {
   recipes: Recipe[];
   mealEntries: MealEntry[];
   shoppingItems: ShoppingItem[];
+  pantryItems: PantryItem[];
   knownSources: string[];
   isAuthenticated: boolean;
   user: { uid: string; name: string; email: string; avatar?: string } | null;

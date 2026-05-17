@@ -10,7 +10,7 @@ import {
   enableNetwork,
 } from 'firebase/firestore';
 import { db, auth } from './firebase';
-import type { Recipe, MealEntry, ShoppingItem, SharedRecipe, CategoryOverrideLog } from '../types';
+import type { Recipe, MealEntry, ShoppingItem, PantryItem, SharedRecipe, CategoryOverrideLog } from '../types';
 
 // ── helpers ──────────────────────────────────────────────────────────────────
 
@@ -22,6 +22,7 @@ function stripUndefined<T extends object>(obj: T): T {
 const recipesCol = (uid: string) => collection(db!, 'users', uid, 'recipes');
 const mealEntriesCol = (uid: string) => collection(db!, 'users', uid, 'mealEntries');
 const shoppingItemsCol = (uid: string) => collection(db!, 'users', uid, 'shoppingItems');
+const pantryItemsCol = (uid: string) => collection(db!, 'users', uid, 'pantryItems');
 const profileDoc = (uid: string) => doc(db!, 'users', uid, 'meta', 'profile');
 
 // ── real-time subscription ────────────────────────────────────────────────────
@@ -30,6 +31,7 @@ export interface UserDataCallbacks {
   onRecipes: (recipes: Recipe[]) => void;
   onMealEntries: (entries: MealEntry[]) => void;
   onShoppingItems: (items: ShoppingItem[]) => void;
+  onPantryItems: (items: PantryItem[]) => void;
   onKnownSources: (sources: string[]) => void;
   onError?: (err: Error) => void;
 }
@@ -68,6 +70,12 @@ export function subscribeToUserData(uid: string, callbacks: UserDataCallbacks): 
     handleError
   );
 
+  const unsubPantryItems = onSnapshot(
+    pantryItemsCol(uid),
+    (snap) => callbacks.onPantryItems(snap.docs.map((d) => d.data() as PantryItem)),
+    handleError
+  );
+
   const unsubProfile = onSnapshot(
     profileDoc(uid),
     (snap) => callbacks.onKnownSources((snap.data()?.knownSources as string[]) ?? []),
@@ -78,6 +86,7 @@ export function subscribeToUserData(uid: string, callbacks: UserDataCallbacks): 
     unsubRecipes();
     unsubMealEntries();
     unsubShoppingItems();
+    unsubPantryItems();
     unsubProfile();
   };
 }
@@ -132,6 +141,16 @@ export async function saveShoppingItems(uid: string, items: ShoppingItem[]): Pro
   existing.docs.forEach((d) => batch.delete(d.ref));
   items.forEach((item, index) => batch.set(doc(col, item.id), stripUndefined({ ...item, order: index })));
   batch.commit().catch(console.error);
+}
+
+// ── pantry items ──────────────────────────────────────────────────────────────
+
+export function savePantryItem(uid: string, item: PantryItem): void {
+  setDoc(doc(pantryItemsCol(uid), item.id), stripUndefined(item)).catch(console.error);
+}
+
+export function deletePantryItemDoc(uid: string, id: string): void {
+  deleteDoc(doc(pantryItemsCol(uid), id)).catch(console.error);
 }
 
 // ── category override log ─────────────────────────────────────────────────────

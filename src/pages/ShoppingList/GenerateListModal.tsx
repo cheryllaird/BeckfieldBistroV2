@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { X, Check } from 'lucide-react';
+import { X, Check, Package } from 'lucide-react';
 import { useStore } from '../../store';
 import { Button } from '../../components/ui/Button';
 import { ModalPortal } from '../../components/ui/ModalPortal';
@@ -10,7 +10,8 @@ interface Props {
 }
 
 export function GenerateListModal({ onClose }: Props) {
-  const { mealEntries, recipes, setShoppingItems } = useStore();
+  const { mealEntries, recipes, pantryItems, setShoppingItems } = useStore();
+  const pantryNormalizedNames = new Set(pantryItems.map((p) => p.normalizedName));
 
   const allWeekDays = [...getWeekDays(0), ...getWeekDays(1)];
   const plannedEntries = mealEntries.filter((e) =>
@@ -24,6 +25,26 @@ export function GenerateListModal({ onClose }: Props) {
   const [selected, setSelected] = useState<Set<string>>(
     new Set(recipeEntries.map((e) => e.id))
   );
+
+  const pantrySkipCount = (() => {
+    if (pantryItems.length === 0 || selected.size === 0) return 0;
+    const groups = recipeEntries
+      .filter((e) => selected.has(e.id))
+      .map((e) => {
+        const recipe = recipes.find((r) => r.id === e.recipeId)!;
+        return {
+          ingredients: getRecipeIngredients(recipe),
+          servings: e.servings,
+          originalServings: recipe.servings,
+        };
+      })
+      .filter((g) => g.ingredients);
+    const allItems = consolidateIngredients(groups);
+    return allItems.filter((item) => {
+      const normalizedName = item.ingredientKey?.split('__')[0] ?? '';
+      return pantryNormalizedNames.has(normalizedName);
+    }).length;
+  })();
 
   const toggle = (id: string) =>
     setSelected((prev) => {
@@ -47,7 +68,11 @@ export function GenerateListModal({ onClose }: Props) {
       })
       .filter((g) => g.ingredients);
 
-    const items = consolidateIngredients(groups);
+    const allItems = consolidateIngredients(groups);
+    const items = allItems.filter((item) => {
+      const normalizedName = item.ingredientKey?.split('__')[0] ?? '';
+      return !pantryNormalizedNames.has(normalizedName);
+    });
     setShoppingItems(items);
     onClose();
   };
@@ -116,6 +141,12 @@ export function GenerateListModal({ onClose }: Props) {
           )}
         </div>
 
+        {pantrySkipCount > 0 && (
+          <div className="px-4 pb-2 shrink-0 flex items-center gap-1.5 text-xs text-slate-400">
+            <Package size={11} />
+            {pantrySkipCount} ingredient{pantrySkipCount !== 1 ? 's' : ''} in store cupboard — will be skipped
+          </div>
+        )}
         <div className="p-4 border-t border-slate-100 flex gap-2 shrink-0">
           <Button variant="secondary" fullWidth onClick={onClose}>
             Cancel

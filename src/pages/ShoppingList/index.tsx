@@ -12,6 +12,7 @@ import {
   Pencil,
   UtensilsCrossed,
   ChevronDown,
+  Package,
 } from 'lucide-react';
 import { useStore } from '../../store';
 import { Button } from '../../components/ui/Button';
@@ -19,6 +20,7 @@ import { categorize, formatQuantity, generateId } from '../../lib/utils';
 import { logCategoryOverride } from '../../lib/firestore';
 import type { MealSource, ShoppingCategory, ShoppingItem } from '../../types';
 import { GenerateListModal } from './GenerateListModal';
+import { PantryModal } from './PantryModal';
 import { ModalPortal } from '../../components/ui/ModalPortal';
 
 type Mode = 'shop' | 'edit';
@@ -49,6 +51,7 @@ export function ShoppingListPage() {
 
   const [mode, setMode] = useState<Mode>('shop');
   const [generateOpen, setGenerateOpen] = useState(false);
+  const [pantryOpen, setPantryOpen] = useState(false);
   const [manualItem, setManualItem] = useState('');
   const [history, setHistory] = useState<ShoppingItem[][]>([]);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -185,6 +188,12 @@ export function ShoppingListPage() {
       <div className="flex flex-col gap-5">
         <div className="flex items-center justify-between">
           <h2 className="text-xl font-bold text-slate-800">Shopping List</h2>
+          <button
+            onClick={() => setPantryOpen(true)}
+            className="flex items-center gap-1.5 text-xs text-slate-400 hover:text-amber-600 transition-colors"
+          >
+            <Package size={13} /> Store Cupboard
+          </button>
         </div>
         <div className="flex flex-col items-center gap-4 py-10 text-center animate-fade">
           <ShoppingCart size={48} className="text-slate-200" />
@@ -209,6 +218,7 @@ export function ShoppingListPage() {
           </Button>
         </div>
         {generateOpen && <GenerateListModal onClose={() => setGenerateOpen(false)} />}
+        {pantryOpen && <PantryModal onClose={() => setPantryOpen(false)} />}
       </div>
     );
   }
@@ -217,7 +227,15 @@ export function ShoppingListPage() {
     <div className="flex flex-col gap-4">
       {/* Header */}
       <div className="flex items-center justify-between gap-2">
-        <h2 className="text-xl font-bold text-slate-800 shrink-0">Shopping List</h2>
+        <div className="flex items-center gap-3 min-w-0">
+          <h2 className="text-xl font-bold text-slate-800 shrink-0">Shopping List</h2>
+          <button
+            onClick={() => setPantryOpen(true)}
+            className="flex items-center gap-1 text-xs text-slate-400 hover:text-amber-600 transition-colors shrink-0"
+          >
+            <Package size={12} /> Cupboard
+          </button>
+        </div>
         <div className="flex items-center gap-1.5">
           {history.length > 0 && (
             <Button variant="ghost" size="sm" onClick={handleUndo} aria-label="Undo">
@@ -369,6 +387,7 @@ export function ShoppingListPage() {
       )}
 
       {generateOpen && <GenerateListModal onClose={() => setGenerateOpen(false)} />}
+      {pantryOpen && <PantryModal onClose={() => setPantryOpen(false)} />}
     </div>
   );
 }
