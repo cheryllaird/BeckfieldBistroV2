@@ -41,11 +41,11 @@ export function normalizeUnit(unit: string): string {
 export function canonicalizeIngredientName(name: string): string {
   let s = name.toLowerCase().trim();
 
-  // Rewrite "juice of [N] ingredient" → "ingredient juice"
+  // Rewrite "juice of [N] ingredient" → "[ingredient]" so it consolidates with the whole fruit/veg
   s = s.replace(/^juice of (?:\d+(?:[./]\d+)?\s+)?(.+)$/, (_, ingredient) => {
     const words = ingredient.trim().split(/\s+/);
     words[words.length - 1] = singularWord(words[words.length - 1]);
-    return `${words.join(' ')} juice`;
+    return words.join(' ');
   });
 
   // Strip leading quality/preparation modifiers
