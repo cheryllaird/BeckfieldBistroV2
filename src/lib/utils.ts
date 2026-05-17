@@ -190,11 +190,16 @@ const CATEGORY_KEYWORDS: Record<ShoppingCategory, string[]> = {
 
 export function categorize(name: string): ShoppingCategory {
   const lower = name.toLowerCase();
+  let bestMatch: { cat: ShoppingCategory; keywordLength: number } | null = null;
   for (const [cat, keywords] of Object.entries(CATEGORY_KEYWORDS) as [ShoppingCategory, string[]][]) {
     if (cat === 'Other') continue;
-    if (keywords.some((kw) => lower.includes(kw))) return cat;
+    for (const kw of keywords) {
+      if (lower.includes(kw) && kw.length > (bestMatch?.keywordLength ?? 0)) {
+        bestMatch = { cat: cat as ShoppingCategory, keywordLength: kw.length };
+      }
+    }
   }
-  return 'Other';
+  return bestMatch?.cat ?? 'Other';
 }
 
 export function consolidateIngredients(
