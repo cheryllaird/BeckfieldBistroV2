@@ -73,6 +73,18 @@ function AuthenticatedApp() {
     unsubRef.current = onAuthStateChanged(auth!, async (firebaseUser) => {
       if (safetyTimer) { clearTimeout(safetyTimer); safetyTimer = null; }
       try {
+        // Wait for Zustand's persist to finish reading from localStorage before
+        // calling signIn/resubscribe. Without this, signIn() can call set()
+        // while recipes:[] is still the default state, causing persist to write
+        // recipes:[] over the real localStorage data before hydration reads it.
+        await new Promise<void>((resolve) => {
+          if (useStore.persist.hasHydrated()) {
+            resolve();
+          } else {
+            const unsub = useStore.persist.onFinishHydration(() => { unsub(); resolve(); });
+          }
+        });
+
         if (firebaseUser) {
           // Firebase Auth has loaded the cached user — set up Firestore
           // subscriptions now that auth context is available.
