@@ -12,6 +12,7 @@ import { RecipeDetailPage } from './pages/RecipeDetail/index';
 import { NewRecipePage } from './pages/NewRecipe/index';
 import { PlanPage } from './pages/Plan/index';
 import { ShoppingListPage } from './pages/ShoppingList/index';
+import { PantryPage } from './pages/Pantry/index';
 
 function FirebaseSetupScreen() {
   return (
@@ -80,6 +81,7 @@ function AuthenticatedApp() {
         <Route path="/recipes/:id/edit" element={<NewRecipePage />} />
         <Route path="/plan" element={<PlanPage />} />
         <Route path="/list" element={<ShoppingListPage />} />
+        <Route path="/pantry" element={<PantryPage />} />
         <Route path="*" element={<Navigate to="/recipes" replace />} />
       </Route>
     </Routes>
