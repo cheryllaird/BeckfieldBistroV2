@@ -23,7 +23,7 @@ export function NewRecipePage() {
   const isEditMode = !!existingRecipe;
 
   const prefillTitle = searchParams.get('title') ?? '';
-  const [mode, setMode] = useState<CaptureMode>(prefillTitle || isEditMode ? 'manual' : 'url');
+  const [mode, setMode] = useState<CaptureMode>(prefillTitle || isEditMode ? 'manual' : 'upload');
   const [urlInput, setUrlInput] = useState('');
   const [isExtracting, setIsExtracting] = useState(false);
   const [extractError, setExtractError] = useState('');
