@@ -201,7 +201,6 @@ export function NewRecipePage() {
           {cropSrc ? (
             <ImageCropper
               src={cropSrc}
-              variant="inline"
               onConfirm={handleCropConfirm}
               onCancel={() => setCropSrc(null)}
             />

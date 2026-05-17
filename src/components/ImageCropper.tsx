@@ -1,4 +1,5 @@
 import { useRef, useState, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import { Check, X } from 'lucide-react';
 import { Button } from './ui/Button';
 
@@ -22,7 +23,6 @@ interface Props {
   src: string;
   onConfirm: (croppedDataUrl: string) => void;
   onCancel: () => void;
-  variant?: 'modal' | 'inline';
 }
 
 const MIN_PCT = 10;
@@ -35,7 +35,7 @@ const CORNERS = [
   { id: 'se' as const, style: { bottom: -8, right: -8 }, cursor: 'se-resize' },
 ];
 
-export function ImageCropper({ src, onConfirm, onCancel, variant = 'modal' }: Props) {
+export function ImageCropper({ src, onConfirm, onCancel }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const imgRef = useRef<HTMLImageElement>(null);
   const dragRef = useRef<DragState | null>(null);
@@ -116,87 +116,78 @@ export function ImageCropper({ src, onConfirm, onCancel, variant = 'modal' }: Pr
     onConfirm(canvas.toDataURL('image/jpeg', 0.92));
   };
 
-  const rounded = variant === 'inline' ? 'rounded-2xl' : 'rounded-xl';
-
-  const cropArea = (
-    <div
-      ref={containerRef}
-      className="relative w-full select-none touch-none"
-      onPointerMove={onMove}
-      onPointerUp={onUp}
-      onPointerLeave={onUp}
-    >
-      <img
-        ref={imgRef}
-        src={src}
-        alt="Crop preview"
-        className={`w-full block ${rounded}`}
-        draggable={false}
-      />
-
-      {/* Dimmed areas outside crop */}
-      <div className={`absolute inset-0 pointer-events-none overflow-hidden ${rounded}`}>
-        <div className="absolute bg-black/55" style={{ top: 0, left: 0, right: 0, height: `${crop.y}%` }} />
-        <div className="absolute bg-black/55" style={{ bottom: 0, left: 0, right: 0, top: `${crop.y + crop.h}%` }} />
-        <div className="absolute bg-black/55" style={{ top: `${crop.y}%`, left: 0, width: `${crop.x}%`, height: `${crop.h}%` }} />
-        <div className="absolute bg-black/55" style={{ top: `${crop.y}%`, right: 0, left: `${crop.x + crop.w}%`, height: `${crop.h}%` }} />
-      </div>
-
-      {/* Crop rectangle */}
-      <div
-        className="absolute border-2 border-white cursor-move"
-        style={{ left: `${crop.x}%`, top: `${crop.y}%`, width: `${crop.w}%`, height: `${crop.h}%` }}
-        onPointerDown={(e) => onHandleDown(e, 'move')}
-      >
-        {/* Rule-of-thirds grid */}
-        <div className="absolute inset-0 pointer-events-none">
-          <div className="absolute left-0 right-0 border-t border-white/30" style={{ top: '33.33%' }} />
-          <div className="absolute left-0 right-0 border-t border-white/30" style={{ top: '66.66%' }} />
-          <div className="absolute top-0 bottom-0 border-l border-white/30" style={{ left: '33.33%' }} />
-          <div className="absolute top-0 bottom-0 border-l border-white/30" style={{ left: '66.66%' }} />
-        </div>
-
-        {/* Corner handles */}
-        {CORNERS.map(({ id, style, cursor }) => (
-          <div
-            key={id}
-            className="absolute w-6 h-6 bg-white rounded-sm shadow-md"
-            style={{ ...style, cursor, position: 'absolute' }}
-            onPointerDown={(e) => onHandleDown(e, id)}
-          />
-        ))}
-      </div>
-    </div>
-  );
-
-  if (variant === 'inline') {
-    return (
-      <div className="flex flex-col gap-3">
-        <p className="text-xs text-slate-500 text-center">
-          Drag handles to crop — keep just the recipe
-        </p>
-        {cropArea}
-        <div className="flex gap-2">
-          <Button variant="secondary" fullWidth onClick={onCancel}>
-            <X size={14} /> Cancel
-          </Button>
-          <Button fullWidth onClick={applyCrop}>
-            <Check size={14} /> Accept
-          </Button>
-        </div>
-      </div>
-    );
-  }
-
-  return (
-    <div className="fixed inset-0 z-50 bg-black/80 flex flex-col items-center justify-center p-4 gap-4">
-      <p className="text-white text-sm font-medium text-center">
-        Drag handles to crop — keep just the recipe
+  // The image area uses a CSS grid wrapper so the containerRef div
+  // sizes itself to the image content rather than stretching to fill width.
+  // This ensures crop percentages map correctly to displayed image pixels.
+  const ui = (
+    <div className="fixed inset-0 z-[200] bg-black flex flex-col overflow-hidden">
+      <p className="shrink-0 text-white/70 text-xs text-center py-2">
+        Drag handles to crop
       </p>
-      <div className="w-full max-w-lg">
-        {cropArea}
+
+      {/* grid wrapper: centres the container and lets it shrink to image size */}
+      <div
+        style={{ flex: '1 1 0', minHeight: 0, display: 'grid', placeItems: 'center', overflow: 'hidden' }}
+      >
+        <div
+          ref={containerRef}
+          className="relative select-none touch-none"
+          style={{ lineHeight: 0 }}
+          onPointerMove={onMove}
+          onPointerUp={onUp}
+          onPointerLeave={onUp}
+        >
+          <img
+            ref={imgRef}
+            src={src}
+            alt="Crop preview"
+            style={{
+              display: 'block',
+              maxWidth: '100vw',
+              maxHeight: 'calc(100dvh - 8rem)',
+              width: 'auto',
+              height: 'auto',
+            }}
+            draggable={false}
+          />
+
+          {/* Dimmed areas outside crop */}
+          <div className="absolute inset-0 pointer-events-none overflow-hidden">
+            <div className="absolute bg-black/55" style={{ top: 0, left: 0, right: 0, height: `${crop.y}%` }} />
+            <div className="absolute bg-black/55" style={{ bottom: 0, left: 0, right: 0, top: `${crop.y + crop.h}%` }} />
+            <div className="absolute bg-black/55" style={{ top: `${crop.y}%`, left: 0, width: `${crop.x}%`, height: `${crop.h}%` }} />
+            <div className="absolute bg-black/55" style={{ top: `${crop.y}%`, right: 0, left: `${crop.x + crop.w}%`, height: `${crop.h}%` }} />
+          </div>
+
+          {/* Crop rectangle */}
+          <div
+            className="absolute border-2 border-white cursor-move"
+            style={{ left: `${crop.x}%`, top: `${crop.y}%`, width: `${crop.w}%`, height: `${crop.h}%` }}
+            onPointerDown={(e) => onHandleDown(e, 'move')}
+          >
+            {/* Rule-of-thirds grid */}
+            <div className="absolute inset-0 pointer-events-none">
+              <div className="absolute left-0 right-0 border-t border-white/30" style={{ top: '33.33%' }} />
+              <div className="absolute left-0 right-0 border-t border-white/30" style={{ top: '66.66%' }} />
+              <div className="absolute top-0 bottom-0 border-l border-white/30" style={{ left: '33.33%' }} />
+              <div className="absolute top-0 bottom-0 border-l border-white/30" style={{ left: '66.66%' }} />
+            </div>
+
+            {/* Corner handles */}
+            {CORNERS.map(({ id, style, cursor }) => (
+              <div
+                key={id}
+                className="absolute w-6 h-6 bg-white rounded-sm shadow-md"
+                style={{ ...style, cursor, position: 'absolute' }}
+                onPointerDown={(e) => onHandleDown(e, id)}
+              />
+            ))}
+          </div>
+        </div>
       </div>
-      <div className="flex gap-3 w-full max-w-lg">
+
+      {/* Action buttons */}
+      <div className="shrink-0 flex gap-3 px-6 py-4">
         <Button variant="secondary" fullWidth onClick={onCancel}>
           <X size={14} /> Cancel
         </Button>
@@ -206,4 +197,6 @@ export function ImageCropper({ src, onConfirm, onCancel, variant = 'modal' }: Pr
       </div>
     </div>
   );
+
+  return createPortal(ui, document.body);
 }
