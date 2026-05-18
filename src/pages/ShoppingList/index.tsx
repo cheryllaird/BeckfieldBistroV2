@@ -99,8 +99,8 @@ export function ShoppingListPage() {
       checked: false,
       manual: true,
     };
-    setShoppingItems([newItem, ...shoppingItems]);
     setManualItem('');
+    setShoppingItems([newItem, ...shoppingItems]);
   };
 
   const handleEditStart = (item: ShoppingItem) => {
