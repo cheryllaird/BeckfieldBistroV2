@@ -99,8 +99,8 @@ export function ShoppingListPage() {
       checked: false,
       manual: true,
     };
-    setShoppingItems([newItem, ...shoppingItems]);
     setManualItem('');
+    setShoppingItems([newItem, ...shoppingItems]);
   };
 
   const handleEditStart = (item: ShoppingItem) => {
@@ -339,15 +339,6 @@ export function ShoppingListPage() {
           )
         )}
       </div>
-
-      {mode === 'edit' && unchecked.length > 0 && (
-        <button
-          onClick={() => { pushHistory(); setShoppingItems([]); }}
-          className="text-xs text-slate-400 hover:text-red-500 transition-colors self-center"
-        >
-          Clear entire list
-        </button>
-      )}
 
       {/* Checked / In basket */}
       {checked.length > 0 && (
