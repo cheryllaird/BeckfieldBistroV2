@@ -1,4 +1,5 @@
 import { useState, useRef } from 'react';
+import { useTouchDrag } from '../../hooks/useTouchDrag';
 import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, Plus, Trash2, ChevronDown, Archive, GripVertical, ArrowUpDown } from 'lucide-react';
 import { useStore } from '../../store';
@@ -86,6 +87,7 @@ export function PantryPage() {
     dropTargetIndexRef.current = null;
   };
 
+
   const displayItems = (() => {
     if (!draggingItemId || dropTargetIndex === null) return pantryItems;
     const sourceIndex = pantryItems.findIndex((i) => i.id === draggingItemId);
@@ -155,12 +157,16 @@ export function PantryPage() {
             <PantryItemRow
               key={item.id}
               item={item}
+              dragIndex={index}
               isBeingDragged={item.id === draggingItemId}
               onCategoryChange={(cat) => handleCategoryChange(item.id, cat)}
               onRemove={() => removePantryItem(item.id)}
               onDragStart={() => handleDragStart(item.id)}
               onDragEnter={() => handleDragEnter(index)}
               onDragEnd={handleDragEnd}
+              onGripPointerDown={() => handleDragStart(item.id)}
+              onDragEnterAt={(idx) => handleDragEnter(idx)}
+              onTouchDragEnd={handleDragEnd}
             />
           ))}
         </div>
@@ -171,25 +177,43 @@ export function PantryPage() {
 
 function PantryItemRow({
   item,
+  dragIndex,
   isBeingDragged,
   onCategoryChange,
   onRemove,
   onDragStart,
   onDragEnter,
   onDragEnd,
+  onGripPointerDown,
+  onDragEnterAt,
+  onTouchDragEnd,
 }: {
   item: PantryItem;
+  dragIndex: number;
   isBeingDragged: boolean;
   onCategoryChange: (category: ShoppingCategory) => void;
   onRemove: () => void;
   onDragStart: () => void;
   onDragEnter: () => void;
   onDragEnd: () => void;
+  onGripPointerDown: () => void;
+  onDragEnterAt: (idx: number) => void;
+  onTouchDragEnd: () => void;
 }) {
   const fromGrip = useRef(false);
+  const gripRef = useRef<HTMLSpanElement>(null);
+
+  useTouchDrag({
+    gripRef,
+    enabled: true,
+    onStart: onGripPointerDown,
+    onMoveOver: onDragEnterAt,
+    onEnd: onTouchDragEnd,
+  });
 
   return (
     <div
+      data-drag-index={dragIndex}
       draggable
       onDragStart={(e) => {
         if (!fromGrip.current) { e.preventDefault(); return; }
@@ -210,12 +234,14 @@ function PantryItemRow({
           : 'border-slate-100',
       ].join(' ')}
     >
-      <GripVertical
-        size={16}
-        className="text-slate-300 shrink-0 cursor-grab active:cursor-grabbing touch-none select-none"
-        onPointerDown={() => { fromGrip.current = true; }}
-        onPointerUp={() => { fromGrip.current = false; }}
-      />
+      <span
+        ref={gripRef}
+        className="shrink-0 touch-none select-none cursor-grab active:cursor-grabbing"
+        onMouseDown={() => { fromGrip.current = true; }}
+        onMouseUp={() => { fromGrip.current = false; }}
+      >
+        <GripVertical size={16} className="text-slate-300 pointer-events-none" />
+      </span>
 
       <span className="text-sm text-slate-700 capitalize flex-1 min-w-0 truncate">
         {item.name}
