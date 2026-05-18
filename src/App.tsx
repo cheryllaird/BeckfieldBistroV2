@@ -56,10 +56,8 @@ function AuthenticatedApp() {
     const unsubRef = { current: null as (() => void) | null };
     let safetyTimer: ReturnType<typeof setTimeout> | null = null;
 
-    const hasCachedAuth = useStore.getState().isAuthenticated;
-
-    // No cached user — wait for Firebase, cap at 5 s so the splash can't hang.
-    if (!hasCachedAuth) {
+    // No persisted user yet (read before hydration) — cap the wait at 5 s.
+    if (!useStore.getState().isAuthenticated) {
       safetyTimer = setTimeout(() => setAuthChecked(true), 5000);
     }
 
@@ -84,6 +82,10 @@ function AuthenticatedApp() {
             const unsub = useStore.persist.onFinishHydration(() => { unsub(); resolve(); });
           }
         });
+
+        // Read isAuthenticated AFTER hydration so we see the persisted value,
+        // not the pre-hydration default of false.
+        const hasCachedAuth = useStore.getState().isAuthenticated;
 
         if (firebaseUser) {
           // Firebase Auth has loaded the cached user — set up Firestore

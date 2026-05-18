@@ -154,6 +154,11 @@ export function ShoppingListPage() {
   const handleDragEnd = () => {
     const itemId = draggingItemIdRef.current;
     const targetIndex = dropTargetIndexRef.current;
+    // Clear visual state first so the item never stays looking dragged.
+    setDraggingItemId(null);
+    setDropTargetIndex(null);
+    draggingItemIdRef.current = null;
+    dropTargetIndexRef.current = null;
     if (itemId && targetIndex !== null) {
       const sourceIndex = unchecked.findIndex((i) => i.id === itemId);
       if (sourceIndex !== -1 && sourceIndex !== targetIndex) {
@@ -164,10 +169,6 @@ export function ShoppingListPage() {
         reorderShoppingItems([...items, ...checked]);
       }
     }
-    setDraggingItemId(null);
-    setDropTargetIndex(null);
-    draggingItemIdRef.current = null;
-    dropTargetIndexRef.current = null;
   };
 
   const unchecked = shoppingItems.filter((i) => !i.checked);
