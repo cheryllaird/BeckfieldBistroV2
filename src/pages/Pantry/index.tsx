@@ -86,6 +86,31 @@ export function PantryPage() {
     dropTargetIndexRef.current = null;
   };
 
+  const handleGripPointerDown = (itemId: string, pointerId: number) => {
+    handleDragStart(itemId);
+
+    const onMove = (ev: PointerEvent) => {
+      if (ev.pointerId !== pointerId) return;
+      ev.preventDefault();
+      const el = document.elementFromPoint(ev.clientX, ev.clientY);
+      const row = (el as Element | null)?.closest('[data-drag-index]') as HTMLElement | null;
+      if (row) {
+        const idx = parseInt(row.dataset.dragIndex ?? '-1', 10);
+        if (idx >= 0) handleDragEnter(idx);
+      }
+    };
+
+    const onUp = (ev: PointerEvent) => {
+      if (ev.pointerId !== pointerId) return;
+      handleDragEnd();
+      document.removeEventListener('pointermove', onMove);
+      document.removeEventListener('pointerup', onUp);
+    };
+
+    document.addEventListener('pointermove', onMove, { passive: false });
+    document.addEventListener('pointerup', onUp);
+  };
+
   const displayItems = (() => {
     if (!draggingItemId || dropTargetIndex === null) return pantryItems;
     const sourceIndex = pantryItems.findIndex((i) => i.id === draggingItemId);
@@ -155,12 +180,14 @@ export function PantryPage() {
             <PantryItemRow
               key={item.id}
               item={item}
+              dragIndex={index}
               isBeingDragged={item.id === draggingItemId}
               onCategoryChange={(cat) => handleCategoryChange(item.id, cat)}
               onRemove={() => removePantryItem(item.id)}
               onDragStart={() => handleDragStart(item.id)}
               onDragEnter={() => handleDragEnter(index)}
               onDragEnd={handleDragEnd}
+              onGripPointerDown={(pid) => handleGripPointerDown(item.id, pid)}
             />
           ))}
         </div>
@@ -171,25 +198,30 @@ export function PantryPage() {
 
 function PantryItemRow({
   item,
+  dragIndex,
   isBeingDragged,
   onCategoryChange,
   onRemove,
   onDragStart,
   onDragEnter,
   onDragEnd,
+  onGripPointerDown,
 }: {
   item: PantryItem;
+  dragIndex: number;
   isBeingDragged: boolean;
   onCategoryChange: (category: ShoppingCategory) => void;
   onRemove: () => void;
   onDragStart: () => void;
   onDragEnter: () => void;
   onDragEnd: () => void;
+  onGripPointerDown: (pointerId: number) => void;
 }) {
   const fromGrip = useRef(false);
 
   return (
     <div
+      data-drag-index={dragIndex}
       draggable
       onDragStart={(e) => {
         if (!fromGrip.current) { e.preventDefault(); return; }
@@ -213,7 +245,14 @@ function PantryItemRow({
       <GripVertical
         size={16}
         className="text-slate-300 shrink-0 cursor-grab active:cursor-grabbing touch-none select-none"
-        onPointerDown={() => { fromGrip.current = true; }}
+        onPointerDown={(e) => {
+          fromGrip.current = true;
+          if (e.pointerType !== 'mouse') {
+            e.preventDefault();
+            e.currentTarget.releasePointerCapture(e.pointerId);
+            onGripPointerDown(e.pointerId);
+          }
+        }}
         onPointerUp={() => { fromGrip.current = false; }}
       />
 

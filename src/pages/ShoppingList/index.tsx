@@ -170,6 +170,31 @@ export function ShoppingListPage() {
     dropTargetIndexRef.current = null;
   };
 
+  const handleGripPointerDown = (itemId: string, pointerId: number) => {
+    handleDragStart(itemId);
+
+    const onMove = (ev: PointerEvent) => {
+      if (ev.pointerId !== pointerId) return;
+      ev.preventDefault();
+      const el = document.elementFromPoint(ev.clientX, ev.clientY);
+      const row = (el as Element | null)?.closest('[data-drag-index]') as HTMLElement | null;
+      if (row) {
+        const idx = parseInt(row.dataset.dragIndex ?? '-1', 10);
+        if (idx >= 0) handleDragEnter(idx);
+      }
+    };
+
+    const onUp = (ev: PointerEvent) => {
+      if (ev.pointerId !== pointerId) return;
+      handleDragEnd();
+      document.removeEventListener('pointermove', onMove);
+      document.removeEventListener('pointerup', onUp);
+    };
+
+    document.addEventListener('pointermove', onMove, { passive: false });
+    document.addEventListener('pointerup', onUp);
+  };
+
   const unchecked = shoppingItems.filter((i) => !i.checked);
   const checked = shoppingItems.filter((i) => i.checked);
 
@@ -323,6 +348,7 @@ export function ShoppingListPage() {
               key={item.id}
               item={item}
               isDraggable={true}
+              dragIndex={index}
               isBeingDragged={item.id === draggingItemId}
               isEditing={editingId === item.id}
               editingValue={editingValue}
@@ -335,6 +361,7 @@ export function ShoppingListPage() {
               onDragStart={() => handleDragStart(item.id)}
               onDragEnter={() => handleDragEnter(index)}
               onDragEnd={handleDragEnd}
+              onGripPointerDown={(pid) => handleGripPointerDown(item.id, pid)}
             />
           )
         )}
@@ -376,6 +403,7 @@ export function ShoppingListPage() {
                 onDragStart={() => {}}
                 onDragEnter={() => {}}
                 onDragEnd={() => {}}
+                onGripPointerDown={() => {}}
               />
             )
           )}
@@ -499,6 +527,7 @@ function MealSourcesModal({
 function EditItem({
   item,
   isDraggable,
+  dragIndex,
   isBeingDragged,
   isEditing,
   editingValue,
@@ -511,9 +540,11 @@ function EditItem({
   onDragStart,
   onDragEnter,
   onDragEnd,
+  onGripPointerDown,
 }: {
   item: ShoppingItem;
   isDraggable: boolean;
+  dragIndex?: number;
   isBeingDragged: boolean;
   isEditing: boolean;
   editingValue: string;
@@ -526,11 +557,13 @@ function EditItem({
   onDragStart: () => void;
   onDragEnter: () => void;
   onDragEnd: () => void;
+  onGripPointerDown: (pointerId: number) => void;
 }) {
   const fromGrip = useRef(false);
 
   return (
     <div
+      data-drag-index={dragIndex}
       draggable={isDraggable}
       onDragStart={(e) => {
         if (!fromGrip.current) { e.preventDefault(); return; }
@@ -554,7 +587,14 @@ function EditItem({
         <GripVertical
           size={16}
           className="text-slate-300 shrink-0 cursor-grab active:cursor-grabbing touch-none select-none"
-          onPointerDown={() => { fromGrip.current = true; }}
+          onPointerDown={(e) => {
+            fromGrip.current = true;
+            if (e.pointerType !== 'mouse') {
+              e.preventDefault();
+              e.currentTarget.releasePointerCapture(e.pointerId);
+              onGripPointerDown(e.pointerId);
+            }
+          }}
           onPointerUp={() => { fromGrip.current = false; }}
         />
       )}
