@@ -1,4 +1,5 @@
 import { useState, useRef } from 'react';
+import { useTouchDrag } from '../../hooks/useTouchDrag';
 import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, Plus, Trash2, ChevronDown, Archive, GripVertical, ArrowUpDown } from 'lucide-react';
 import { useStore } from '../../store';
@@ -200,8 +201,15 @@ function PantryItemRow({
   onTouchDragEnd: () => void;
 }) {
   const fromGrip = useRef(false);
-  const touchActive = useRef(false);
-  const touchMoved = useRef(false);
+  const gripRef = useRef<HTMLSpanElement>(null);
+
+  useTouchDrag({
+    gripRef,
+    enabled: true,
+    onStart: onGripPointerDown,
+    onMoveOver: onDragEnterAt,
+    onEnd: onTouchDragEnd,
+  });
 
   return (
     <div
@@ -226,47 +234,14 @@ function PantryItemRow({
           : 'border-slate-100',
       ].join(' ')}
     >
-      <GripVertical
-        size={16}
-        className="text-slate-300 shrink-0 cursor-grab active:cursor-grabbing touch-none select-none"
-        onPointerDown={(e) => {
-          if (e.pointerType === 'mouse') {
-            fromGrip.current = true;
-          } else {
-            e.preventDefault();
-            e.currentTarget.setPointerCapture(e.pointerId);
-            touchActive.current = true;
-            touchMoved.current = false;
-          }
-        }}
-        onPointerMove={(e) => {
-          if (!touchActive.current) return;
-          e.preventDefault();
-          if (!touchMoved.current) {
-            touchMoved.current = true;
-            onGripPointerDown();
-          }
-          const el = document.elementFromPoint(e.clientX, e.clientY);
-          const row = (el as Element | null)?.closest('[data-drag-index]') as HTMLElement | null;
-          if (row) {
-            const idx = parseInt(row.dataset.dragIndex ?? '-1', 10);
-            if (idx >= 0) onDragEnterAt(idx);
-          }
-        }}
-        onPointerUp={(e) => {
-          if (e.pointerType === 'mouse') { fromGrip.current = false; return; }
-          if (!touchActive.current) return;
-          touchActive.current = false;
-          if (touchMoved.current) onTouchDragEnd();
-          touchMoved.current = false;
-        }}
-        onPointerCancel={() => {
-          if (!touchActive.current) return;
-          touchActive.current = false;
-          if (touchMoved.current) onTouchDragEnd();
-          touchMoved.current = false;
-        }}
-      />
+      <span
+        ref={gripRef}
+        className="shrink-0 touch-none select-none cursor-grab active:cursor-grabbing"
+        onMouseDown={() => { fromGrip.current = true; }}
+        onMouseUp={() => { fromGrip.current = false; }}
+      >
+        <GripVertical size={16} className="text-slate-300 pointer-events-none" />
+      </span>
 
       <span className="text-sm text-slate-700 capitalize flex-1 min-w-0 truncate">
         {item.name}
