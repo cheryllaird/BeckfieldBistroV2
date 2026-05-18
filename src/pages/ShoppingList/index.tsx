@@ -340,15 +340,6 @@ export function ShoppingListPage() {
         )}
       </div>
 
-      {mode === 'edit' && unchecked.length > 0 && (
-        <button
-          onClick={() => { pushHistory(); setShoppingItems([]); }}
-          className="text-xs text-slate-400 hover:text-red-500 transition-colors self-center"
-        >
-          Clear entire list
-        </button>
-      )}
-
       {/* Checked / In basket */}
       {checked.length > 0 && (
         <div className="flex flex-col gap-1">
