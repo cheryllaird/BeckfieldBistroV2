@@ -86,30 +86,6 @@ export function PantryPage() {
     dropTargetIndexRef.current = null;
   };
 
-  const handleGripPointerDown = (itemId: string, pointerId: number) => {
-    handleDragStart(itemId);
-
-    const onMove = (ev: PointerEvent) => {
-      if (ev.pointerId !== pointerId) return;
-      ev.preventDefault();
-      const el = document.elementFromPoint(ev.clientX, ev.clientY);
-      const row = (el as Element | null)?.closest('[data-drag-index]') as HTMLElement | null;
-      if (row) {
-        const idx = parseInt(row.dataset.dragIndex ?? '-1', 10);
-        if (idx >= 0) handleDragEnter(idx);
-      }
-    };
-
-    const onUp = (ev: PointerEvent) => {
-      if (ev.pointerId !== pointerId) return;
-      handleDragEnd();
-      document.removeEventListener('pointermove', onMove);
-      document.removeEventListener('pointerup', onUp);
-    };
-
-    document.addEventListener('pointermove', onMove, { passive: false });
-    document.addEventListener('pointerup', onUp);
-  };
 
   const displayItems = (() => {
     if (!draggingItemId || dropTargetIndex === null) return pantryItems;
@@ -187,7 +163,9 @@ export function PantryPage() {
               onDragStart={() => handleDragStart(item.id)}
               onDragEnter={() => handleDragEnter(index)}
               onDragEnd={handleDragEnd}
-              onGripPointerDown={(pid) => handleGripPointerDown(item.id, pid)}
+              onGripPointerDown={() => handleDragStart(item.id)}
+              onDragEnterAt={(idx) => handleDragEnter(idx)}
+              onTouchDragEnd={handleDragEnd}
             />
           ))}
         </div>
@@ -206,6 +184,8 @@ function PantryItemRow({
   onDragEnter,
   onDragEnd,
   onGripPointerDown,
+  onDragEnterAt,
+  onTouchDragEnd,
 }: {
   item: PantryItem;
   dragIndex: number;
@@ -215,9 +195,13 @@ function PantryItemRow({
   onDragStart: () => void;
   onDragEnter: () => void;
   onDragEnd: () => void;
-  onGripPointerDown: (pointerId: number) => void;
+  onGripPointerDown: () => void;
+  onDragEnterAt: (idx: number) => void;
+  onTouchDragEnd: () => void;
 }) {
   const fromGrip = useRef(false);
+  const touchActive = useRef(false);
+  const touchMoved = useRef(false);
 
   return (
     <div
@@ -246,14 +230,42 @@ function PantryItemRow({
         size={16}
         className="text-slate-300 shrink-0 cursor-grab active:cursor-grabbing touch-none select-none"
         onPointerDown={(e) => {
-          fromGrip.current = true;
-          if (e.pointerType !== 'mouse') {
+          if (e.pointerType === 'mouse') {
+            fromGrip.current = true;
+          } else {
             e.preventDefault();
-            e.currentTarget.releasePointerCapture(e.pointerId);
-            onGripPointerDown(e.pointerId);
+            e.currentTarget.setPointerCapture(e.pointerId);
+            touchActive.current = true;
+            touchMoved.current = false;
           }
         }}
-        onPointerUp={() => { fromGrip.current = false; }}
+        onPointerMove={(e) => {
+          if (!touchActive.current) return;
+          e.preventDefault();
+          if (!touchMoved.current) {
+            touchMoved.current = true;
+            onGripPointerDown();
+          }
+          const el = document.elementFromPoint(e.clientX, e.clientY);
+          const row = (el as Element | null)?.closest('[data-drag-index]') as HTMLElement | null;
+          if (row) {
+            const idx = parseInt(row.dataset.dragIndex ?? '-1', 10);
+            if (idx >= 0) onDragEnterAt(idx);
+          }
+        }}
+        onPointerUp={(e) => {
+          if (e.pointerType === 'mouse') { fromGrip.current = false; return; }
+          if (!touchActive.current) return;
+          touchActive.current = false;
+          if (touchMoved.current) onTouchDragEnd();
+          touchMoved.current = false;
+        }}
+        onPointerCancel={() => {
+          if (!touchActive.current) return;
+          touchActive.current = false;
+          if (touchMoved.current) onTouchDragEnd();
+          touchMoved.current = false;
+        }}
       />
 
       <span className="text-sm text-slate-700 capitalize flex-1 min-w-0 truncate">
