@@ -229,12 +229,33 @@ export const useStore = create<Store>()(
 
         // Subscribe to real-time updates. First emission loads initial data;
         // subsequent emissions reflect changes from any device or tab.
+        //
+        // fromCache=true: Firestore served from its local IndexedDB (offline or
+        // server not yet reached). When the store already has data from Zustand's
+        // localStorage persist, that persisted data is the reliable offline copy —
+        // skip stale/partial Firestore cache snapshots. fromCache=false (server-
+        // confirmed) is always authoritative and always applied.
         _unsubscribeUserData = subscribeToUserData(firebaseUser.uid, {
-          onRecipes: (recipes) => set({ recipes }),
-          onMealEntries: (mealEntries) => set({ mealEntries }),
-          onShoppingItems: (shoppingItems) => set({ shoppingItems }),
-          onPantryItems: (pantryItems) => set({ pantryItems }),
-          onKnownSources: (knownSources) => set({ knownSources }),
+          onRecipes: (recipes, fromCache) => {
+            if (fromCache && get().recipes.length > 0) return;
+            set({ recipes });
+          },
+          onMealEntries: (mealEntries, fromCache) => {
+            if (fromCache && get().mealEntries.length > 0) return;
+            set({ mealEntries });
+          },
+          onShoppingItems: (shoppingItems, fromCache) => {
+            if (fromCache && get().shoppingItems.length > 0) return;
+            set({ shoppingItems });
+          },
+          onPantryItems: (pantryItems, fromCache) => {
+            if (fromCache && get().pantryItems.length > 0) return;
+            set({ pantryItems });
+          },
+          onKnownSources: (knownSources, fromCache) => {
+            if (fromCache && get().knownSources.length > 0) return;
+            set({ knownSources });
+          },
         });
 
         // Subscribe to incoming recipe shares for this user's email
@@ -252,11 +273,26 @@ export const useStore = create<Store>()(
         const { user } = get();
         if (!user || _unsubscribeUserData) return;
         _unsubscribeUserData = subscribeToUserData(user.uid, {
-          onRecipes: (recipes) => set({ recipes }),
-          onMealEntries: (mealEntries) => set({ mealEntries }),
-          onShoppingItems: (shoppingItems) => set({ shoppingItems }),
-          onPantryItems: (pantryItems) => set({ pantryItems }),
-          onKnownSources: (knownSources) => set({ knownSources }),
+          onRecipes: (recipes, fromCache) => {
+            if (fromCache && get().recipes.length > 0) return;
+            set({ recipes });
+          },
+          onMealEntries: (mealEntries, fromCache) => {
+            if (fromCache && get().mealEntries.length > 0) return;
+            set({ mealEntries });
+          },
+          onShoppingItems: (shoppingItems, fromCache) => {
+            if (fromCache && get().shoppingItems.length > 0) return;
+            set({ shoppingItems });
+          },
+          onPantryItems: (pantryItems, fromCache) => {
+            if (fromCache && get().pantryItems.length > 0) return;
+            set({ pantryItems });
+          },
+          onKnownSources: (knownSources, fromCache) => {
+            if (fromCache && get().knownSources.length > 0) return;
+            set({ knownSources });
+          },
         });
         if (user.email) {
           _unsubscribeShares = subscribeToIncomingShares(user.email, (incomingShares) =>
