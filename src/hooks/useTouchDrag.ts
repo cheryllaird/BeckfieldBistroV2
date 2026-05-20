@@ -1,12 +1,19 @@
 import { useEffect, useRef, type RefObject } from 'react';
 
 /**
- * Attaches immediate-response touch drag to a grip element.
- * Uses native touch events (not pointer events) to avoid interference
- * from the draggable attribute / HTML5 DnD on mobile browsers.
+ * Immediate-response touch drag for a grip handle element.
  *
- * Drag starts on first touchmove (not on touchstart) so a simple tap
- * on the handle doesn't flicker the drag state.
+ * Key design decisions:
+ * - Calls stopPropagation on touchstart so the draggable parent never sees
+ *   the touch, preventing its DnD long-press timer from starting (which
+ *   would otherwise fire touchcancel and swallow subsequent touch events).
+ * - Attaches touchmove/touchend/touchcancel directly to the grip DOM node.
+ *   Touch events are always dispatched to the element that received
+ *   touchstart, so these listeners fire reliably regardless of where the
+ *   finger moves, and regardless of what the parent draggable div does.
+ * - Window fallback for touchend/touchcancel as a safety net.
+ * - Drag starts on first touchmove (not touchstart) to avoid flickering
+ *   the drag state on a simple tap.
  */
 export function useTouchDrag({
   gripRef,
@@ -35,12 +42,24 @@ export function useTouchDrag({
     const handleTouchStart = (e: TouchEvent) => {
       if (e.touches.length !== 1) return;
       e.preventDefault();
+      e.stopPropagation(); // prevent draggable parent from seeing this touch
 
       let started = false;
-      const id = e.changedTouches[0].identifier;
+      let ended = false;
+
+      const finish = () => {
+        if (ended) return;
+        ended = true;
+        grip.removeEventListener('touchmove', handleTouchMove);
+        grip.removeEventListener('touchend', finish);
+        grip.removeEventListener('touchcancel', finish);
+        window.removeEventListener('touchend', finish);
+        window.removeEventListener('touchcancel', finish);
+        if (started) onEndRef.current();
+      };
 
       const handleTouchMove = (ev: TouchEvent) => {
-        const touch = Array.from(ev.changedTouches).find((t) => t.identifier === id);
+        const touch = ev.changedTouches[0] ?? ev.touches[0];
         if (!touch) return;
         ev.preventDefault();
         if (!started) {
@@ -55,17 +74,13 @@ export function useTouchDrag({
         }
       };
 
-      const handleTouchEndOrCancel = (ev: TouchEvent) => {
-        if (!Array.from(ev.changedTouches).find((t) => t.identifier === id)) return;
-        document.removeEventListener('touchmove', handleTouchMove);
-        document.removeEventListener('touchend', handleTouchEndOrCancel);
-        document.removeEventListener('touchcancel', handleTouchEndOrCancel);
-        if (started) onEndRef.current();
-      };
-
-      document.addEventListener('touchmove', handleTouchMove, { passive: false });
-      document.addEventListener('touchend', handleTouchEndOrCancel);
-      document.addEventListener('touchcancel', handleTouchEndOrCancel);
+      // Primary: grip element (always fires since touch target = touchstart target)
+      grip.addEventListener('touchmove', handleTouchMove, { passive: false });
+      grip.addEventListener('touchend', finish);
+      grip.addEventListener('touchcancel', finish);
+      // Fallback: window, in case something stops propagation on the way up
+      window.addEventListener('touchend', finish);
+      window.addEventListener('touchcancel', finish);
     };
 
     grip.addEventListener('touchstart', handleTouchStart, { passive: false });
