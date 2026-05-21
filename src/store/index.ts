@@ -40,19 +40,52 @@ function applyShoppingSnapshot(
   get: () => Store,
 ) {
   const pending = get().shoppingPendingToggles;
+  const localById: Record<string, ShoppingItem> = {};
+  for (const li of get().shoppingItems) localById[li.id] = li;
   const uid = get().user?.uid;
   const nextPending: Record<string, { checked: boolean; checkedAt: number }> = {};
+
   const merged = serverItems.map((item) => {
     const p = pending[item.id];
-    if (!p) return item;
+    const local = localById[item.id];
     const serverTs = item.checkedAt ?? 0;
-    if (p.checkedAt > serverTs) {
-      nextPending[item.id] = p;
-      if (uid) saveShoppingItem(uid, { ...item, checked: p.checked, checkedAt: p.checkedAt });
-      return { ...item, checked: p.checked, checkedAt: p.checkedAt };
+
+    // Explicit pending toggle wins when it's newer than the server
+    if (p) {
+      if (p.checkedAt > serverTs) {
+        nextPending[item.id] = p;
+        if (uid) saveShoppingItem(uid, { ...item, checked: p.checked, checkedAt: p.checkedAt });
+        return { ...item, checked: p.checked, checkedAt: p.checkedAt };
+      }
+      return item; // server is as-or-more recent — accept it
     }
-    return item;
+
+    // No pending entry — fall back to the localStorage-hydrated item.
+    // This handles the case where the user toggled items while running old
+    // code that didn't write shoppingPendingToggles, so the toggle survives
+    // at least one more reload.
+    if (local) {
+      const localTs = local.checkedAt ?? 0;
+      if (localTs > serverTs) {
+        // Local has a newer checkedAt — treat as implicit pending
+        nextPending[item.id] = { checked: local.checked, checkedAt: localTs };
+        if (uid) saveShoppingItem(uid, { ...item, checked: local.checked, checkedAt: localTs });
+        return { ...item, checked: local.checked, checkedAt: localTs };
+      }
+      // Neither side has a timestamp, but local says checked and server says not.
+      // Prefer local to avoid silently losing the user's edit. Stamp with now so
+      // future snapshots resolve correctly via timestamp comparison.
+      if (serverTs === 0 && localTs === 0 && local.checked && !item.checked) {
+        const now = Date.now();
+        nextPending[item.id] = { checked: true, checkedAt: now };
+        if (uid) saveShoppingItem(uid, { ...item, checked: true, checkedAt: now });
+        return { ...item, checked: true, checkedAt: now };
+      }
+    }
+
+    return item; // server wins
   });
+
   set({ shoppingItems: merged, shoppingPendingToggles: nextPending });
 }
 
