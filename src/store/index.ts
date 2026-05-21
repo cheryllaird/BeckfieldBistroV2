@@ -27,6 +27,35 @@ import type { Recipe, MealEntry, ShoppingItem, PantryItem, AppState, SharedRecip
 let _unsubscribeUserData: (() => void) | null = null;
 let _unsubscribeShares: (() => void) | null = null;
 
+// Reconciles a server snapshot of shopping items against pending local toggles.
+// For items with a pending toggle, the checkedAt timestamps decide the winner:
+// - pending newer than server  → keep local state and re-save (covers writes
+//   that didn't survive a reload, common on Android/iOS PWAs where Firestore's
+//   IndexedDB cache silently falls back to in-memory mode)
+// - server equal or newer       → server confirmed the toggle (or another
+//   device made a newer change); accept it and clear the pending entry.
+function applyShoppingSnapshot(
+  serverItems: ShoppingItem[],
+  set: (partial: Partial<Store>) => void,
+  get: () => Store,
+) {
+  const pending = get().shoppingPendingToggles;
+  const uid = get().user?.uid;
+  const nextPending: Record<string, { checked: boolean; checkedAt: number }> = {};
+  const merged = serverItems.map((item) => {
+    const p = pending[item.id];
+    if (!p) return item;
+    const serverTs = item.checkedAt ?? 0;
+    if (p.checkedAt > serverTs) {
+      nextPending[item.id] = p;
+      if (uid) saveShoppingItem(uid, { ...item, checked: p.checked, checkedAt: p.checkedAt });
+      return { ...item, checked: p.checked, checkedAt: p.checkedAt };
+    }
+    return item;
+  });
+  set({ shoppingItems: merged, shoppingPendingToggles: nextPending });
+}
+
 interface Store extends AppState {
   incomingShares: SharedRecipe[];
 
@@ -77,6 +106,7 @@ export const useStore = create<Store>()(
       recipes: [],
       mealEntries: [],
       shoppingItems: [],
+      shoppingPendingToggles: {},
       pantryItems: [],
       knownSources: [],
       isAuthenticated: false,
@@ -139,11 +169,20 @@ export const useStore = create<Store>()(
 
       toggleShoppingItem: (id) => {
         const checkedAt = Date.now();
-        set((s) => ({
-          shoppingItems: s.shoppingItems.map((item) =>
+        set((s) => {
+          const newItems = s.shoppingItems.map((item) =>
             item.id === id ? { ...item, checked: !item.checked, checkedAt } : item
-          ),
-        }));
+          );
+          const toggled = newItems.find((i) => i.id === id);
+          if (!toggled) return { shoppingItems: newItems };
+          return {
+            shoppingItems: newItems,
+            shoppingPendingToggles: {
+              ...s.shoppingPendingToggles,
+              [id]: { checked: toggled.checked, checkedAt },
+            },
+          };
+        });
         const uid = get().user?.uid;
         if (uid) {
           const item = get().shoppingItems.find((i) => i.id === id);
@@ -158,7 +197,13 @@ export const useStore = create<Store>()(
       },
 
       removeShoppingItem: (id) => {
-        set((s) => ({ shoppingItems: s.shoppingItems.filter((i) => i.id !== id) }));
+        set((s) => {
+          const { [id]: _removed, ...rest } = s.shoppingPendingToggles;
+          return {
+            shoppingItems: s.shoppingItems.filter((i) => i.id !== id),
+            shoppingPendingToggles: rest,
+          };
+        });
         const uid = get().user?.uid;
         if (uid) deleteShoppingItemDoc(uid, id);
       },
@@ -171,7 +216,13 @@ export const useStore = create<Store>()(
 
       clearCheckedItems: () => {
         const removed = get().shoppingItems.filter((i) => i.checked);
-        set((s) => ({ shoppingItems: s.shoppingItems.filter((i) => !i.checked) }));
+        const removedIds = new Set(removed.map((i) => i.id));
+        set((s) => ({
+          shoppingItems: s.shoppingItems.filter((i) => !i.checked),
+          shoppingPendingToggles: Object.fromEntries(
+            Object.entries(s.shoppingPendingToggles).filter(([id]) => !removedIds.has(id)),
+          ),
+        }));
         const uid = get().user?.uid;
         if (uid) removed.forEach((i) => deleteShoppingItemDoc(uid, i.id));
       },
@@ -222,6 +273,7 @@ export const useStore = create<Store>()(
             recipes: [],
             mealEntries: [],
             shoppingItems: [],
+            shoppingPendingToggles: {},
             pantryItems: [],
             knownSources: [],
             incomingShares: [],
@@ -236,12 +288,6 @@ export const useStore = create<Store>()(
         // localStorage persist, that persisted data is the reliable offline copy —
         // skip stale/partial Firestore cache snapshots. fromCache=false (server-
         // confirmed) is always authoritative and always applied.
-        // Track whether the first server-confirmed snapshot has been applied.
-        // On the first fromCache=false snapshot we merge server data with the
-        // localStorage-persisted state, preserving local `checked` values that
-        // may not have reached Firestore before the page was reloaded. Any
-        // discrepancy is re-saved so the server eventually catches up.
-        let shoppingItemsServerReady = false;
         _unsubscribeUserData = subscribeToUserData(firebaseUser.uid, {
           onRecipes: (recipes, fromCache) => {
             if (fromCache && get().recipes.length > 0) return;
@@ -253,34 +299,7 @@ export const useStore = create<Store>()(
           },
           onShoppingItems: (shoppingItems, fromCache) => {
             if (fromCache && get().shoppingItems.length > 0) return;
-            if (!shoppingItemsServerReady) {
-              shoppingItemsServerReady = true;
-              const uid = get().user?.uid;
-              const localItems = get().shoppingItems;
-              if (uid && localItems.length > 0) {
-                // Last-write-wins merge: for any item whose checked state differs
-                // between local and server, keep whichever was toggled more recently.
-                // This preserves your own toggles when the Firestore write was lost
-                // on reload, while still accepting another device's newer toggles.
-                const localMap = new Map(localItems.map((i) => [i.id, i]));
-                set({
-                  shoppingItems: shoppingItems.map((item) => {
-                    const local = localMap.get(item.id);
-                    if (local && local.checked !== item.checked) {
-                      const localTs = local.checkedAt ?? 0;
-                      const serverTs = item.checkedAt ?? 0;
-                      if (localTs > serverTs) {
-                        saveShoppingItem(uid, { ...item, checked: local.checked, checkedAt: localTs });
-                        return { ...item, checked: local.checked, checkedAt: localTs };
-                      }
-                    }
-                    return item;
-                  }),
-                });
-                return;
-              }
-            }
-            set({ shoppingItems });
+            applyShoppingSnapshot(shoppingItems, set, get);
           },
           onPantryItems: (pantryItems, fromCache) => {
             if (fromCache && get().pantryItems.length > 0) return;
@@ -306,7 +325,6 @@ export const useStore = create<Store>()(
       resubscribe: () => {
         const { user } = get();
         if (!user || _unsubscribeUserData) return;
-        let shoppingItemsServerReady = false;
         _unsubscribeUserData = subscribeToUserData(user.uid, {
           onRecipes: (recipes, fromCache) => {
             if (fromCache && get().recipes.length > 0) return;
@@ -318,30 +336,7 @@ export const useStore = create<Store>()(
           },
           onShoppingItems: (shoppingItems, fromCache) => {
             if (fromCache && get().shoppingItems.length > 0) return;
-            if (!shoppingItemsServerReady) {
-              shoppingItemsServerReady = true;
-              const uid = get().user?.uid;
-              const localItems = get().shoppingItems;
-              if (uid && localItems.length > 0) {
-                const localMap = new Map(localItems.map((i) => [i.id, i]));
-                set({
-                  shoppingItems: shoppingItems.map((item) => {
-                    const local = localMap.get(item.id);
-                    if (local && local.checked !== item.checked) {
-                      const localTs = local.checkedAt ?? 0;
-                      const serverTs = item.checkedAt ?? 0;
-                      if (localTs > serverTs) {
-                        saveShoppingItem(uid, { ...item, checked: local.checked, checkedAt: localTs });
-                        return { ...item, checked: local.checked, checkedAt: localTs };
-                      }
-                    }
-                    return item;
-                  }),
-                });
-                return;
-              }
-            }
-            set({ shoppingItems });
+            applyShoppingSnapshot(shoppingItems, set, get);
           },
           onPantryItems: (pantryItems, fromCache) => {
             if (fromCache && get().pantryItems.length > 0) return;
@@ -372,6 +367,7 @@ export const useStore = create<Store>()(
           recipes: [],
           mealEntries: [],
           shoppingItems: [],
+          shoppingPendingToggles: {},
           pantryItems: [],
           knownSources: [],
           incomingShares: [],
@@ -460,6 +456,7 @@ export const useStore = create<Store>()(
         recipes: s.recipes,
         mealEntries: s.mealEntries,
         shoppingItems: s.shoppingItems,
+        shoppingPendingToggles: s.shoppingPendingToggles,
         pantryItems: s.pantryItems,
         knownSources: s.knownSources,
       }),
