@@ -71,6 +71,11 @@ export function PantryPage() {
   const handleDragEnd = () => {
     const itemId = draggingItemIdRef.current;
     const targetIndex = dropTargetIndexRef.current;
+    // Clear visual state first so the item never stays looking dragged.
+    setDraggingItemId(null);
+    setDropTargetIndex(null);
+    draggingItemIdRef.current = null;
+    dropTargetIndexRef.current = null;
     if (itemId && targetIndex !== null) {
       const sourceIndex = pantryItems.findIndex((i) => i.id === itemId);
       if (sourceIndex !== -1 && sourceIndex !== targetIndex) {
@@ -80,10 +85,6 @@ export function PantryPage() {
         reorderPantryItems(items);
       }
     }
-    setDraggingItemId(null);
-    setDropTargetIndex(null);
-    draggingItemIdRef.current = null;
-    dropTargetIndexRef.current = null;
   };
 
   const displayItems = (() => {
