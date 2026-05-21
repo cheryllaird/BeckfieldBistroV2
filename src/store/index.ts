@@ -235,6 +235,12 @@ export const useStore = create<Store>()(
         // localStorage persist, that persisted data is the reliable offline copy —
         // skip stale/partial Firestore cache snapshots. fromCache=false (server-
         // confirmed) is always authoritative and always applied.
+        // Track whether the first server-confirmed snapshot has been applied.
+        // On the first fromCache=false snapshot we merge server data with the
+        // localStorage-persisted state, preserving local `checked` values that
+        // may not have reached Firestore before the page was reloaded. Any
+        // discrepancy is re-saved so the server eventually catches up.
+        let shoppingItemsServerReady = false;
         _unsubscribeUserData = subscribeToUserData(firebaseUser.uid, {
           onRecipes: (recipes, fromCache) => {
             if (fromCache && get().recipes.length > 0) return;
@@ -246,6 +252,27 @@ export const useStore = create<Store>()(
           },
           onShoppingItems: (shoppingItems, fromCache) => {
             if (fromCache && get().shoppingItems.length > 0) return;
+            if (!shoppingItemsServerReady) {
+              shoppingItemsServerReady = true;
+              const uid = get().user?.uid;
+              const localItems = get().shoppingItems;
+              if (uid && localItems.length > 0) {
+                const localChecked = new Map(localItems.map((i) => [i.id, i.checked]));
+                set({
+                  shoppingItems: shoppingItems.map((item) => {
+                    const localCheck = localChecked.get(item.id);
+                    if (localCheck !== undefined && localCheck !== item.checked) {
+                      // Local state disagrees with server (pending write was lost on
+                      // reload). Re-save so server catches up, and preserve local value.
+                      saveShoppingItem(uid, { ...item, checked: localCheck });
+                      return { ...item, checked: localCheck };
+                    }
+                    return item;
+                  }),
+                });
+                return;
+              }
+            }
             set({ shoppingItems });
           },
           onPantryItems: (pantryItems, fromCache) => {
@@ -272,6 +299,7 @@ export const useStore = create<Store>()(
       resubscribe: () => {
         const { user } = get();
         if (!user || _unsubscribeUserData) return;
+        let shoppingItemsServerReady = false;
         _unsubscribeUserData = subscribeToUserData(user.uid, {
           onRecipes: (recipes, fromCache) => {
             if (fromCache && get().recipes.length > 0) return;
@@ -283,6 +311,25 @@ export const useStore = create<Store>()(
           },
           onShoppingItems: (shoppingItems, fromCache) => {
             if (fromCache && get().shoppingItems.length > 0) return;
+            if (!shoppingItemsServerReady) {
+              shoppingItemsServerReady = true;
+              const uid = get().user?.uid;
+              const localItems = get().shoppingItems;
+              if (uid && localItems.length > 0) {
+                const localChecked = new Map(localItems.map((i) => [i.id, i.checked]));
+                set({
+                  shoppingItems: shoppingItems.map((item) => {
+                    const localCheck = localChecked.get(item.id);
+                    if (localCheck !== undefined && localCheck !== item.checked) {
+                      saveShoppingItem(uid, { ...item, checked: localCheck });
+                      return { ...item, checked: localCheck };
+                    }
+                    return item;
+                  }),
+                });
+                return;
+              }
+            }
             set({ shoppingItems });
           },
           onPantryItems: (pantryItems, fromCache) => {
