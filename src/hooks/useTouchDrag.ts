@@ -1,4 +1,4 @@
-import { useEffect, useRef, type RefObject } from 'react';
+import { useEffect, useRef, useState, type RefObject } from 'react';
 
 /**
  * Immediate-response touch drag for a grip handle element.
@@ -7,6 +7,9 @@ import { useEffect, useRef, type RefObject } from 'react';
  * - Calls stopPropagation on touchstart so the draggable parent never sees
  *   the touch, preventing its DnD long-press timer from starting (which
  *   would otherwise fire touchcancel and swallow subsequent touch events).
+ * - Returns isTouchDragging so the caller can set draggable={false} on the
+ *   container while a touch drag is active — this is the primary guard
+ *   against the browser DnD system stealing the touch sequence mid-drag.
  * - Attaches touchmove/touchend/touchcancel directly to the grip DOM node.
  *   Touch events are always dispatched to the element that received
  *   touchstart, so these listeners fire reliably regardless of where the
@@ -27,13 +30,15 @@ export function useTouchDrag({
   onStart: () => void;
   onMoveOver: (idx: number) => void;
   onEnd: () => void;
-}) {
+}): { isTouchDragging: boolean } {
   const onStartRef = useRef(onStart);
   const onMoveOverRef = useRef(onMoveOver);
   const onEndRef = useRef(onEnd);
   onStartRef.current = onStart;
   onMoveOverRef.current = onMoveOver;
   onEndRef.current = onEnd;
+
+  const [isTouchDragging, setIsTouchDragging] = useState(false);
 
   useEffect(() => {
     const grip = gripRef.current;
@@ -50,6 +55,7 @@ export function useTouchDrag({
       const finish = () => {
         if (ended) return;
         ended = true;
+        setIsTouchDragging(false);
         grip.removeEventListener('touchmove', handleTouchMove);
         grip.removeEventListener('touchend', finish);
         grip.removeEventListener('touchcancel', finish);
@@ -64,6 +70,7 @@ export function useTouchDrag({
         ev.preventDefault();
         if (!started) {
           started = true;
+          setIsTouchDragging(true);
           onStartRef.current();
         }
         const el = document.elementFromPoint(touch.clientX, touch.clientY);
@@ -86,4 +93,6 @@ export function useTouchDrag({
     grip.addEventListener('touchstart', handleTouchStart, { passive: false });
     return () => grip.removeEventListener('touchstart', handleTouchStart);
   }, [gripRef, enabled]);
+
+  return { isTouchDragging };
 }

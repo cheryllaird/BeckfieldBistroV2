@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { useTouchDrag } from '../../hooks/useTouchDrag';
 import { useNavigate } from 'react-router-dom';
 import {
@@ -170,6 +170,23 @@ export function ShoppingListPage() {
     draggingItemIdRef.current = null;
     dropTargetIndexRef.current = null;
   };
+
+  const handleDragEndRef = useRef(handleDragEnd);
+  handleDragEndRef.current = handleDragEnd;
+
+  // Guaranteed fallback: clear drag state on any window-level touch end,
+  // in case mobile browsers consume touchend before it reaches the hook's listeners.
+  useEffect(() => {
+    const onGlobalTouchEnd = () => {
+      if (draggingItemIdRef.current !== null) handleDragEndRef.current();
+    };
+    window.addEventListener('touchend', onGlobalTouchEnd);
+    window.addEventListener('touchcancel', onGlobalTouchEnd);
+    return () => {
+      window.removeEventListener('touchend', onGlobalTouchEnd);
+      window.removeEventListener('touchcancel', onGlobalTouchEnd);
+    };
+  }, []);
 
 
   const unchecked = shoppingItems.filter((i) => !i.checked);
@@ -547,7 +564,7 @@ function EditItem({
   const fromGrip = useRef(false);
   const gripRef = useRef<HTMLSpanElement>(null);
 
-  useTouchDrag({
+  const { isTouchDragging } = useTouchDrag({
     gripRef,
     enabled: isDraggable,
     onStart: onGripPointerDown,
@@ -558,7 +575,7 @@ function EditItem({
   return (
     <div
       data-drag-index={dragIndex}
-      draggable={isDraggable}
+      draggable={isDraggable && !isTouchDragging}
       onDragStart={(e) => {
         if (!fromGrip.current) { e.preventDefault(); return; }
         onDragStart();
