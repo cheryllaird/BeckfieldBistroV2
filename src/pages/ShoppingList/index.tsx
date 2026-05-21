@@ -1,4 +1,5 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
+import { useTouchDrag } from '../../hooks/useTouchDrag';
 import { useNavigate } from 'react-router-dom';
 import {
   ShoppingCart,
@@ -171,6 +172,24 @@ export function ShoppingListPage() {
     }
   };
 
+  const handleDragEndRef = useRef(handleDragEnd);
+  handleDragEndRef.current = handleDragEnd;
+
+  // Guaranteed fallback: clear drag state on any window-level touch end,
+  // in case mobile browsers consume touchend before it reaches the hook's listeners.
+  useEffect(() => {
+    const onGlobalTouchEnd = () => {
+      if (draggingItemIdRef.current !== null) handleDragEndRef.current();
+    };
+    window.addEventListener('touchend', onGlobalTouchEnd);
+    window.addEventListener('touchcancel', onGlobalTouchEnd);
+    return () => {
+      window.removeEventListener('touchend', onGlobalTouchEnd);
+      window.removeEventListener('touchcancel', onGlobalTouchEnd);
+    };
+  }, []);
+
+
   const unchecked = shoppingItems.filter((i) => !i.checked);
   const checked = shoppingItems.filter((i) => i.checked);
 
@@ -324,6 +343,7 @@ export function ShoppingListPage() {
               key={item.id}
               item={item}
               isDraggable={true}
+              dragIndex={index}
               isBeingDragged={item.id === draggingItemId}
               isEditing={editingId === item.id}
               editingValue={editingValue}
@@ -336,6 +356,9 @@ export function ShoppingListPage() {
               onDragStart={() => handleDragStart(item.id)}
               onDragEnter={() => handleDragEnter(index)}
               onDragEnd={handleDragEnd}
+              onGripPointerDown={() => handleDragStart(item.id)}
+              onDragEnterAt={(idx) => handleDragEnter(idx)}
+              onTouchDragEnd={handleDragEnd}
             />
           )
         )}
@@ -377,6 +400,9 @@ export function ShoppingListPage() {
                 onDragStart={() => {}}
                 onDragEnter={() => {}}
                 onDragEnd={() => {}}
+                onGripPointerDown={() => {}}
+                onDragEnterAt={() => {}}
+                onTouchDragEnd={() => {}}
               />
             )
           )}
@@ -500,6 +526,7 @@ function MealSourcesModal({
 function EditItem({
   item,
   isDraggable,
+  dragIndex,
   isBeingDragged,
   isEditing,
   editingValue,
@@ -512,9 +539,13 @@ function EditItem({
   onDragStart,
   onDragEnter,
   onDragEnd,
+  onGripPointerDown,
+  onDragEnterAt,
+  onTouchDragEnd,
 }: {
   item: ShoppingItem;
   isDraggable: boolean;
+  dragIndex?: number;
   isBeingDragged: boolean;
   isEditing: boolean;
   editingValue: string;
@@ -527,12 +558,25 @@ function EditItem({
   onDragStart: () => void;
   onDragEnter: () => void;
   onDragEnd: () => void;
+  onGripPointerDown: () => void;
+  onDragEnterAt: (idx: number) => void;
+  onTouchDragEnd: () => void;
 }) {
   const fromGrip = useRef(false);
+  const gripRef = useRef<HTMLSpanElement>(null);
+
+  const { isTouchDragging } = useTouchDrag({
+    gripRef,
+    enabled: isDraggable,
+    onStart: onGripPointerDown,
+    onMoveOver: onDragEnterAt,
+    onEnd: onTouchDragEnd,
+  });
 
   return (
     <div
-      draggable={isDraggable}
+      data-drag-index={dragIndex}
+      draggable={isDraggable && !isTouchDragging}
       onDragStart={(e) => {
         if (!fromGrip.current) { e.preventDefault(); return; }
         onDragStart();
@@ -552,12 +596,14 @@ function EditItem({
       ].join(' ')}
     >
       {isDraggable && (
-        <GripVertical
-          size={16}
-          className="text-slate-300 shrink-0 cursor-grab active:cursor-grabbing touch-none select-none"
-          onPointerDown={() => { fromGrip.current = true; }}
-          onPointerUp={() => { fromGrip.current = false; }}
-        />
+        <span
+          ref={gripRef}
+          className="shrink-0 touch-none select-none cursor-grab active:cursor-grabbing"
+          onMouseDown={() => { fromGrip.current = true; }}
+          onMouseUp={() => { fromGrip.current = false; }}
+        >
+          <GripVertical size={16} className="text-slate-300 pointer-events-none" />
+        </span>
       )}
 
       {isEditing ? (
