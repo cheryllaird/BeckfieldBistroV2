@@ -55,6 +55,7 @@ export interface ShoppingItem {
   name: string; // full plain text e.g. "2 cups flour" or "chicken breast"
   category: ShoppingCategory;
   checked: boolean;
+  checkedAt?: number; // epoch ms of last toggle, used for last-write-wins on reload
   order?: number;
   manual?: boolean;
   mealSources?: MealSource[];
@@ -104,6 +105,10 @@ export interface AppState {
   recipes: Recipe[];
   mealEntries: MealEntry[];
   shoppingItems: ShoppingItem[];
+  // Items whose checked state was toggled locally and is awaiting server
+  // confirmation. Persisted to localStorage so toggles survive reload even
+  // when Firestore's IndexedDB cache is unreliable (notably iOS Safari PWAs).
+  shoppingPendingToggles: Record<string, { checked: boolean; checkedAt: number }>;
   pantryItems: PantryItem[];
   knownSources: string[];
   isAuthenticated: boolean;
