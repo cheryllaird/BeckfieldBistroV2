@@ -55,6 +55,7 @@ export interface ShoppingItem {
   name: string; // full plain text e.g. "2 cups flour" or "chicken breast"
   category: ShoppingCategory;
   checked: boolean;
+  checkedAt?: number; // epoch ms of last toggle, used for last-write-wins on reload
   order?: number;
   manual?: boolean;
   mealSources?: MealSource[];

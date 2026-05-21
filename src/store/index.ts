@@ -138,9 +138,10 @@ export const useStore = create<Store>()(
       },
 
       toggleShoppingItem: (id) => {
+        const checkedAt = Date.now();
         set((s) => ({
           shoppingItems: s.shoppingItems.map((item) =>
-            item.id === id ? { ...item, checked: !item.checked } : item
+            item.id === id ? { ...item, checked: !item.checked, checkedAt } : item
           ),
         }));
         const uid = get().user?.uid;
@@ -257,15 +258,21 @@ export const useStore = create<Store>()(
               const uid = get().user?.uid;
               const localItems = get().shoppingItems;
               if (uid && localItems.length > 0) {
-                const localChecked = new Map(localItems.map((i) => [i.id, i.checked]));
+                // Last-write-wins merge: for any item whose checked state differs
+                // between local and server, keep whichever was toggled more recently.
+                // This preserves your own toggles when the Firestore write was lost
+                // on reload, while still accepting another device's newer toggles.
+                const localMap = new Map(localItems.map((i) => [i.id, i]));
                 set({
                   shoppingItems: shoppingItems.map((item) => {
-                    const localCheck = localChecked.get(item.id);
-                    if (localCheck !== undefined && localCheck !== item.checked) {
-                      // Local state disagrees with server (pending write was lost on
-                      // reload). Re-save so server catches up, and preserve local value.
-                      saveShoppingItem(uid, { ...item, checked: localCheck });
-                      return { ...item, checked: localCheck };
+                    const local = localMap.get(item.id);
+                    if (local && local.checked !== item.checked) {
+                      const localTs = local.checkedAt ?? 0;
+                      const serverTs = item.checkedAt ?? 0;
+                      if (localTs > serverTs) {
+                        saveShoppingItem(uid, { ...item, checked: local.checked, checkedAt: localTs });
+                        return { ...item, checked: local.checked, checkedAt: localTs };
+                      }
                     }
                     return item;
                   }),
@@ -316,13 +323,17 @@ export const useStore = create<Store>()(
               const uid = get().user?.uid;
               const localItems = get().shoppingItems;
               if (uid && localItems.length > 0) {
-                const localChecked = new Map(localItems.map((i) => [i.id, i.checked]));
+                const localMap = new Map(localItems.map((i) => [i.id, i]));
                 set({
                   shoppingItems: shoppingItems.map((item) => {
-                    const localCheck = localChecked.get(item.id);
-                    if (localCheck !== undefined && localCheck !== item.checked) {
-                      saveShoppingItem(uid, { ...item, checked: localCheck });
-                      return { ...item, checked: localCheck };
+                    const local = localMap.get(item.id);
+                    if (local && local.checked !== item.checked) {
+                      const localTs = local.checkedAt ?? 0;
+                      const serverTs = item.checkedAt ?? 0;
+                      if (localTs > serverTs) {
+                        saveShoppingItem(uid, { ...item, checked: local.checked, checkedAt: localTs });
+                        return { ...item, checked: local.checked, checkedAt: localTs };
+                      }
                     }
                     return item;
                   }),
