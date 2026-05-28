@@ -27,11 +27,11 @@ const profileDoc = (uid: string) => doc(db!, 'users', uid, 'meta', 'profile');
 // ── real-time subscription ────────────────────────────────────────────────────
 
 export interface UserDataCallbacks {
-  onRecipes: (recipes: Recipe[]) => void;
-  onMealEntries: (entries: MealEntry[]) => void;
-  onShoppingItems: (items: ShoppingItem[]) => void;
-  onPantryItems: (items: PantryItem[]) => void;
-  onKnownSources: (sources: string[]) => void;
+  onRecipes: (recipes: Recipe[], fromCache: boolean) => void;
+  onMealEntries: (entries: MealEntry[], fromCache: boolean) => void;
+  onShoppingItems: (items: ShoppingItem[], fromCache: boolean) => void;
+  onPantryItems: (items: PantryItem[], fromCache: boolean) => void;
+  onKnownSources: (sources: string[], fromCache: boolean) => void;
   onError?: (err: Error) => void;
 }
 
@@ -58,7 +58,7 @@ export function subscribeToUserData(uid: string, callbacks: UserDataCallbacks): 
     recipesCol(uid),
     (snap) => {
       if (skipIfCacheMiss(snap)) return;
-      callbacks.onRecipes(snap.docs.map((d) => d.data() as Recipe));
+      callbacks.onRecipes(snap.docs.map((d) => d.data() as Recipe), snap.metadata.fromCache);
     },
     handleError
   );
@@ -67,7 +67,7 @@ export function subscribeToUserData(uid: string, callbacks: UserDataCallbacks): 
     mealEntriesCol(uid),
     (snap) => {
       if (skipIfCacheMiss(snap)) return;
-      callbacks.onMealEntries(snap.docs.map((d) => d.data() as MealEntry));
+      callbacks.onMealEntries(snap.docs.map((d) => d.data() as MealEntry), snap.metadata.fromCache);
     },
     handleError
   );
@@ -78,7 +78,7 @@ export function subscribeToUserData(uid: string, callbacks: UserDataCallbacks): 
       if (skipIfCacheMiss(snap)) return;
       const items = snap.docs.map((d) => d.data() as ShoppingItem);
       items.sort((a, b) => (a.order ?? Infinity) - (b.order ?? Infinity));
-      callbacks.onShoppingItems(items);
+      callbacks.onShoppingItems(items, snap.metadata.fromCache);
     },
     handleError
   );
@@ -89,7 +89,7 @@ export function subscribeToUserData(uid: string, callbacks: UserDataCallbacks): 
       if (skipIfCacheMiss(snap)) return;
       const items = snap.docs.map((d) => d.data() as PantryItem);
       items.sort((a, b) => (a.order ?? Infinity) - (b.order ?? Infinity));
-      callbacks.onPantryItems(items);
+      callbacks.onPantryItems(items, snap.metadata.fromCache);
     },
     handleError
   );
@@ -98,7 +98,7 @@ export function subscribeToUserData(uid: string, callbacks: UserDataCallbacks): 
     profileDoc(uid),
     (snap) => {
       if (snap.metadata.fromCache && !snap.exists()) return;
-      callbacks.onKnownSources((snap.data()?.knownSources as string[]) ?? []);
+      callbacks.onKnownSources((snap.data()?.knownSources as string[]) ?? [], snap.metadata.fromCache);
     },
     handleError
   );

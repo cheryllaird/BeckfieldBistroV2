@@ -71,22 +71,74 @@ interface Store extends AppState {
   dismissAllShares: () => Promise<void>;
 }
 
+// Reconciles an incoming shopping-item snapshot against the locally-held items
+// using each item's `checkedAt` timestamp (last-write-wins). When the local
+// copy is strictly newer than the snapshot and its checked state differs, the
+// local toggle wins and is re-saved so the unsynced write is re-queued to the
+// server. This recovers toggles that didn't survive a refresh — common on
+// Android/iOS PWAs where Firestore's IndexedDB cache silently drops pending
+// writes — without losing newer changes made on another device.
+function reconcileShoppingItems(
+  incoming: ShoppingItem[],
+  get: () => Store,
+  set: (partial: Partial<Store>) => void,
+) {
+  const localById = new Map(get().shoppingItems.map((i) => [i.id, i]));
+  const uid = get().user?.uid;
+
+  const merged = incoming.map((item) => {
+    const local = localById.get(item.id);
+    if (!local) return item;
+    const localTs = local.checkedAt ?? 0;
+    const serverTs = item.checkedAt ?? 0;
+    if (localTs > serverTs && local.checked !== item.checked) {
+      const winner = { ...item, checked: local.checked, checkedAt: localTs };
+      if (uid) saveShoppingItem(uid, winner);
+      return winner;
+    }
+    return item;
+  });
+
+  set({ shoppingItems: merged });
+}
+
 // Attaches realtime Firestore listeners for a given user. The first emission
 // reflects Firestore's local IndexedDB cache (or is skipped when empty via
 // the skipIfCacheMiss guard in firestore.ts); subsequent emissions are
-// server-confirmed. Local writes are applied immediately to the cache by
-// persistentLocalCache, so cache snapshots already include them.
+// server-confirmed (fromCache === false).
+//
+// We ignore cache emissions once the store already holds data: Zustand has
+// hydrated that data from localStorage, which is the reliable offline copy.
+// Firestore's IndexedDB cache is unreliable on Android/iOS PWAs and can emit
+// stale (or empty) snapshots on refresh that would otherwise clobber it.
+// Server-confirmed snapshots are always authoritative and always applied.
 function attachListeners(
   uid: string,
   email: string | null,
   set: (partial: Partial<Store>) => void,
+  get: () => Store,
 ) {
   _unsubscribeUserData = subscribeToUserData(uid, {
-    onRecipes: (recipes) => set({ recipes }),
-    onMealEntries: (mealEntries) => set({ mealEntries }),
-    onShoppingItems: (shoppingItems) => set({ shoppingItems }),
-    onPantryItems: (pantryItems) => set({ pantryItems }),
-    onKnownSources: (knownSources) => set({ knownSources }),
+    onRecipes: (recipes, fromCache) => {
+      if (fromCache && get().recipes.length > 0) return;
+      set({ recipes });
+    },
+    onMealEntries: (mealEntries, fromCache) => {
+      if (fromCache && get().mealEntries.length > 0) return;
+      set({ mealEntries });
+    },
+    onShoppingItems: (shoppingItems, fromCache) => {
+      if (fromCache && get().shoppingItems.length > 0) return;
+      reconcileShoppingItems(shoppingItems, get, set);
+    },
+    onPantryItems: (pantryItems, fromCache) => {
+      if (fromCache && get().pantryItems.length > 0) return;
+      set({ pantryItems });
+    },
+    onKnownSources: (knownSources, fromCache) => {
+      if (fromCache && get().knownSources.length > 0) return;
+      set({ knownSources });
+    },
   });
 
   if (email) {
@@ -255,7 +307,7 @@ export const useStore = create<Store>()(
           }),
         });
 
-        attachListeners(firebaseUser.uid, firebaseUser.email, set);
+        attachListeners(firebaseUser.uid, firebaseUser.email, set, get);
       },
 
       // Re-attaches Firestore listeners for a cached user without resetting
@@ -264,7 +316,7 @@ export const useStore = create<Store>()(
       resubscribe: () => {
         const { user } = get();
         if (!user || _unsubscribeUserData) return;
-        attachListeners(user.uid, user.email, set);
+        attachListeners(user.uid, user.email, set, get);
       },
 
       signOut: async () => {
