@@ -71,22 +71,90 @@ interface Store extends AppState {
   dismissAllShares: () => Promise<void>;
 }
 
+// Reconciles an incoming shopping-item snapshot against the locally-held items
+// using each item's `checkedAt` timestamp (last-write-wins). When the local
+// copy is strictly newer than the snapshot and its checked state differs, the
+// local toggle wins and is re-saved so the unsynced write is re-queued to the
+// server. This recovers toggles that didn't survive a refresh — common on
+// Android/iOS PWAs where Firestore's IndexedDB cache silently drops pending
+// writes — without losing newer changes made on another device.
+function reconcileShoppingItems(
+  incoming: ShoppingItem[],
+  get: () => Store,
+  set: (partial: Partial<Store>) => void,
+) {
+  const localById = new Map(get().shoppingItems.map((i) => [i.id, i]));
+  const uid = get().user?.uid;
+
+  const merged = incoming.map((item) => {
+    const local = localById.get(item.id);
+    if (!local) return item;
+    const localTs = local.checkedAt ?? 0;
+    const serverTs = item.checkedAt ?? 0;
+    if (localTs > serverTs && local.checked !== item.checked) {
+      const winner = { ...item, checked: local.checked, checkedAt: localTs };
+      if (uid) saveShoppingItem(uid, winner);
+      return winner;
+    }
+    return item;
+  });
+
+  set({ shoppingItems: merged });
+}
+
+// Decides whether an incoming snapshot should be dropped instead of written
+// to the store. Two cases, both of which would otherwise clobber the data
+// Zustand hydrated from localStorage (the reliable offline copy):
+//
+//   1. fromCache emission while we already hold data — Firestore's IndexedDB
+//      cache is unreliable on Android/iOS PWAs and can emit stale snapshots on
+//      refresh.
+//   2. an *empty* emission (cache OR server) while we already hold data — on
+//      mobile the SDK can briefly report a collection empty before the real
+//      server result lands. Applying it wipes the store to [], which also
+//      disarms guard (1) for every later snapshot, causing the "flash empty
+//      then reappear with stale state" bug. Genuine deletions never rely on an
+//      empty snapshot: they mutate the store directly (removeShoppingItem,
+//      clearCheckedItems, deleteRecipe, …), so dropping empty emissions here is
+//      safe.
+//
+// Server-confirmed, non-empty snapshots are always authoritative and applied.
+function shouldSkipSnapshot(incomingLen: number, localLen: number, fromCache: boolean) {
+  if (localLen === 0) return false;
+  return fromCache || incomingLen === 0;
+}
+
 // Attaches realtime Firestore listeners for a given user. The first emission
 // reflects Firestore's local IndexedDB cache (or is skipped when empty via
 // the skipIfCacheMiss guard in firestore.ts); subsequent emissions are
-// server-confirmed. Local writes are applied immediately to the cache by
-// persistentLocalCache, so cache snapshots already include them.
+// server-confirmed (fromCache === false).
 function attachListeners(
   uid: string,
   email: string | null,
   set: (partial: Partial<Store>) => void,
+  get: () => Store,
 ) {
   _unsubscribeUserData = subscribeToUserData(uid, {
-    onRecipes: (recipes) => set({ recipes }),
-    onMealEntries: (mealEntries) => set({ mealEntries }),
-    onShoppingItems: (shoppingItems) => set({ shoppingItems }),
-    onPantryItems: (pantryItems) => set({ pantryItems }),
-    onKnownSources: (knownSources) => set({ knownSources }),
+    onRecipes: (recipes, fromCache) => {
+      if (shouldSkipSnapshot(recipes.length, get().recipes.length, fromCache)) return;
+      set({ recipes });
+    },
+    onMealEntries: (mealEntries, fromCache) => {
+      if (shouldSkipSnapshot(mealEntries.length, get().mealEntries.length, fromCache)) return;
+      set({ mealEntries });
+    },
+    onShoppingItems: (shoppingItems, fromCache) => {
+      if (shouldSkipSnapshot(shoppingItems.length, get().shoppingItems.length, fromCache)) return;
+      reconcileShoppingItems(shoppingItems, get, set);
+    },
+    onPantryItems: (pantryItems, fromCache) => {
+      if (shouldSkipSnapshot(pantryItems.length, get().pantryItems.length, fromCache)) return;
+      set({ pantryItems });
+    },
+    onKnownSources: (knownSources, fromCache) => {
+      if (shouldSkipSnapshot(knownSources.length, get().knownSources.length, fromCache)) return;
+      set({ knownSources });
+    },
   });
 
   if (email) {
@@ -255,7 +323,7 @@ export const useStore = create<Store>()(
           }),
         });
 
-        attachListeners(firebaseUser.uid, firebaseUser.email, set);
+        attachListeners(firebaseUser.uid, firebaseUser.email, set, get);
       },
 
       // Re-attaches Firestore listeners for a cached user without resetting
@@ -264,7 +332,7 @@ export const useStore = create<Store>()(
       resubscribe: () => {
         const { user } = get();
         if (!user || _unsubscribeUserData) return;
-        attachListeners(user.uid, user.email, set);
+        attachListeners(user.uid, user.email, set, get);
       },
 
       signOut: async () => {
