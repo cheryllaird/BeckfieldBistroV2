@@ -102,16 +102,32 @@ function reconcileShoppingItems(
   set({ shoppingItems: merged });
 }
 
+// Decides whether an incoming snapshot should be dropped instead of written
+// to the store. Two cases, both of which would otherwise clobber the data
+// Zustand hydrated from localStorage (the reliable offline copy):
+//
+//   1. fromCache emission while we already hold data — Firestore's IndexedDB
+//      cache is unreliable on Android/iOS PWAs and can emit stale snapshots on
+//      refresh.
+//   2. an *empty* emission (cache OR server) while we already hold data — on
+//      mobile the SDK can briefly report a collection empty before the real
+//      server result lands. Applying it wipes the store to [], which also
+//      disarms guard (1) for every later snapshot, causing the "flash empty
+//      then reappear with stale state" bug. Genuine deletions never rely on an
+//      empty snapshot: they mutate the store directly (removeShoppingItem,
+//      clearCheckedItems, deleteRecipe, …), so dropping empty emissions here is
+//      safe.
+//
+// Server-confirmed, non-empty snapshots are always authoritative and applied.
+function shouldSkipSnapshot(incomingLen: number, localLen: number, fromCache: boolean) {
+  if (localLen === 0) return false;
+  return fromCache || incomingLen === 0;
+}
+
 // Attaches realtime Firestore listeners for a given user. The first emission
 // reflects Firestore's local IndexedDB cache (or is skipped when empty via
 // the skipIfCacheMiss guard in firestore.ts); subsequent emissions are
 // server-confirmed (fromCache === false).
-//
-// We ignore cache emissions once the store already holds data: Zustand has
-// hydrated that data from localStorage, which is the reliable offline copy.
-// Firestore's IndexedDB cache is unreliable on Android/iOS PWAs and can emit
-// stale (or empty) snapshots on refresh that would otherwise clobber it.
-// Server-confirmed snapshots are always authoritative and always applied.
 function attachListeners(
   uid: string,
   email: string | null,
@@ -120,23 +136,23 @@ function attachListeners(
 ) {
   _unsubscribeUserData = subscribeToUserData(uid, {
     onRecipes: (recipes, fromCache) => {
-      if (fromCache && get().recipes.length > 0) return;
+      if (shouldSkipSnapshot(recipes.length, get().recipes.length, fromCache)) return;
       set({ recipes });
     },
     onMealEntries: (mealEntries, fromCache) => {
-      if (fromCache && get().mealEntries.length > 0) return;
+      if (shouldSkipSnapshot(mealEntries.length, get().mealEntries.length, fromCache)) return;
       set({ mealEntries });
     },
     onShoppingItems: (shoppingItems, fromCache) => {
-      if (fromCache && get().shoppingItems.length > 0) return;
+      if (shouldSkipSnapshot(shoppingItems.length, get().shoppingItems.length, fromCache)) return;
       reconcileShoppingItems(shoppingItems, get, set);
     },
     onPantryItems: (pantryItems, fromCache) => {
-      if (fromCache && get().pantryItems.length > 0) return;
+      if (shouldSkipSnapshot(pantryItems.length, get().pantryItems.length, fromCache)) return;
       set({ pantryItems });
     },
     onKnownSources: (knownSources, fromCache) => {
-      if (fromCache && get().knownSources.length > 0) return;
+      if (shouldSkipSnapshot(knownSources.length, get().knownSources.length, fromCache)) return;
       set({ knownSources });
     },
   });
