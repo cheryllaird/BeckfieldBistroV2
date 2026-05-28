@@ -47,17 +47,19 @@ export function subscribeToUserData(uid: string, callbacks: UserDataCallbacks): 
     callbacks.onError?.(err);
   };
 
-  // Guard: skip an empty cache-miss snapshot so it doesn't overwrite data
-  // already restored from localStorage. Firebase fires onSnapshot immediately
-  // with an empty result when offline and the collection has no local cache;
-  // without this guard that wipes the persisted store state.
-  const skipIfCacheMiss = (snap: { empty: boolean; metadata: { fromCache: boolean } }) =>
-    snap.metadata.fromCache && snap.empty;
+  // Apply only server-confirmed snapshots. Cache snapshots (fromCache: true)
+  // can be stale relative to the localStorage-hydrated Zustand state — Firestore's
+  // IndexedDB cache lags behind Zustand's synchronous localStorage write,
+  // especially on mobile PWAs. Skipping all fromCache emissions means local
+  // mutations are never overwritten by a stale cache view. The first
+  // fromCache: false snapshot after reconnecting is authoritative and replaces
+  // local state with the server-merged result (which includes any pending
+  // writes Firestore replayed from its mutation queue).
 
   const unsubRecipes = onSnapshot(
     recipesCol(uid),
     (snap) => {
-      if (skipIfCacheMiss(snap)) return;
+      if (snap.metadata.fromCache) return;
       callbacks.onRecipes(snap.docs.map((d) => d.data() as Recipe));
     },
     handleError
@@ -66,7 +68,7 @@ export function subscribeToUserData(uid: string, callbacks: UserDataCallbacks): 
   const unsubMealEntries = onSnapshot(
     mealEntriesCol(uid),
     (snap) => {
-      if (skipIfCacheMiss(snap)) return;
+      if (snap.metadata.fromCache) return;
       callbacks.onMealEntries(snap.docs.map((d) => d.data() as MealEntry));
     },
     handleError
@@ -75,7 +77,7 @@ export function subscribeToUserData(uid: string, callbacks: UserDataCallbacks): 
   const unsubShoppingItems = onSnapshot(
     shoppingItemsCol(uid),
     (snap) => {
-      if (skipIfCacheMiss(snap)) return;
+      if (snap.metadata.fromCache) return;
       const items = snap.docs.map((d) => d.data() as ShoppingItem);
       items.sort((a, b) => (a.order ?? Infinity) - (b.order ?? Infinity));
       callbacks.onShoppingItems(items);
@@ -86,7 +88,7 @@ export function subscribeToUserData(uid: string, callbacks: UserDataCallbacks): 
   const unsubPantryItems = onSnapshot(
     pantryItemsCol(uid),
     (snap) => {
-      if (skipIfCacheMiss(snap)) return;
+      if (snap.metadata.fromCache) return;
       const items = snap.docs.map((d) => d.data() as PantryItem);
       items.sort((a, b) => (a.order ?? Infinity) - (b.order ?? Infinity));
       callbacks.onPantryItems(items);
@@ -97,7 +99,7 @@ export function subscribeToUserData(uid: string, callbacks: UserDataCallbacks): 
   const unsubProfile = onSnapshot(
     profileDoc(uid),
     (snap) => {
-      if (snap.metadata.fromCache && !snap.exists()) return;
+      if (snap.metadata.fromCache) return;
       callbacks.onKnownSources((snap.data()?.knownSources as string[]) ?? []);
     },
     handleError

@@ -71,11 +71,10 @@ interface Store extends AppState {
   dismissAllShares: () => Promise<void>;
 }
 
-// Attaches realtime Firestore listeners for a given user. The first emission
-// reflects Firestore's local IndexedDB cache (or is skipped when empty via
-// the skipIfCacheMiss guard in firestore.ts); subsequent emissions are
-// server-confirmed. Local writes are applied immediately to the cache by
-// persistentLocalCache, so cache snapshots already include them.
+// Attaches realtime Firestore listeners for a given user. Only server-
+// confirmed snapshots reach these handlers; cache emissions are dropped
+// inside subscribeToUserData so they can't overwrite the Zustand state
+// hydrated from localStorage (which is the source of truth offline).
 function attachListeners(
   uid: string,
   email: string | null,
