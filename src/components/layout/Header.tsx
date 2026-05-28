@@ -44,6 +44,7 @@ export function Header() {
                   <div className="px-3 py-2 border-b border-slate-100">
                     <p className="text-sm font-medium text-slate-800">{user.name}</p>
                     <p className="text-xs text-slate-400">{user.email}</p>
+                    <p className="text-xs text-slate-300 mt-1">v{__APP_VERSION__}</p>
                   </div>
                   <button
                     onClick={() => { signOut(); setMenuOpen(false); }}
