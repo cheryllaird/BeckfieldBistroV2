@@ -5,7 +5,6 @@ import {
   setDoc,
   deleteDoc,
   writeBatch,
-  getDocs,
   addDoc,
   enableNetwork,
 } from 'firebase/firestore';
@@ -28,11 +27,11 @@ const profileDoc = (uid: string) => doc(db!, 'users', uid, 'meta', 'profile');
 // ── real-time subscription ────────────────────────────────────────────────────
 
 export interface UserDataCallbacks {
-  onRecipes: (recipes: Recipe[], fromCache: boolean) => void;
-  onMealEntries: (entries: MealEntry[], fromCache: boolean) => void;
-  onShoppingItems: (items: ShoppingItem[], fromCache: boolean) => void;
-  onPantryItems: (items: PantryItem[], fromCache: boolean) => void;
-  onKnownSources: (sources: string[], fromCache: boolean) => void;
+  onRecipes: (recipes: Recipe[]) => void;
+  onMealEntries: (entries: MealEntry[]) => void;
+  onShoppingItems: (items: ShoppingItem[]) => void;
+  onPantryItems: (items: PantryItem[]) => void;
+  onKnownSources: (sources: string[]) => void;
   onError?: (err: Error) => void;
 }
 
@@ -59,7 +58,7 @@ export function subscribeToUserData(uid: string, callbacks: UserDataCallbacks): 
     recipesCol(uid),
     (snap) => {
       if (skipIfCacheMiss(snap)) return;
-      callbacks.onRecipes(snap.docs.map((d) => d.data() as Recipe), snap.metadata.fromCache);
+      callbacks.onRecipes(snap.docs.map((d) => d.data() as Recipe));
     },
     handleError
   );
@@ -68,7 +67,7 @@ export function subscribeToUserData(uid: string, callbacks: UserDataCallbacks): 
     mealEntriesCol(uid),
     (snap) => {
       if (skipIfCacheMiss(snap)) return;
-      callbacks.onMealEntries(snap.docs.map((d) => d.data() as MealEntry), snap.metadata.fromCache);
+      callbacks.onMealEntries(snap.docs.map((d) => d.data() as MealEntry));
     },
     handleError
   );
@@ -79,7 +78,7 @@ export function subscribeToUserData(uid: string, callbacks: UserDataCallbacks): 
       if (skipIfCacheMiss(snap)) return;
       const items = snap.docs.map((d) => d.data() as ShoppingItem);
       items.sort((a, b) => (a.order ?? Infinity) - (b.order ?? Infinity));
-      callbacks.onShoppingItems(items, snap.metadata.fromCache);
+      callbacks.onShoppingItems(items);
     },
     handleError
   );
@@ -90,7 +89,7 @@ export function subscribeToUserData(uid: string, callbacks: UserDataCallbacks): 
       if (skipIfCacheMiss(snap)) return;
       const items = snap.docs.map((d) => d.data() as PantryItem);
       items.sort((a, b) => (a.order ?? Infinity) - (b.order ?? Infinity));
-      callbacks.onPantryItems(items, snap.metadata.fromCache);
+      callbacks.onPantryItems(items);
     },
     handleError
   );
@@ -99,7 +98,7 @@ export function subscribeToUserData(uid: string, callbacks: UserDataCallbacks): 
     profileDoc(uid),
     (snap) => {
       if (snap.metadata.fromCache && !snap.exists()) return;
-      callbacks.onKnownSources((snap.data()?.knownSources as string[]) ?? [], snap.metadata.fromCache);
+      callbacks.onKnownSources((snap.data()?.knownSources as string[]) ?? []);
     },
     handleError
   );
@@ -153,15 +152,13 @@ export function deleteShoppingItemDoc(uid: string, id: string): void {
   deleteDoc(doc(shoppingItemsCol(uid), id)).catch(console.error);
 }
 
-/** Batch replace the entire shopping list (used for setShoppingItems / reorder). */
-export async function saveShoppingItems(uid: string, items: ShoppingItem[]): Promise<void> {
+/** Batch write the shopping list with refreshed order indices. */
+export function saveShoppingItems(uid: string, items: ShoppingItem[]): void {
   const col = shoppingItemsCol(uid);
-
-  // Delete all existing docs first
-  const existing = await getDocs(col);
   const batch = writeBatch(db!);
-  existing.docs.forEach((d) => batch.delete(d.ref));
-  items.forEach((item, index) => batch.set(doc(col, item.id), stripUndefined({ ...item, order: index })));
+  items.forEach((item, index) =>
+    batch.set(doc(col, item.id), stripUndefined({ ...item, order: index })),
+  );
   batch.commit().catch(console.error);
 }
 
@@ -175,12 +172,12 @@ export function deletePantryItemDoc(uid: string, id: string): void {
   deleteDoc(doc(pantryItemsCol(uid), id)).catch(console.error);
 }
 
-export async function savePantryItems(uid: string, items: PantryItem[]): Promise<void> {
+export function savePantryItems(uid: string, items: PantryItem[]): void {
   const col = pantryItemsCol(uid);
-  const existing = await getDocs(col);
   const batch = writeBatch(db!);
-  existing.docs.forEach((d) => batch.delete(d.ref));
-  items.forEach((item, index) => batch.set(doc(col, item.id), stripUndefined({ ...item, order: index })));
+  items.forEach((item, index) =>
+    batch.set(doc(col, item.id), stripUndefined({ ...item, order: index })),
+  );
   batch.commit().catch(console.error);
 }
 

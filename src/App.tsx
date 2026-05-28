@@ -33,97 +33,55 @@ function AuthenticatedApp() {
   const { splashDone, isAuthenticated, signIn, resubscribe } = useStore();
   const [redirectError, setRedirectError] = useState<string | null>(null);
 
-  // Wait for Zustand's persist middleware to finish reading from localStorage
-  // before doing anything else. For synchronous storage this is nearly instant,
-  // but without this gate signIn() can run before the persisted user/recipes
-  // are in the store — causing the account-switch wipe to fire incorrectly.
-  const [hasHydrated, setHasHydrated] = useState(
-    () => useStore.persist.hasHydrated()
-  );
+  // Single gate: render nothing until Zustand has hydrated from localStorage.
+  // Everything below — auth checks, listener setup, persisted data — is
+  // accurate only after hydration.
+  const [hasHydrated, setHasHydrated] = useState(() => useStore.persist.hasHydrated());
   useEffect(() => {
-    if (!useStore.persist.hasHydrated()) {
-      return useStore.persist.onFinishHydration(() => setHasHydrated(true));
-    }
+    if (useStore.persist.hasHydrated()) return;
+    return useStore.persist.onFinishHydration(() => setHasHydrated(true));
   }, []);
 
-  // If the user was previously signed in (persisted to localStorage), skip
-  // the Firebase auth wait entirely — we already know who they are.
-  const [authChecked, setAuthChecked] = useState(
-    () => useStore.getState().isAuthenticated
-  );
+  // firebaseChecked flips true when onAuthStateChanged fires. We don't need
+  // to wait for it if we already have a persisted identity — that path
+  // renders against localStorage immediately and lets Firebase catch up.
+  const [firebaseChecked, setFirebaseChecked] = useState(false);
 
   useEffect(() => {
-    const unsubRef = { current: null as (() => void) | null };
-    let safetyTimer: ReturnType<typeof setTimeout> | null = null;
+    if (!hasHydrated) return;
 
-    // No persisted user yet (read before hydration) — cap the wait at 5 s.
-    if (!useStore.getState().isAuthenticated) {
-      safetyTimer = setTimeout(() => setAuthChecked(true), 5000);
+    // If we have a persisted user, attach Firestore listeners immediately —
+    // the UI can render against localStorage while Firebase validates the
+    // token in the background.
+    if (useStore.getState().isAuthenticated) {
+      resubscribe();
     }
 
-    // Do NOT call resubscribe() here. Firestore evaluates its security rules
-    // using Firebase Auth's internal state, which is null until
-    // onAuthStateChanged fires (it reads from its own IndexedDB asynchronously).
-    // Calling onSnapshot before auth is ready returns empty results / permission
-    // errors, leaving the library blank. Let onAuthStateChanged control all
-    // Firestore setup so the auth context is always ready first.
-
-    unsubRef.current = onAuthStateChanged(auth!, async (firebaseUser) => {
-      if (safetyTimer) { clearTimeout(safetyTimer); safetyTimer = null; }
-      try {
-        // Wait for Zustand's persist to finish reading from localStorage before
-        // calling signIn/resubscribe. Without this, signIn() can call set()
-        // while recipes:[] is still the default state, causing persist to write
-        // recipes:[] over the real localStorage data before hydration reads it.
-        await new Promise<void>((resolve) => {
-          if (useStore.persist.hasHydrated()) {
-            resolve();
-          } else {
-            const unsub = useStore.persist.onFinishHydration(() => { unsub(); resolve(); });
-          }
-        });
-
-        // Read isAuthenticated AFTER hydration so we see the persisted value,
-        // not the pre-hydration default of false.
-        const hasCachedAuth = useStore.getState().isAuthenticated;
-
-        if (firebaseUser) {
-          // Firebase Auth has loaded the cached user — set up Firestore
-          // subscriptions now that auth context is available.
-          signIn(firebaseUser);
-        } else if (hasCachedAuth) {
-          // Firebase returned null (offline token-refresh failure) but we have
-          // a persisted identity. Try attaching Firestore listeners anyway —
-          // Firebase Auth has at least finished initialising at this point so
-          // the local cache may be served even with a stale/missing token.
-          resubscribe();
-        }
-        // else: no cached auth and not signed in — show the login page.
-      } catch (e) {
-        console.error('Auth state change error:', e);
-      } finally {
-        setAuthChecked(true);
-      }
+    const unsubAuth = onAuthStateChanged(auth!, (firebaseUser) => {
+      if (firebaseUser) signIn(firebaseUser);
+      setFirebaseChecked(true);
     });
 
-    // Handle OAuth redirect results in the background — don't block
-    // onAuthStateChanged. Races with a 5 s timeout so it can't hang.
+    // Handle OAuth redirect results in the background — don't block render.
+    // Races with a 5 s timeout so it can't hang.
     Promise.race([
-      getRedirectResult(auth!).catch((e: any) => {
+      getRedirectResult(auth!).catch((e: { code?: string }) => {
         setRedirectError(authErrorMessage(e?.code ?? ''));
       }),
       new Promise<void>((resolve) => setTimeout(resolve, 5000)),
     ]);
 
     return () => {
-      unsubRef.current?.();
-      if (safetyTimer) clearTimeout(safetyTimer);
+      unsubAuth();
     };
-  }, []);
+  }, [hasHydrated, signIn, resubscribe]);
 
-  // Keep splash up until the store has hydrated from localStorage, the
-  // splash timer has fired, and auth state has been determined.
-  if (!hasHydrated || !splashDone || !authChecked) return <SplashScreen />;
+  // Splash stays up until we know what to render: hydration done, splash
+  // timer fired, and either a persisted session exists (render immediately)
+  // or Firebase has resolved the auth state (render Library or AuthPage).
+  if (!hasHydrated || !splashDone || (!isAuthenticated && !firebaseChecked)) {
+    return <SplashScreen />;
+  }
   if (!isAuthenticated) return <AuthPage initialError={redirectError} />;
 
   return (

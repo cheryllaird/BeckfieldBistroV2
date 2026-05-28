@@ -27,68 +27,6 @@ import type { Recipe, MealEntry, ShoppingItem, PantryItem, AppState, SharedRecip
 let _unsubscribeUserData: (() => void) | null = null;
 let _unsubscribeShares: (() => void) | null = null;
 
-// Reconciles a server snapshot of shopping items against pending local toggles.
-// For items with a pending toggle, the checkedAt timestamps decide the winner:
-// - pending newer than server  → keep local state and re-save (covers writes
-//   that didn't survive a reload, common on Android/iOS PWAs where Firestore's
-//   IndexedDB cache silently falls back to in-memory mode)
-// - server equal or newer       → server confirmed the toggle (or another
-//   device made a newer change); accept it and clear the pending entry.
-function applyShoppingSnapshot(
-  serverItems: ShoppingItem[],
-  set: (partial: Partial<Store>) => void,
-  get: () => Store,
-) {
-  const pending = get().shoppingPendingToggles;
-  const localById: Record<string, ShoppingItem> = {};
-  for (const li of get().shoppingItems) localById[li.id] = li;
-  const uid = get().user?.uid;
-  const nextPending: Record<string, { checked: boolean; checkedAt: number }> = {};
-
-  const merged = serverItems.map((item) => {
-    const p = pending[item.id];
-    const local = localById[item.id];
-    const serverTs = item.checkedAt ?? 0;
-
-    // Explicit pending toggle wins when it's newer than the server
-    if (p) {
-      if (p.checkedAt > serverTs) {
-        nextPending[item.id] = p;
-        if (uid) saveShoppingItem(uid, { ...item, checked: p.checked, checkedAt: p.checkedAt });
-        return { ...item, checked: p.checked, checkedAt: p.checkedAt };
-      }
-      return item; // server is as-or-more recent — accept it
-    }
-
-    // No pending entry — fall back to the localStorage-hydrated item.
-    // This handles the case where the user toggled items while running old
-    // code that didn't write shoppingPendingToggles, so the toggle survives
-    // at least one more reload.
-    if (local) {
-      const localTs = local.checkedAt ?? 0;
-      if (localTs > serverTs) {
-        // Local has a newer checkedAt — treat as implicit pending
-        nextPending[item.id] = { checked: local.checked, checkedAt: localTs };
-        if (uid) saveShoppingItem(uid, { ...item, checked: local.checked, checkedAt: localTs });
-        return { ...item, checked: local.checked, checkedAt: localTs };
-      }
-      // Neither side has a timestamp, but local says checked and server says not.
-      // Prefer local to avoid silently losing the user's edit. Stamp with now so
-      // future snapshots resolve correctly via timestamp comparison.
-      if (serverTs === 0 && localTs === 0 && local.checked && !item.checked) {
-        const now = Date.now();
-        nextPending[item.id] = { checked: true, checkedAt: now };
-        if (uid) saveShoppingItem(uid, { ...item, checked: true, checkedAt: now });
-        return { ...item, checked: true, checkedAt: now };
-      }
-    }
-
-    return item; // server wins
-  });
-
-  set({ shoppingItems: merged, shoppingPendingToggles: nextPending });
-}
-
 interface Store extends AppState {
   incomingShares: SharedRecipe[];
 
@@ -133,13 +71,37 @@ interface Store extends AppState {
   dismissAllShares: () => Promise<void>;
 }
 
+// Attaches realtime Firestore listeners for a given user. The first emission
+// reflects Firestore's local IndexedDB cache (or is skipped when empty via
+// the skipIfCacheMiss guard in firestore.ts); subsequent emissions are
+// server-confirmed. Local writes are applied immediately to the cache by
+// persistentLocalCache, so cache snapshots already include them.
+function attachListeners(
+  uid: string,
+  email: string | null,
+  set: (partial: Partial<Store>) => void,
+) {
+  _unsubscribeUserData = subscribeToUserData(uid, {
+    onRecipes: (recipes) => set({ recipes }),
+    onMealEntries: (mealEntries) => set({ mealEntries }),
+    onShoppingItems: (shoppingItems) => set({ shoppingItems }),
+    onPantryItems: (pantryItems) => set({ pantryItems }),
+    onKnownSources: (knownSources) => set({ knownSources }),
+  });
+
+  if (email) {
+    _unsubscribeShares = subscribeToIncomingShares(email, (incomingShares) =>
+      set({ incomingShares }),
+    );
+  }
+}
+
 export const useStore = create<Store>()(
   persist(
     (set, get) => ({
       recipes: [],
       mealEntries: [],
       shoppingItems: [],
-      shoppingPendingToggles: {},
       pantryItems: [],
       knownSources: [],
       isAuthenticated: false,
@@ -202,20 +164,11 @@ export const useStore = create<Store>()(
 
       toggleShoppingItem: (id) => {
         const checkedAt = Date.now();
-        set((s) => {
-          const newItems = s.shoppingItems.map((item) =>
-            item.id === id ? { ...item, checked: !item.checked, checkedAt } : item
-          );
-          const toggled = newItems.find((i) => i.id === id);
-          if (!toggled) return { shoppingItems: newItems };
-          return {
-            shoppingItems: newItems,
-            shoppingPendingToggles: {
-              ...s.shoppingPendingToggles,
-              [id]: { checked: toggled.checked, checkedAt },
-            },
-          };
-        });
+        set((s) => ({
+          shoppingItems: s.shoppingItems.map((item) =>
+            item.id === id ? { ...item, checked: !item.checked, checkedAt } : item,
+          ),
+        }));
         const uid = get().user?.uid;
         if (uid) {
           const item = get().shoppingItems.find((i) => i.id === id);
@@ -230,13 +183,7 @@ export const useStore = create<Store>()(
       },
 
       removeShoppingItem: (id) => {
-        set((s) => {
-          const { [id]: _removed, ...rest } = s.shoppingPendingToggles;
-          return {
-            shoppingItems: s.shoppingItems.filter((i) => i.id !== id),
-            shoppingPendingToggles: rest,
-          };
-        });
+        set((s) => ({ shoppingItems: s.shoppingItems.filter((i) => i.id !== id) }));
         const uid = get().user?.uid;
         if (uid) deleteShoppingItemDoc(uid, id);
       },
@@ -249,13 +196,7 @@ export const useStore = create<Store>()(
 
       clearCheckedItems: () => {
         const removed = get().shoppingItems.filter((i) => i.checked);
-        const removedIds = new Set(removed.map((i) => i.id));
-        set((s) => ({
-          shoppingItems: s.shoppingItems.filter((i) => !i.checked),
-          shoppingPendingToggles: Object.fromEntries(
-            Object.entries(s.shoppingPendingToggles).filter(([id]) => !removedIds.has(id)),
-          ),
-        }));
+        set((s) => ({ shoppingItems: s.shoppingItems.filter((i) => !i.checked) }));
         const uid = get().user?.uid;
         if (uid) removed.forEach((i) => deleteShoppingItemDoc(uid, i.id));
       },
@@ -288,6 +229,8 @@ export const useStore = create<Store>()(
         // Tear down any previous listeners (e.g. if signIn is called twice)
         _unsubscribeUserData?.();
         _unsubscribeShares?.();
+        _unsubscribeUserData = null;
+        _unsubscribeShares = null;
 
         const existingUid = get().user?.uid;
 
@@ -306,50 +249,13 @@ export const useStore = create<Store>()(
             recipes: [],
             mealEntries: [],
             shoppingItems: [],
-            shoppingPendingToggles: {},
             pantryItems: [],
             knownSources: [],
             incomingShares: [],
           }),
         });
 
-        // Subscribe to real-time updates. First emission loads initial data;
-        // subsequent emissions reflect changes from any device or tab.
-        //
-        // fromCache=true: Firestore served from its local IndexedDB (offline or
-        // server not yet reached). When the store already has data from Zustand's
-        // localStorage persist, that persisted data is the reliable offline copy —
-        // skip stale/partial Firestore cache snapshots. fromCache=false (server-
-        // confirmed) is always authoritative and always applied.
-        _unsubscribeUserData = subscribeToUserData(firebaseUser.uid, {
-          onRecipes: (recipes, fromCache) => {
-            if (fromCache && get().recipes.length > 0) return;
-            set({ recipes });
-          },
-          onMealEntries: (mealEntries, fromCache) => {
-            if (fromCache && get().mealEntries.length > 0) return;
-            set({ mealEntries });
-          },
-          onShoppingItems: (shoppingItems, fromCache) => {
-            if (fromCache && get().shoppingItems.length > 0) return;
-            applyShoppingSnapshot(shoppingItems, set, get);
-          },
-          onPantryItems: (pantryItems, fromCache) => {
-            if (fromCache && get().pantryItems.length > 0) return;
-            set({ pantryItems });
-          },
-          onKnownSources: (knownSources, fromCache) => {
-            if (fromCache && get().knownSources.length > 0) return;
-            set({ knownSources });
-          },
-        });
-
-        // Subscribe to incoming recipe shares for this user's email
-        if (firebaseUser.email) {
-          _unsubscribeShares = subscribeToIncomingShares(firebaseUser.email, (incomingShares) =>
-            set({ incomingShares })
-          );
-        }
+        attachListeners(firebaseUser.uid, firebaseUser.email, set);
       },
 
       // Re-attaches Firestore listeners for a cached user without resetting
@@ -358,33 +264,7 @@ export const useStore = create<Store>()(
       resubscribe: () => {
         const { user } = get();
         if (!user || _unsubscribeUserData) return;
-        _unsubscribeUserData = subscribeToUserData(user.uid, {
-          onRecipes: (recipes, fromCache) => {
-            if (fromCache && get().recipes.length > 0) return;
-            set({ recipes });
-          },
-          onMealEntries: (mealEntries, fromCache) => {
-            if (fromCache && get().mealEntries.length > 0) return;
-            set({ mealEntries });
-          },
-          onShoppingItems: (shoppingItems, fromCache) => {
-            if (fromCache && get().shoppingItems.length > 0) return;
-            applyShoppingSnapshot(shoppingItems, set, get);
-          },
-          onPantryItems: (pantryItems, fromCache) => {
-            if (fromCache && get().pantryItems.length > 0) return;
-            set({ pantryItems });
-          },
-          onKnownSources: (knownSources, fromCache) => {
-            if (fromCache && get().knownSources.length > 0) return;
-            set({ knownSources });
-          },
-        });
-        if (user.email) {
-          _unsubscribeShares = subscribeToIncomingShares(user.email, (incomingShares) =>
-            set({ incomingShares })
-          );
-        }
+        attachListeners(user.uid, user.email, set);
       },
 
       signOut: async () => {
@@ -400,7 +280,6 @@ export const useStore = create<Store>()(
           recipes: [],
           mealEntries: [],
           shoppingItems: [],
-          shoppingPendingToggles: {},
           pantryItems: [],
           knownSources: [],
           incomingShares: [],
@@ -489,10 +368,9 @@ export const useStore = create<Store>()(
         recipes: s.recipes,
         mealEntries: s.mealEntries,
         shoppingItems: s.shoppingItems,
-        shoppingPendingToggles: s.shoppingPendingToggles,
         pantryItems: s.pantryItems,
         knownSources: s.knownSources,
       }),
-    }
-  )
+    },
+  ),
 );
