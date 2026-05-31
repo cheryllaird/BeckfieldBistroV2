@@ -40,6 +40,7 @@ export interface MealEntry {
   servings: number;
   location?: string; // for dining-out
   mealTime?: MealTime;
+  updatedAt?: number; // epoch ms of last write, used for last-write-wins on reload
 }
 
 export interface MealSource {

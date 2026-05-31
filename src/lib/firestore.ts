@@ -18,6 +18,15 @@ function stripUndefined<T extends object>(obj: T): T {
   return JSON.parse(JSON.stringify(obj));
 }
 
+// Re-enable network in case the SDK got stuck in offline mode. On Android/iOS
+// PWAs the SDK can silently drop queued writes while it believes it is offline,
+// which leaves the server stale and makes refreshes revert to old state. Recipe
+// writes already do this; shopping/meal/pantry writes were fire-and-forget and
+// so were the ones that most often failed to reach the server.
+function kickNetwork(): void {
+  if (db) enableNetwork(db).catch(() => {});
+}
+
 const recipesCol = (uid: string) => collection(db!, 'users', uid, 'recipes');
 const mealEntriesCol = (uid: string) => collection(db!, 'users', uid, 'mealEntries');
 const shoppingItemsCol = (uid: string) => collection(db!, 'users', uid, 'shoppingItems');
@@ -115,8 +124,7 @@ export function subscribeToUserData(uid: string, callbacks: UserDataCallbacks): 
 // ── recipes ───────────────────────────────────────────────────────────────────
 
 export function saveRecipe(uid: string, recipe: Recipe): Promise<void> {
-  // Re-enable network in case the SDK got stuck in offline mode.
-  enableNetwork(db!).catch(() => {});
+  kickNetwork();
 
   const writePromise = setDoc(doc(recipesCol(uid), recipe.id), stripUndefined(recipe));
   // 5-second timeout: if the server hasn't acknowledged by then, the write is
@@ -135,6 +143,7 @@ export function deleteRecipeDoc(uid: string, id: string): void {
 // ── meal entries ──────────────────────────────────────────────────────────────
 
 export function saveMealEntry(uid: string, entry: MealEntry): void {
+  kickNetwork();
   setDoc(doc(mealEntriesCol(uid), entry.id), stripUndefined(entry)).catch(console.error);
 }
 
@@ -145,6 +154,7 @@ export function deleteMealEntryDoc(uid: string, id: string): void {
 // ── shopping items ────────────────────────────────────────────────────────────
 
 export function saveShoppingItem(uid: string, item: ShoppingItem): void {
+  kickNetwork();
   setDoc(doc(shoppingItemsCol(uid), item.id), stripUndefined(item)).catch(console.error);
 }
 
@@ -154,6 +164,7 @@ export function deleteShoppingItemDoc(uid: string, id: string): void {
 
 /** Batch write the shopping list with refreshed order indices. */
 export function saveShoppingItems(uid: string, items: ShoppingItem[]): void {
+  kickNetwork();
   const col = shoppingItemsCol(uid);
   const batch = writeBatch(db!);
   items.forEach((item, index) =>
@@ -165,6 +176,7 @@ export function saveShoppingItems(uid: string, items: ShoppingItem[]): void {
 // ── pantry items ──────────────────────────────────────────────────────────────
 
 export function savePantryItem(uid: string, item: PantryItem): void {
+  kickNetwork();
   setDoc(doc(pantryItemsCol(uid), item.id), stripUndefined(item)).catch(console.error);
 }
 
@@ -173,6 +185,7 @@ export function deletePantryItemDoc(uid: string, id: string): void {
 }
 
 export function savePantryItems(uid: string, items: PantryItem[]): void {
+  kickNetwork();
   const col = pantryItemsCol(uid);
   const batch = writeBatch(db!);
   items.forEach((item, index) =>
@@ -193,6 +206,7 @@ export function logCategoryOverride(uid: string, entry: Omit<CategoryOverrideLog
 // ── sources ───────────────────────────────────────────────────────────────────
 
 export function saveKnownSources(uid: string, sources: string[]): void {
+  kickNetwork();
   setDoc(profileDoc(uid), { knownSources: sources }, { merge: true }).catch(console.error);
 }
 

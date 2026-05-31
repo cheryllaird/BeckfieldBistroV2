@@ -102,6 +102,61 @@ function reconcileShoppingItems(
   set({ shoppingItems: merged });
 }
 
+// How long a locally-held meal entry that is missing from the server snapshot is
+// still treated as an unsynced add (and re-saved) rather than a deletion. Covers
+// the common "added a meal, write was dropped, refreshed" case while not
+// resurrecting entries genuinely deleted on another device (those carry an old
+// updatedAt). Generous because a stuck SDK may not resync until reopened.
+const MEAL_RESURRECT_WINDOW_MS = 24 * 60 * 60 * 1000;
+
+// Reconciles an incoming meal-entry snapshot against the locally-held entries.
+// Like reconcileShoppingItems, this recovers writes that didn't survive a refresh
+// — common on Android/iOS PWAs where Firestore's IndexedDB cache silently drops
+// pending writes. Meal entries carry no `checked` flag, so the unit of conflict
+// is the whole entry, compared by `updatedAt` (last-write-wins):
+//
+//   1. present in both: the side with the newer `updatedAt` wins; a local win is
+//      re-saved so the unsynced edit is re-queued to the server.
+//   2. present only locally with a recent `updatedAt`: treated as an unsynced add
+//      and kept + re-saved. Older local-only entries are dropped (the server is
+//      authoritative for membership, so deletions made elsewhere stick).
+//
+// Genuine deletions mutate the store directly (deleteMealEntry), so dropping
+// stale local-only entries here is safe.
+function reconcileMealEntries(
+  incoming: MealEntry[],
+  get: () => Store,
+  set: (partial: Partial<Store>) => void,
+) {
+  const localById = new Map(get().mealEntries.map((e) => [e.id, e]));
+  const uid = get().user?.uid;
+  const now = Date.now();
+
+  const merged = incoming.map((entry) => {
+    const local = localById.get(entry.id);
+    localById.delete(entry.id);
+    if (!local) return entry;
+    const localTs = local.updatedAt ?? 0;
+    const serverTs = entry.updatedAt ?? 0;
+    if (localTs > serverTs) {
+      if (uid) saveMealEntry(uid, local);
+      return local;
+    }
+    return entry;
+  });
+
+  // Whatever remains in localById was not in the server snapshot. Keep (and
+  // re-queue) only the recently-written ones as unsynced adds.
+  for (const local of localById.values()) {
+    if ((local.updatedAt ?? 0) > now - MEAL_RESURRECT_WINDOW_MS) {
+      if (uid) saveMealEntry(uid, local);
+      merged.push(local);
+    }
+  }
+
+  set({ mealEntries: merged });
+}
+
 // Decides whether an incoming snapshot should be dropped instead of written
 // to the store. Two cases, both of which would otherwise clobber the data
 // Zustand hydrated from localStorage (the reliable offline copy):
@@ -141,7 +196,7 @@ function attachListeners(
     },
     onMealEntries: (mealEntries, fromCache) => {
       if (shouldSkipSnapshot(mealEntries.length, get().mealEntries.length, fromCache)) return;
-      set({ mealEntries });
+      reconcileMealEntries(mealEntries, get, set);
     },
     onShoppingItems: (shoppingItems, fromCache) => {
       if (shouldSkipSnapshot(shoppingItems.length, get().shoppingItems.length, fromCache)) return;
@@ -205,17 +260,19 @@ export const useStore = create<Store>()(
       },
 
       addMealEntry: (entry) => {
-        set((s) => ({ mealEntries: [...s.mealEntries, entry] }));
+        const stamped = { ...entry, updatedAt: Date.now() };
+        set((s) => ({ mealEntries: [...s.mealEntries, stamped] }));
         const uid = get().user?.uid;
-        if (uid) saveMealEntry(uid, entry);
+        if (uid) saveMealEntry(uid, stamped);
       },
 
       updateMealEntry: (entry) => {
+        const stamped = { ...entry, updatedAt: Date.now() };
         set((s) => ({
-          mealEntries: s.mealEntries.map((e) => (e.id === entry.id ? entry : e)),
+          mealEntries: s.mealEntries.map((e) => (e.id === entry.id ? stamped : e)),
         }));
         const uid = get().user?.uid;
-        if (uid) saveMealEntry(uid, entry);
+        if (uid) saveMealEntry(uid, stamped);
       },
 
       deleteMealEntry: (id) => {
