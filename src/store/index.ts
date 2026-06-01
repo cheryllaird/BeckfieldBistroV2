@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { persist } from 'zustand/middleware';
+import { persist, createJSONStorage } from 'zustand/middleware';
 import { signOut as firebaseSignOut } from 'firebase/auth';
 import type { User as FirebaseUser } from 'firebase/auth';
 import { auth } from '../lib/firebase';
@@ -71,37 +71,6 @@ interface Store extends AppState {
   dismissAllShares: () => Promise<void>;
 }
 
-// Reconciles an incoming shopping-item snapshot against the locally-held items
-// using each item's `checkedAt` timestamp (last-write-wins). When the local
-// copy is strictly newer than the snapshot and its checked state differs, the
-// local toggle wins and is re-saved so the unsynced write is re-queued to the
-// server. This recovers toggles that didn't survive a refresh — common on
-// Android/iOS PWAs where Firestore's IndexedDB cache silently drops pending
-// writes — without losing newer changes made on another device.
-function reconcileShoppingItems(
-  incoming: ShoppingItem[],
-  get: () => Store,
-  set: (partial: Partial<Store>) => void,
-) {
-  const localById = new Map(get().shoppingItems.map((i) => [i.id, i]));
-  const uid = get().user?.uid;
-
-  const merged = incoming.map((item) => {
-    const local = localById.get(item.id);
-    if (!local) return item;
-    const localTs = local.checkedAt ?? 0;
-    const serverTs = item.checkedAt ?? 0;
-    if (localTs > serverTs && local.checked !== item.checked) {
-      const winner = { ...item, checked: local.checked, checkedAt: localTs };
-      if (uid) saveShoppingItem(uid, winner);
-      return winner;
-    }
-    return item;
-  });
-
-  set({ shoppingItems: merged });
-}
-
 // Decides whether an incoming snapshot should be dropped instead of written
 // to the store. Two cases, both of which would otherwise clobber the data
 // Zustand hydrated from localStorage (the reliable offline copy):
@@ -145,7 +114,7 @@ function attachListeners(
     },
     onShoppingItems: (shoppingItems, fromCache) => {
       if (shouldSkipSnapshot(shoppingItems.length, get().shoppingItems.length, fromCache)) return;
-      reconcileShoppingItems(shoppingItems, get, set);
+      set({ shoppingItems });
     },
     onPantryItems: (pantryItems, fromCache) => {
       if (shouldSkipSnapshot(pantryItems.length, get().pantryItems.length, fromCache)) return;
@@ -231,10 +200,9 @@ export const useStore = create<Store>()(
       },
 
       toggleShoppingItem: (id) => {
-        const checkedAt = Date.now();
         set((s) => ({
           shoppingItems: s.shoppingItems.map((item) =>
-            item.id === id ? { ...item, checked: !item.checked, checkedAt } : item,
+            item.id === id ? { ...item, checked: !item.checked } : item,
           ),
         }));
         const uid = get().user?.uid;
@@ -423,6 +391,24 @@ export const useStore = create<Store>()(
     }),
     {
       name: 'bistro-storage-v2',
+      // Wrap localStorage so a QuotaExceededError can never throw out of a store
+      // action. Persisting happens synchronously inside every set() (e.g. a
+      // shopping-list toggle); if the write throws uncaught it aborts the action
+      // and — worse — leaves the on-disk blob at its last-good (stale) value, so
+      // the whole store reverts on the next refresh. Swallowing the error keeps
+      // the change live in memory and in Firestore; the next write that fits
+      // will persist it.
+      storage: createJSONStorage(() => ({
+        getItem: (name) => localStorage.getItem(name),
+        setItem: (name, value) => {
+          try {
+            localStorage.setItem(name, value);
+          } catch (e) {
+            console.error('Persist write failed (storage quota?):', e);
+          }
+        },
+        removeItem: (name) => localStorage.removeItem(name),
+      })),
       // Persist auth identity AND data collections so the library loads
       // immediately from localStorage when offline, without waiting for
       // Firestore's IndexedDB cache (which requires a live auth token to
@@ -433,7 +419,18 @@ export const useStore = create<Store>()(
         splashDone: s.splashDone,
         user: s.user,
         isAuthenticated: s.isAuthenticated,
-        recipes: s.recipes,
+        // Strip heavy base64 image blobs before persisting. localStorage caps at
+        // ~5MB; embedded data: URLs (resized cover photos + full-res originals)
+        // blow that quota, which made every persisted write fail and reverted
+        // all state on refresh. The full images live in Firestore and its
+        // IndexedDB cache, and repopulate the in-memory store from the live
+        // snapshot. External (http) cover URLs are small, so they're kept for
+        // offline display; only data: URLs and originals are dropped.
+        recipes: s.recipes.map((r) => ({
+          ...r,
+          coverImage: r.coverImage?.startsWith('data:') ? undefined : r.coverImage,
+          originalImage: undefined,
+        })),
         mealEntries: s.mealEntries,
         shoppingItems: s.shoppingItems,
         pantryItems: s.pantryItems,
