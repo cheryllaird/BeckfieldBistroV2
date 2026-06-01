@@ -3,6 +3,7 @@ import { persist, createJSONStorage } from 'zustand/middleware';
 import { signOut as firebaseSignOut } from 'firebase/auth';
 import type { User as FirebaseUser } from 'firebase/auth';
 import { auth } from '../lib/firebase';
+import { idbStorage } from '../lib/idbStorage';
 import {
   subscribeToUserData,
   saveRecipe,
@@ -73,7 +74,7 @@ interface Store extends AppState {
 
 // Decides whether an incoming snapshot should be dropped instead of written
 // to the store. Two cases, both of which would otherwise clobber the data
-// Zustand hydrated from localStorage (the reliable offline copy):
+// Zustand hydrated from persisted storage (the reliable offline copy):
 //
 //   1. fromCache emission while we already hold data — Firestore's IndexedDB
 //      cache is unreliable on Android/iOS PWAs and can emit stale snapshots on
@@ -391,46 +392,24 @@ export const useStore = create<Store>()(
     }),
     {
       name: 'bistro-storage-v2',
-      // Wrap localStorage so a QuotaExceededError can never throw out of a store
-      // action. Persisting happens synchronously inside every set() (e.g. a
-      // shopping-list toggle); if the write throws uncaught it aborts the action
-      // and — worse — leaves the on-disk blob at its last-good (stale) value, so
-      // the whole store reverts on the next refresh. Swallowing the error keeps
-      // the change live in memory and in Firestore; the next write that fits
-      // will persist it.
-      storage: createJSONStorage(() => ({
-        getItem: (name) => localStorage.getItem(name),
-        setItem: (name, value) => {
-          try {
-            localStorage.setItem(name, value);
-          } catch (e) {
-            console.error('Persist write failed (storage quota?):', e);
-          }
-        },
-        removeItem: (name) => localStorage.removeItem(name),
-      })),
+      // IndexedDB-backed storage (see idbStorage). localStorage's ~5MB quota was
+      // overflowed by recipes' embedded base64 images, which made the persist
+      // write throw inside set() and reverted state on refresh. IndexedDB has a
+      // far larger quota, so the full state — images included — persists for a
+      // reliable offline library. The adapter also swallows write errors so a
+      // persist failure can never throw out of a store action.
+      storage: createJSONStorage(() => idbStorage),
       // Persist auth identity AND data collections so the library loads
-      // immediately from localStorage when offline, without waiting for
-      // Firestore's IndexedDB cache (which requires a live auth token to
-      // initialise and can be absent on the first offline session).
+      // immediately from storage when offline, without waiting for Firestore's
+      // own IndexedDB cache (which requires a live auth token to initialise and
+      // can be absent on the first offline session).
       // incomingShares is excluded: it requires a network fetch and is stale
       // as soon as a share is accepted/dismissed on another device.
       partialize: (s) => ({
         splashDone: s.splashDone,
         user: s.user,
         isAuthenticated: s.isAuthenticated,
-        // Strip heavy base64 image blobs before persisting. localStorage caps at
-        // ~5MB; embedded data: URLs (resized cover photos + full-res originals)
-        // blow that quota, which made every persisted write fail and reverted
-        // all state on refresh. The full images live in Firestore and its
-        // IndexedDB cache, and repopulate the in-memory store from the live
-        // snapshot. External (http) cover URLs are small, so they're kept for
-        // offline display; only data: URLs and originals are dropped.
-        recipes: s.recipes.map((r) => ({
-          ...r,
-          coverImage: r.coverImage?.startsWith('data:') ? undefined : r.coverImage,
-          originalImage: undefined,
-        })),
+        recipes: s.recipes,
         mealEntries: s.mealEntries,
         shoppingItems: s.shoppingItems,
         pantryItems: s.pantryItems,

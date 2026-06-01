@@ -33,9 +33,10 @@ function AuthenticatedApp() {
   const { splashDone, isAuthenticated, signIn, resubscribe } = useStore();
   const [redirectError, setRedirectError] = useState<string | null>(null);
 
-  // Single gate: render nothing until Zustand has hydrated from localStorage.
-  // Everything below — auth checks, listener setup, persisted data — is
-  // accurate only after hydration.
+  // Single gate: render nothing until Zustand has hydrated from persisted
+  // storage (IndexedDB). Everything below — auth checks, listener setup,
+  // persisted data — is accurate only after hydration. Hydration is async, so
+  // hasHydrated() is false on first render and onFinishHydration flips it.
   const [hasHydrated, setHasHydrated] = useState(() => useStore.persist.hasHydrated());
   useEffect(() => {
     if (useStore.persist.hasHydrated()) return;
@@ -44,14 +45,14 @@ function AuthenticatedApp() {
 
   // firebaseChecked flips true when onAuthStateChanged fires. We don't need
   // to wait for it if we already have a persisted identity — that path
-  // renders against localStorage immediately and lets Firebase catch up.
+  // renders against persisted state immediately and lets Firebase catch up.
   const [firebaseChecked, setFirebaseChecked] = useState(false);
 
   useEffect(() => {
     if (!hasHydrated) return;
 
     // If we have a persisted user, attach Firestore listeners immediately —
-    // the UI can render against localStorage while Firebase validates the
+    // the UI can render against persisted state while Firebase validates the
     // token in the background.
     if (useStore.getState().isAuthenticated) {
       resubscribe();
