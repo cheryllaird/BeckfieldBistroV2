@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { persist } from 'zustand/middleware';
+import { persist, createJSONStorage } from 'zustand/middleware';
 import { signOut as firebaseSignOut } from 'firebase/auth';
 import type { User as FirebaseUser } from 'firebase/auth';
 import { auth } from '../lib/firebase';
@@ -480,6 +480,24 @@ export const useStore = create<Store>()(
     }),
     {
       name: 'bistro-storage-v2',
+      // Wrap localStorage so a QuotaExceededError can never throw out of a store
+      // action. Persisting happens synchronously inside every set() (e.g. a
+      // shopping-list toggle); if the write throws uncaught it aborts the action
+      // and — worse — leaves the on-disk blob at its last-good (stale) value, so
+      // the whole store reverts on the next refresh. Swallowing the error keeps
+      // the change live in memory and in Firestore; the next write that fits
+      // will persist it.
+      storage: createJSONStorage(() => ({
+        getItem: (name) => localStorage.getItem(name),
+        setItem: (name, value) => {
+          try {
+            localStorage.setItem(name, value);
+          } catch (e) {
+            console.error('Persist write failed (storage quota?):', e);
+          }
+        },
+        removeItem: (name) => localStorage.removeItem(name),
+      })),
       // Persist auth identity AND data collections so the library loads
       // immediately from localStorage when offline, without waiting for
       // Firestore's IndexedDB cache (which requires a live auth token to
@@ -490,7 +508,18 @@ export const useStore = create<Store>()(
         splashDone: s.splashDone,
         user: s.user,
         isAuthenticated: s.isAuthenticated,
-        recipes: s.recipes,
+        // Strip heavy base64 image blobs before persisting. localStorage caps at
+        // ~5MB; embedded data: URLs (resized cover photos + full-res originals)
+        // blow that quota, which made every persisted write fail and reverted
+        // all state on refresh. The full images live in Firestore and its
+        // IndexedDB cache, and repopulate the in-memory store from the live
+        // snapshot. External (http) cover URLs are small, so they're kept for
+        // offline display; only data: URLs and originals are dropped.
+        recipes: s.recipes.map((r) => ({
+          ...r,
+          coverImage: r.coverImage?.startsWith('data:') ? undefined : r.coverImage,
+          originalImage: undefined,
+        })),
         mealEntries: s.mealEntries,
         shoppingItems: s.shoppingItems,
         pantryItems: s.pantryItems,
