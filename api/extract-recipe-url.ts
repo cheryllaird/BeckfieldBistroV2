@@ -401,7 +401,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   let rawText: string;
   try {
-    const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash', systemInstruction: URL_SYSTEM_PROMPT });
+    const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash', systemInstruction: URL_SYSTEM_PROMPT });
     rawText = await model.generateContent(prompt).then((r) => r.response.text());
   } catch (primaryErr) {
     const primaryMsg = primaryErr instanceof Error ? primaryErr.message : String(primaryErr);
@@ -416,10 +416,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(502).json({ error: 'AI service error. Please try again.' });
     }
 
-    // Daily quota hit — fall back to gemini-1.5-flash (separate quota bucket).
-    console.log('gemini-2.0-flash rate-limited on URL extraction, falling back to gemini-1.5-flash');
+    // Daily quota hit — fall back to gemini-2.5-flash-lite (separate quota bucket).
+    console.log('gemini-2.5-flash rate-limited on URL extraction, falling back to gemini-2.5-flash-lite');
     try {
-      const fallback = genAI.getGenerativeModel({ model: 'gemini-1.5-flash', systemInstruction: URL_SYSTEM_PROMPT });
+      const fallback = genAI.getGenerativeModel({ model: 'gemini-2.5-flash-lite', systemInstruction: URL_SYSTEM_PROMPT });
       rawText = await fallback.generateContent(prompt).then((r) => r.response.text());
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
