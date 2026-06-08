@@ -72,32 +72,63 @@ interface Store extends AppState {
   dismissAllShares: () => Promise<void>;
 }
 
-// Decides whether an incoming snapshot should be dropped instead of written
-// to the store. Two cases, both of which would otherwise clobber the data
-// Zustand hydrated from persisted storage (the reliable offline copy):
-//
-//   1. fromCache emission while we already hold data — Firestore's IndexedDB
-//      cache is unreliable on Android/iOS PWAs and can emit stale snapshots on
-//      refresh.
-//   2. an *empty* emission (cache OR server) while we already hold data — on
-//      mobile the SDK can briefly report a collection empty before the real
-//      server result lands. Applying it wipes the store to [], which also
-//      disarms guard (1) for every later snapshot, causing the "flash empty
-//      then reappear with stale state" bug. Genuine deletions never rely on an
-//      empty snapshot: they mutate the store directly (removeShoppingItem,
-//      clearCheckedItems, deleteRecipe, …), so dropping empty emissions here is
-//      safe.
-//
-// Server-confirmed, non-empty snapshots are always authoritative and applied.
-function shouldSkipSnapshot(incomingLen: number, localLen: number, fromCache: boolean) {
-  if (localLen === 0) return false;
-  return fromCache || incomingLen === 0;
+// Per-collection timers that debounce empty snapshots (see
+// applyCollectionSnapshot below). Cleared whenever listeners are torn down so
+// a stale timer from a previous account/session can never fire against the
+// next account's freshly loaded data.
+let _pendingEmptyTimers = new Map<string, ReturnType<typeof setTimeout>>();
+
+function clearPendingEmptyTimers() {
+  _pendingEmptyTimers.forEach(clearTimeout);
+  _pendingEmptyTimers.clear();
 }
 
-// Attaches realtime Firestore listeners for a given user. The first emission
-// reflects Firestore's local IndexedDB cache (or is skipped when empty via
-// the skipIfCacheMiss guard in firestore.ts); subsequent emissions are
-// server-confirmed (fromCache === false).
+// Applies an incoming Firestore snapshot to the store, debouncing empty
+// results so a transient "collection looks empty" read doesn't wipe out data
+// that's about to be confirmed as non-empty a moment later — the "flash empty
+// then reappear with stale state" bug seen on Android/iOS PWA refreshes.
+//
+// Non-empty snapshots are applied immediately and unconditionally. Note that
+// `fromCache` is *not* used as a trust signal here: with persistentLocalCache
+// enabled, snapshots carrying genuinely fresh edits made on another device are
+// routinely reported `fromCache: true` (the cache is how synced data is
+// served), so gating on it just freezes other devices on old data — which was
+// the actual cause of "edits on device A never show up on device B".
+//
+// An empty snapshot while local data exists is ambiguous — it could be that
+// transient mid-sync read, or a genuine clear/delete-all (made locally or on
+// another device). Resolve the ambiguity with a short debounce: a follow-up
+// non-empty snapshot cancels the pending empty (it was transient) and is
+// applied instead; if nothing else arrives, the empty result was genuine and
+// gets applied once the timer fires.
+function applyCollectionSnapshot<T>(
+  key: string,
+  incoming: T[],
+  localLen: number,
+  apply: () => void,
+) {
+  const pending = _pendingEmptyTimers.get(key);
+  if (pending) {
+    clearTimeout(pending);
+    _pendingEmptyTimers.delete(key);
+  }
+
+  if (incoming.length > 0 || localLen === 0) {
+    apply();
+    return;
+  }
+
+  _pendingEmptyTimers.set(
+    key,
+    setTimeout(() => {
+      _pendingEmptyTimers.delete(key);
+      apply();
+    }, 1500),
+  );
+}
+
+// Attaches realtime Firestore listeners for a given user, keeping the store
+// live-synced with edits made on every device signed into the same account.
 function attachListeners(
   uid: string,
   email: string | null,
@@ -105,25 +136,28 @@ function attachListeners(
   get: () => Store,
 ) {
   _unsubscribeUserData = subscribeToUserData(uid, {
-    onRecipes: (recipes, fromCache) => {
-      if (shouldSkipSnapshot(recipes.length, get().recipes.length, fromCache)) return;
-      set({ recipes });
+    onRecipes: (recipes) => {
+      applyCollectionSnapshot('recipes', recipes, get().recipes.length, () => set({ recipes }));
     },
-    onMealEntries: (mealEntries, fromCache) => {
-      if (shouldSkipSnapshot(mealEntries.length, get().mealEntries.length, fromCache)) return;
-      set({ mealEntries });
+    onMealEntries: (mealEntries) => {
+      applyCollectionSnapshot('mealEntries', mealEntries, get().mealEntries.length, () =>
+        set({ mealEntries }),
+      );
     },
-    onShoppingItems: (shoppingItems, fromCache) => {
-      if (shouldSkipSnapshot(shoppingItems.length, get().shoppingItems.length, fromCache)) return;
-      set({ shoppingItems });
+    onShoppingItems: (shoppingItems) => {
+      applyCollectionSnapshot('shoppingItems', shoppingItems, get().shoppingItems.length, () =>
+        set({ shoppingItems }),
+      );
     },
-    onPantryItems: (pantryItems, fromCache) => {
-      if (shouldSkipSnapshot(pantryItems.length, get().pantryItems.length, fromCache)) return;
-      set({ pantryItems });
+    onPantryItems: (pantryItems) => {
+      applyCollectionSnapshot('pantryItems', pantryItems, get().pantryItems.length, () =>
+        set({ pantryItems }),
+      );
     },
-    onKnownSources: (knownSources, fromCache) => {
-      if (shouldSkipSnapshot(knownSources.length, get().knownSources.length, fromCache)) return;
-      set({ knownSources });
+    onKnownSources: (knownSources) => {
+      applyCollectionSnapshot('knownSources', knownSources, get().knownSources.length, () =>
+        set({ knownSources }),
+      );
     },
   });
 
@@ -268,6 +302,9 @@ export const useStore = create<Store>()(
         _unsubscribeShares?.();
         _unsubscribeUserData = null;
         _unsubscribeShares = null;
+        // Cancel pending empty-snapshot timers from the previous session so
+        // they can't fire against this account's freshly loaded data.
+        clearPendingEmptyTimers();
 
         const existingUid = get().user?.uid;
 
@@ -310,6 +347,7 @@ export const useStore = create<Store>()(
         _unsubscribeUserData = null;
         _unsubscribeShares?.();
         _unsubscribeShares = null;
+        clearPendingEmptyTimers();
         if (auth) await firebaseSignOut(auth);
         set({
           isAuthenticated: false,
