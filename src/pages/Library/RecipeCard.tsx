@@ -27,10 +27,11 @@ export function RecipeCard({ recipe, isSelectMode, isSelected, onLongPress, onSe
 
   const handleQuickPlan = (e: React.MouseEvent) => {
     e.stopPropagation();
-    const weekDays = [...getWeekDays(0), ...getWeekDays(1)];
+    const todayIso = isoDate(new Date());
+    const weekDays = [...getWeekDays(0), ...getWeekDays(1)].filter((d) => isoDate(d) >= todayIso);
     const plannedDates = new Set(mealEntries.map((e) => e.date));
     const nextEmpty = weekDays.find((d) => !plannedDates.has(isoDate(d)));
-    const targetDate = nextEmpty ? isoDate(nextEmpty) : isoDate(weekDays[0]);
+    const targetDate = nextEmpty ? isoDate(nextEmpty) : todayIso;
     setDefaultDate(targetDate);
     setPlanModalOpen(true);
   };
