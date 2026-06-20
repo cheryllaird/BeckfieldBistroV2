@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Navigate, Route, Routes } from 'react-router-dom';
 import { onAuthStateChanged, getRedirectResult } from 'firebase/auth';
 import { auth, firebaseConfigured } from './lib/firebase';
+import { startConnectivityManager } from './lib/connectivity';
 import { authErrorMessage } from './lib/authErrors';
 import { useStore } from './store';
 import { SplashScreen } from './pages/SplashScreen';
@@ -47,6 +48,10 @@ function AuthenticatedApp() {
   // to wait for it if we already have a persisted identity — that path
   // renders against persisted state immediately and lets Firebase catch up.
   const [firebaseChecked, setFirebaseChecked] = useState(false);
+
+  // Keep Firestore's realtime connection awake across backgrounding so edits
+  // made on other devices stay live-synced. Independent of auth/hydration.
+  useEffect(() => startConnectivityManager(), []);
 
   useEffect(() => {
     if (!hasHydrated) return;
