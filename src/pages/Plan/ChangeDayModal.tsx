@@ -113,7 +113,7 @@ export function ChangeDayModal({ entry, title, onClose }: Props) {
                     : isCurrent
                     ? 'bg-amber-50 text-amber-700 ring-1 ring-amber-300'
                     : isToday
-                    ? 'bg-slate-100 text-slate-600 ring-1 ring-slate-300'
+                    ? 'font-bold text-amber-600'
                     : 'hover:bg-slate-50 text-slate-700',
                 ].join(' ')}
               >

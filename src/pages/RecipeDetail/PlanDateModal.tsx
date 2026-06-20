@@ -122,7 +122,7 @@ export function PlanDateModal({ recipe, servings, onClose, initialDate, onConfir
                   isSelected
                     ? 'bg-amber-500 text-white shadow-sm'
                     : isToday
-                    ? 'bg-amber-50 text-amber-700 ring-1 ring-amber-300'
+                    ? 'font-bold text-amber-600'
                     : isPlanned
                     ? 'bg-slate-100 text-slate-400'
                     : 'hover:bg-slate-50 text-slate-700',

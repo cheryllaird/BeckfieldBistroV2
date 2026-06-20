@@ -140,15 +140,14 @@ export function HistoryView({ year, month, setYear, setMonth }: HistoryViewProps
               <div
                 key={i}
                 className={[
-                  'rounded-lg p-0.5 border transition-colors',
-                  isToday ? 'border-amber-300 bg-amber-50' : 'border-transparent',
+                  'rounded-lg p-0.5 border border-transparent transition-colors',
                   titles.length > 0 ? 'bg-slate-50' : '',
                 ].join(' ')}
               >
                 <div
                   className={[
-                    'text-[10px] font-semibold text-center pt-0.5',
-                    isToday ? 'text-amber-600' : 'text-slate-500',
+                    'text-[10px] text-center pt-0.5',
+                    isToday ? 'font-bold text-amber-600' : 'font-semibold text-slate-500',
                   ].join(' ')}
                 >
                   {day}
