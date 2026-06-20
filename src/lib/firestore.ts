@@ -18,6 +18,23 @@ function stripUndefined<T extends object>(obj: T): T {
   return JSON.parse(JSON.stringify(obj));
 }
 
+/**
+ * Forces the Firestore SDK back online (idempotent).
+ *
+ * On mobile PWAs the realtime connection goes dormant whenever the app is
+ * backgrounded (screen locked / tab hidden) and does not always re-establish on
+ * its own — the "SDK stuck offline" behaviour seen in production here. While
+ * dormant the onSnapshot listeners stop receiving server pushes and queued
+ * writes never reach the server, so an edit made on one device never appears on
+ * another. Calling enableNetwork wakes the connection back up; we invoke it from
+ * every write path and whenever the app regains the foreground (see
+ * connectivity.ts) — exactly when cross-device sync is expected to resume.
+ */
+export function ensureFirestoreOnline(): void {
+  if (!db) return;
+  enableNetwork(db).catch(() => {});
+}
+
 const recipesCol = (uid: string) => collection(db!, 'users', uid, 'recipes');
 const mealEntriesCol = (uid: string) => collection(db!, 'users', uid, 'mealEntries');
 const shoppingItemsCol = (uid: string) => collection(db!, 'users', uid, 'shoppingItems');
@@ -116,7 +133,7 @@ export function subscribeToUserData(uid: string, callbacks: UserDataCallbacks): 
 
 export function saveRecipe(uid: string, recipe: Recipe): Promise<void> {
   // Re-enable network in case the SDK got stuck in offline mode.
-  enableNetwork(db!).catch(() => {});
+  ensureFirestoreOnline();
 
   const writePromise = setDoc(doc(recipesCol(uid), recipe.id), stripUndefined(recipe));
   // 5-second timeout: if the server hasn't acknowledged by then, the write is
@@ -129,31 +146,37 @@ export function saveRecipe(uid: string, recipe: Recipe): Promise<void> {
 }
 
 export function deleteRecipeDoc(uid: string, id: string): void {
+  ensureFirestoreOnline();
   deleteDoc(doc(recipesCol(uid), id)).catch(console.error);
 }
 
 // ── meal entries ──────────────────────────────────────────────────────────────
 
 export function saveMealEntry(uid: string, entry: MealEntry): void {
+  ensureFirestoreOnline();
   setDoc(doc(mealEntriesCol(uid), entry.id), stripUndefined(entry)).catch(console.error);
 }
 
 export function deleteMealEntryDoc(uid: string, id: string): void {
+  ensureFirestoreOnline();
   deleteDoc(doc(mealEntriesCol(uid), id)).catch(console.error);
 }
 
 // ── shopping items ────────────────────────────────────────────────────────────
 
 export function saveShoppingItem(uid: string, item: ShoppingItem): void {
+  ensureFirestoreOnline();
   setDoc(doc(shoppingItemsCol(uid), item.id), stripUndefined(item)).catch(console.error);
 }
 
 export function deleteShoppingItemDoc(uid: string, id: string): void {
+  ensureFirestoreOnline();
   deleteDoc(doc(shoppingItemsCol(uid), id)).catch(console.error);
 }
 
 /** Batch write the shopping list with refreshed order indices. */
 export function saveShoppingItems(uid: string, items: ShoppingItem[]): void {
+  ensureFirestoreOnline();
   const col = shoppingItemsCol(uid);
   const batch = writeBatch(db!);
   items.forEach((item, index) =>
@@ -165,14 +188,17 @@ export function saveShoppingItems(uid: string, items: ShoppingItem[]): void {
 // ── pantry items ──────────────────────────────────────────────────────────────
 
 export function savePantryItem(uid: string, item: PantryItem): void {
+  ensureFirestoreOnline();
   setDoc(doc(pantryItemsCol(uid), item.id), stripUndefined(item)).catch(console.error);
 }
 
 export function deletePantryItemDoc(uid: string, id: string): void {
+  ensureFirestoreOnline();
   deleteDoc(doc(pantryItemsCol(uid), id)).catch(console.error);
 }
 
 export function savePantryItems(uid: string, items: PantryItem[]): void {
+  ensureFirestoreOnline();
   const col = pantryItemsCol(uid);
   const batch = writeBatch(db!);
   items.forEach((item, index) =>
@@ -187,12 +213,14 @@ const categoryOverrideLogsCol = (uid: string) =>
   collection(db!, 'users', uid, 'categoryOverrideLogs');
 
 export function logCategoryOverride(uid: string, entry: Omit<CategoryOverrideLog, 'id'>): void {
+  ensureFirestoreOnline();
   addDoc(categoryOverrideLogsCol(uid), stripUndefined(entry)).catch(console.error);
 }
 
 // ── sources ───────────────────────────────────────────────────────────────────
 
 export function saveKnownSources(uid: string, sources: string[]): void {
+  ensureFirestoreOnline();
   setDoc(profileDoc(uid), { knownSources: sources }, { merge: true }).catch(console.error);
 }
 
