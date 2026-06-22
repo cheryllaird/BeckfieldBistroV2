@@ -76,7 +76,7 @@ interface Store extends AppState {
 // applyCollectionSnapshot below). Cleared whenever listeners are torn down so
 // a stale timer from a previous account/session can never fire against the
 // next account's freshly loaded data.
-let _pendingEmptyTimers = new Map<string, ReturnType<typeof setTimeout>>();
+const _pendingEmptyTimers = new Map<string, ReturnType<typeof setTimeout>>();
 
 function clearPendingEmptyTimers() {
   _pendingEmptyTimers.forEach(clearTimeout);
@@ -101,6 +101,70 @@ function clearPendingEmptyTimers() {
 // non-empty snapshot cancels the pending empty (it was transient) and is
 // applied instead; if nothing else arrives, the empty result was genuine and
 // gets applied once the timer fires.
+// Reconciles an incoming Firestore snapshot of shopping items with the current
+// local copy, resolving per-item conflicts by recency (`updatedAt`). This is the
+// fix for "I ticked items off, reopened, and they were unticked": the realtime
+// listener used to replace local state wholesale, so a stale snapshot — e.g. the
+// server hadn't yet received a toggle made while the mobile connection was
+// dormant — would clobber the correct local state and then re-persist the stale
+// data over it.
+//
+// Rules:
+//  • An item present on both sides keeps whichever copy has the newer
+//    `updatedAt`. A locally-newer item (an unsynced edit) wins and is collected
+//    in `toResend` so it gets pushed back to the server and both sides converge.
+//  • Items only in the snapshot are taken as-is (created/edited on another
+//    device, or confirmed by the server).
+//  • Items only in the local copy are dropped — matching the previous
+//    replace-everything behaviour, so an item deleted on another device stays
+//    deleted rather than resurrecting. Genuinely unsynced local additions are
+//    still present in the snapshot because Firestore's persistent cache replays
+//    pending writes, so they are not lost here.
+//
+// `updatedAt` is compared as a number with missing treated as 0, so a stamped
+// local edit always beats an older un-stamped server copy.
+function reconcileShoppingItems(
+  incoming: ShoppingItem[],
+  local: ShoppingItem[],
+): { merged: ShoppingItem[]; toResend: ShoppingItem[] } {
+  const localById = new Map(local.map((i) => [i.id, i]));
+  const toResend: ShoppingItem[] = [];
+  const merged = incoming.map((inc) => {
+    const loc = localById.get(inc.id);
+    if (loc && (loc.updatedAt ?? 0) > (inc.updatedAt ?? 0)) {
+      toResend.push(loc);
+      return loc;
+    }
+    return inc;
+  });
+  return { merged, toResend };
+}
+
+// Stamps `updatedAt` on items whose synced content actually changed (new items,
+// or a changed name/checked/category) so the recency-based reconcile above can
+// tell a real edit from an untouched item. Pure reordering does not bump the
+// stamp: order is carried by the `order` field and a snapshot that only differs
+// in order ties on `updatedAt`, so the incoming (server) ordering is taken.
+function stampChangedShoppingItems(
+  prev: ShoppingItem[],
+  next: ShoppingItem[],
+  now: number,
+): ShoppingItem[] {
+  const prevById = new Map(prev.map((i) => [i.id, i]));
+  return next.map((item) => {
+    const before = prevById.get(item.id);
+    if (
+      before &&
+      before.name === item.name &&
+      before.checked === item.checked &&
+      before.category === item.category
+    ) {
+      return item;
+    }
+    return { ...item, updatedAt: now };
+  });
+}
+
 function applyCollectionSnapshot<T>(
   key: string,
   incoming: T[],
@@ -145,9 +209,14 @@ function attachListeners(
       );
     },
     onShoppingItems: (shoppingItems) => {
-      applyCollectionSnapshot('shoppingItems', shoppingItems, get().shoppingItems.length, () =>
-        set({ shoppingItems }),
-      );
+      applyCollectionSnapshot('shoppingItems', shoppingItems, get().shoppingItems.length, () => {
+        const { merged, toResend } = reconcileShoppingItems(shoppingItems, get().shoppingItems);
+        set({ shoppingItems: merged });
+        // Re-push any item the local copy won so the server catches up. The
+        // resent doc carries the same updatedAt, so the snapshot it triggers
+        // ties and is taken as-is — convergence terminates, no write loop.
+        if (toResend.length) toResend.forEach((item) => saveShoppingItem(uid, item));
+      });
     },
     onPantryItems: (pantryItems) => {
       applyCollectionSnapshot('pantryItems', pantryItems, get().pantryItems.length, () =>
@@ -229,15 +298,19 @@ export const useStore = create<Store>()(
       },
 
       setShoppingItems: (items) => {
-        set({ shoppingItems: items });
+        // Stamp only items whose content changed so the recency-based reconcile
+        // can distinguish a real edit from an untouched item on the next sync.
+        const stamped = stampChangedShoppingItems(get().shoppingItems, items, Date.now());
+        set({ shoppingItems: stamped });
         const uid = get().user?.uid;
-        if (uid) saveShoppingItems(uid, items);
+        if (uid) saveShoppingItems(uid, stamped);
       },
 
       toggleShoppingItem: (id) => {
+        const now = Date.now();
         set((s) => ({
           shoppingItems: s.shoppingItems.map((item) =>
-            item.id === id ? { ...item, checked: !item.checked } : item,
+            item.id === id ? { ...item, checked: !item.checked, updatedAt: now } : item,
           ),
         }));
         const uid = get().user?.uid;
@@ -248,9 +321,10 @@ export const useStore = create<Store>()(
       },
 
       addShoppingItem: (item) => {
-        set((s) => ({ shoppingItems: [...s.shoppingItems, item] }));
+        const stamped: ShoppingItem = { ...item, updatedAt: Date.now() };
+        set((s) => ({ shoppingItems: [...s.shoppingItems, stamped] }));
         const uid = get().user?.uid;
-        if (uid) saveShoppingItem(uid, item);
+        if (uid) saveShoppingItem(uid, stamped);
       },
 
       removeShoppingItem: (id) => {
@@ -260,9 +334,12 @@ export const useStore = create<Store>()(
       },
 
       reorderShoppingItems: (items) => {
-        set({ shoppingItems: items });
+        // Reordering changes only position (carried by `order`), not item
+        // content, so no updatedAt bump — see stampChangedShoppingItems.
+        const stamped = stampChangedShoppingItems(get().shoppingItems, items, Date.now());
+        set({ shoppingItems: stamped });
         const uid = get().user?.uid;
-        if (uid) saveShoppingItems(uid, items);
+        if (uid) saveShoppingItems(uid, stamped);
       },
 
       clearCheckedItems: () => {
