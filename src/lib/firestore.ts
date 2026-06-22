@@ -7,6 +7,7 @@ import {
   writeBatch,
   addDoc,
   enableNetwork,
+  waitForPendingWrites,
 } from 'firebase/firestore';
 import { db, auth } from './firebase';
 import type { Recipe, MealEntry, ShoppingItem, PantryItem, SharedRecipe, CategoryOverrideLog } from '../types';
@@ -33,6 +34,30 @@ function stripUndefined<T extends object>(obj: T): T {
 export function ensureFirestoreOnline(): void {
   if (!db) return;
   enableNetwork(db).catch(() => {});
+}
+
+/**
+ * Best-effort flush of locally-queued writes to the server, called when the app
+ * is about to be hidden/closed (see connectivity.ts).
+ *
+ * Writes are always durably queued in IndexedDB by persistentLocalCache before
+ * the SDK round-trips, so nothing is lost if the app dies — the queue replays on
+ * the next launch. But that means a change made on this device only reaches the
+ * server (and therefore other devices) once this app is reopened. Nudging the
+ * network on the way out gives the SDK a chance to drain the queue while the
+ * page is still alive, so the common "tick an item then swipe the app away" case
+ * propagates immediately instead of waiting for the next cold start.
+ *
+ * This is best-effort by nature: the browser may suspend or kill the page before
+ * the flush completes (page-unload work cannot be awaited reliably), in which
+ * case the durable queue + next-launch replay remains the backstop. enableNetwork
+ * is fire-and-forget; waitForPendingWrites is only used to know when the drain
+ * finished for callers that can act on it.
+ */
+export function flushPendingWrites(): Promise<void> {
+  if (!db) return Promise.resolve();
+  enableNetwork(db).catch(() => {});
+  return waitForPendingWrites(db).catch(() => {});
 }
 
 const recipesCol = (uid: string) => collection(db!, 'users', uid, 'recipes');
