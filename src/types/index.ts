@@ -40,6 +40,7 @@ export interface MealEntry {
   servings: number;
   location?: string; // for dining-out
   mealTime?: MealTime;
+  updatedAt?: number; // epoch ms of last change; reconciles snapshots by recency
 }
 
 export interface MealSource {
@@ -59,6 +60,11 @@ export interface ShoppingItem {
   manual?: boolean;
   mealSources?: MealSource[];
   ingredientKey?: string; // normalizeIngredientName(name)__normalizeUnit(unit) for dedup
+  // Epoch ms of the last content change (checked/name/category/add). Used to
+  // reconcile the local copy with incoming Firestore snapshots by recency, so a
+  // change that hasn't finished syncing is never clobbered by a stale snapshot.
+  // Optional for backward compat with items written before this field existed.
+  updatedAt?: number;
 }
 
 export type ShoppingCategory =
@@ -98,6 +104,7 @@ export interface PantryItem {
   category: ShoppingCategory;
   order?: number;
   createdAt: string;
+  updatedAt?: number; // epoch ms of last change; reconciles snapshots by recency
 }
 
 export interface AppState {
