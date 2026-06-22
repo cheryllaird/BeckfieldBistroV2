@@ -40,6 +40,7 @@ export interface MealEntry {
   servings: number;
   location?: string; // for dining-out
   mealTime?: MealTime;
+  updatedAt?: number; // epoch ms of last change; reconciles snapshots by recency
 }
 
 export interface MealSource {
@@ -103,6 +104,7 @@ export interface PantryItem {
   category: ShoppingCategory;
   order?: number;
   createdAt: string;
+  updatedAt?: number; // epoch ms of last change; reconciles snapshots by recency
 }
 
 export interface AppState {
