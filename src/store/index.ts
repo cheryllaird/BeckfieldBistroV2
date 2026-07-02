@@ -33,7 +33,7 @@ interface Store extends AppState {
 
   // Recipe actions
   addRecipe: (recipe: Omit<Recipe, 'userId'>) => Promise<void>;
-  updateRecipe: (recipe: Recipe) => void;
+  updateRecipe: (recipe: Recipe) => Promise<void>;
   deleteRecipe: (id: string) => void;
 
   // Meal plan actions
@@ -288,10 +288,10 @@ export const useStore = create<Store>()(
         }
       },
 
-      updateRecipe: (recipe) => {
+      updateRecipe: async (recipe) => {
         set((s) => ({ recipes: s.recipes.map((r) => (r.id === recipe.id ? recipe : r)) }));
         const uid = get().user?.uid;
-        if (uid) saveRecipe(uid, recipe);
+        if (uid) await saveRecipe(uid, recipe);
       },
 
       deleteRecipe: (id) => {

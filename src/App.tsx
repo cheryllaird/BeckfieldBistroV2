@@ -64,7 +64,18 @@ function AuthenticatedApp() {
     }
 
     const unsubAuth = onAuthStateChanged(auth!, (firebaseUser) => {
-      if (firebaseUser) signIn(firebaseUser);
+      if (firebaseUser) {
+        signIn(firebaseUser);
+      } else if (useStore.getState().isAuthenticated) {
+        // We rendered against a persisted session (see resubscribe() above),
+        // but Firebase says there's no real session — the token was revoked,
+        // expired, or the account was deleted/disabled elsewhere. Writes made
+        // against a persisted-but-invalid uid are silently rejected by
+        // Firestore security rules, which is what "Failed to save recipe"
+        // looks like from the user's side. Drop back to the sign-in screen
+        // instead of leaving the app stuck on a session Firebase disowns.
+        useStore.getState().signOut();
+      }
       setFirebaseChecked(true);
     });
 

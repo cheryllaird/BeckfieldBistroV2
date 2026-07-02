@@ -117,7 +117,14 @@ export function NewRecipePage() {
         navigate(isEditMode && existingRecipe ? `/recipes/${existingRecipe.id}` : '/recipes');
       } else {
         console.error('Failed to save recipe:', err);
-        setSaveError('Failed to save recipe. Please try again.');
+        const code = (err as { code?: string })?.code;
+        setSaveError(
+          code === 'permission-denied'
+            ? 'Your session has expired. Please sign in again to save recipes.'
+            : code === 'invalid-argument' || code === 'resource-exhausted'
+            ? 'This recipe is too large to save (likely the photo). Try a smaller image.'
+            : 'Failed to save recipe. Please try again.'
+        );
       }
     } finally {
       setIsSaving(false);
