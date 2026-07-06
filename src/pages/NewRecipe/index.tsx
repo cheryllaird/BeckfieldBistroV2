@@ -18,7 +18,7 @@ export function NewRecipePage() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const { id: editId } = useParams<{ id: string }>();
-  const { addRecipe, updateRecipe, knownSources, recipes } = useStore();
+  const { addRecipe, updateRecipe, knownSources, recipes, geminiApiKey } = useStore();
 
   const existingRecipe = editId ? recipes.find((r) => r.id === editId) : undefined;
   const isEditMode = !!existingRecipe;
@@ -55,7 +55,7 @@ export function NewRecipePage() {
     setIsExtracting(true);
     setExtractError('');
     try {
-      const extracted = await extractRecipeFromUrl(urlInput.trim());
+      const extracted = await extractRecipeFromUrl(urlInput.trim(), geminiApiKey);
       setDraft((prev) => ({ ...prev, ...extracted, sourceUrl: urlInput.trim() }));
       setMode('manual');
     } catch (err) {
@@ -84,7 +84,7 @@ export function NewRecipePage() {
     setExtractError('');
     try {
       const [extracted, resizedDataUrl] = await Promise.all([
-        extractRecipeFromImage(croppedDataUrl),
+        extractRecipeFromImage(croppedDataUrl, geminiApiKey),
         resizeImage(croppedDataUrl),
       ]);
       setDraft({ ...extracted, coverImage: resizedDataUrl });
@@ -179,6 +179,15 @@ export function NewRecipePage() {
         </div>
       )}
 
+      {(mode === 'url' || mode === 'upload') && !geminiApiKey && (
+        <div className="flex items-center justify-between gap-2 rounded-xl bg-amber-soft px-4 py-3 text-sm text-amber-800">
+          <span>Add your Gemini API key to extract recipes.</span>
+          <Button size="sm" variant="secondary" onClick={() => navigate('/settings')}>
+            Settings
+          </Button>
+        </div>
+      )}
+
       {/* URL mode */}
       {mode === 'url' && (
         <div className="flex flex-col gap-3 animate-in">
@@ -197,7 +206,7 @@ export function NewRecipePage() {
             disabled={!isOnline}
           />
           {extractError && <p className="text-xs text-red-500">{extractError}</p>}
-          <Button fullWidth onClick={handleUrlExtract} disabled={isExtracting || !urlInput.trim() || !isOnline}>
+          <Button fullWidth onClick={handleUrlExtract} disabled={isExtracting || !urlInput.trim() || !isOnline || !geminiApiKey}>
             {isExtracting ? (
               <>
                 <Loader size={14} className="animate-spin" /> Extracting…

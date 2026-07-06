@@ -1,9 +1,11 @@
 import { useState } from 'react';
-import { LogOut, User } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { LogOut, Settings, User } from 'lucide-react';
 import { useStore } from '../../store';
 
 export function Header() {
   const { user, signOut } = useStore();
+  const navigate = useNavigate();
   const [menuOpen, setMenuOpen] = useState(false);
 
   return (
@@ -46,6 +48,13 @@ export function Header() {
                     <p className="text-xs text-slate-400">{user.email}</p>
                     <p className="text-xs text-slate-300 mt-1">v{__APP_VERSION__}</p>
                   </div>
+                  <button
+                    onClick={() => { navigate('/settings'); setMenuOpen(false); }}
+                    className="w-full flex items-center gap-2 px-3 py-2 text-sm text-slate-600 hover:bg-slate-50 transition-colors"
+                  >
+                    <Settings size={14} />
+                    Settings
+                  </button>
                   <button
                     onClick={() => { signOut(); setMenuOpen(false); }}
                     className="w-full flex items-center gap-2 px-3 py-2 text-sm text-slate-600 hover:bg-slate-50 transition-colors"

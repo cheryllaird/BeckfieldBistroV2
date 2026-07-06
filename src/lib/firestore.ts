@@ -74,6 +74,7 @@ export interface UserDataCallbacks {
   onShoppingItems: (items: ShoppingItem[]) => void;
   onPantryItems: (items: PantryItem[]) => void;
   onKnownSources: (sources: string[]) => void;
+  onGeminiApiKey: (key: string) => void;
   onError?: (err: Error) => void;
 }
 
@@ -141,6 +142,7 @@ export function subscribeToUserData(uid: string, callbacks: UserDataCallbacks): 
     (snap) => {
       if (snap.metadata.fromCache && !snap.exists()) return;
       callbacks.onKnownSources((snap.data()?.knownSources as string[]) ?? []);
+      callbacks.onGeminiApiKey((snap.data()?.geminiApiKey as string) ?? '');
     },
     handleError
   );
@@ -247,6 +249,17 @@ export function logCategoryOverride(uid: string, entry: Omit<CategoryOverrideLog
 export function saveKnownSources(uid: string, sources: string[]): void {
   ensureFirestoreOnline();
   setDoc(profileDoc(uid), { knownSources: sources }, { merge: true }).catch(console.error);
+}
+
+// ── AI API key ────────────────────────────────────────────────────────────────
+// Each user supplies their own Gemini API key so recipe-extraction usage/cost is
+// billed to their own account rather than a single shared key. Stored on the
+// same per-user profile doc that Firestore security rules already scope to
+// `request.auth.uid == uid`, so no other user can ever read it.
+
+export function saveGeminiApiKey(uid: string, key: string): Promise<void> {
+  ensureFirestoreOnline();
+  return setDoc(profileDoc(uid), { geminiApiKey: key }, { merge: true });
 }
 
 // ── recipe sharing ────────────────────────────────────────────────────────────

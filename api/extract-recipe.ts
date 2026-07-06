@@ -177,7 +177,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   // Validate request body
-  const { base64, mediaType, url } = req.body ?? {};
+  const { base64, mediaType, url, apiKey } = req.body ?? {};
   const hasImage = typeof base64 === 'string' && base64.length > 0;
   const hasUrl = typeof url === 'string' && url.length > 0;
 
@@ -185,10 +185,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(400).json({ error: 'Provide either base64 image data or a url' });
   }
 
-  // Call Gemini
-  const apiKey = process.env.GEMINI_API_KEY;
-  if (!apiKey) {
-    return res.status(500).json({ error: 'Server is not configured for AI extraction' });
+  // Each user supplies their own Gemini API key so usage is billed to them,
+  // not a single shared key — there is no server-wide fallback.
+  if (typeof apiKey !== 'string' || !apiKey) {
+    return res.status(400).json({ error: 'Add your Gemini API key in Settings to extract recipes.' });
   }
 
   const genAI = new GoogleGenerativeAI(apiKey);
@@ -240,7 +240,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     rawText = await callGeminiWithRetry(genAI, parts);
   } catch (err) {
     if (isRateLimitError(err)) {
-      return res.status(429).json({ error: 'Too many requests. Please wait a moment and try again.' });
+      return res.status(429).json({
+        error: 'Your Gemini API key has hit its rate limit or daily quota. Wait a bit and try again, or upgrade your key at aistudio.google.com.',
+      });
     }
     return res.status(502).json({ error: 'AI service error. Please try again.' });
   }

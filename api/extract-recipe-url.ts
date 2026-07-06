@@ -322,7 +322,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   // Validate URL
-  const { url } = req.body ?? {};
+  const { url, apiKey } = req.body ?? {};
   if (typeof url !== 'string' || !url.trim()) {
     return res.status(400).json({ error: 'Missing url' });
   }
@@ -388,10 +388,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(200).json(result);
   }
 
-  // Gemini text fallback
-  const apiKey = process.env.GEMINI_API_KEY;
-  if (!apiKey) {
-    return res.status(500).json({ error: 'Server is not configured for AI extraction' });
+  // Gemini text fallback — each user supplies their own API key so usage is
+  // billed to them, not a single shared key. There is no server-wide fallback.
+  if (typeof apiKey !== 'string' || !apiKey) {
+    return res.status(400).json({ error: 'Add your Gemini API key in Settings to extract recipes.' });
   }
 
   const pageText = htmlToText(html).slice(0, 40_000);
@@ -424,7 +424,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       console.error('Gemini fallback error:', message);
-      return res.status(502).json({ error: 'AI service error. Please try again.' });
+      return res.status(429).json({
+        error: 'Your Gemini API key has hit its rate limit or daily quota. Wait a bit and try again, or upgrade your key at aistudio.google.com.',
+      });
     }
   }
 
