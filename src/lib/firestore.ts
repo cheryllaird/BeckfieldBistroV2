@@ -4,6 +4,7 @@ import {
   onSnapshot,
   setDoc,
   deleteDoc,
+  deleteField,
   writeBatch,
   addDoc,
   enableNetwork,
@@ -11,6 +12,7 @@ import {
 } from 'firebase/firestore';
 import { db, auth } from './firebase';
 import type { Recipe, MealEntry, ShoppingItem, PantryItem, SharedRecipe, CategoryOverrideLog } from '../types';
+import type { ShoppingItemPatch } from './shoppingSync';
 
 // ── helpers ──────────────────────────────────────────────────────────────────
 
@@ -119,6 +121,8 @@ export function subscribeToUserData(uid: string, callbacks: UserDataCallbacks): 
     shoppingItemsCol(uid),
     (snap) => {
       if (skipIfCacheMiss(snap)) return;
+      // Raw docs, tombstoned (soft-deleted) ones included — the store's
+      // reconcile needs to see deletions explicitly (see shoppingSync.ts).
       const items = snap.docs.map((d) => d.data() as ShoppingItem);
       items.sort((a, b) => (a.order ?? Infinity) - (b.order ?? Infinity));
       callbacks.onShoppingItems(items);
@@ -191,25 +195,38 @@ export function deleteMealEntryDoc(uid: string, id: string): void {
 
 // ── shopping items ────────────────────────────────────────────────────────────
 
-export function saveShoppingItem(uid: string, item: ShoppingItem): void {
+/**
+ * Applies field-masked patches (see shoppingSync.ts) as merge writes, so each
+ * device only ever touches the fields it actually changed. This is what makes
+ * offline queues safe: a replayed stale patch can no longer overwrite fields
+ * another device edited in the meantime, and a patch merging into a
+ * tombstoned doc can't resurrect it. `null` field values clear the field on
+ * the server (the winning copy doesn't carry it); `undefined` fields are
+ * omitted from the write entirely.
+ */
+export function patchShoppingItems(uid: string, patches: ShoppingItemPatch[]): void {
+  if (patches.length === 0) return;
   ensureFirestoreOnline();
-  setDoc(doc(shoppingItemsCol(uid), item.id), stripUndefined(item)).catch(console.error);
+  const col = shoppingItemsCol(uid);
+  // Firestore batches cap at 500 operations; chunk to stay under it.
+  for (let i = 0; i < patches.length; i += 450) {
+    const batch = writeBatch(db!);
+    for (const { id, ...fields } of patches.slice(i, i + 450)) {
+      const data: Record<string, unknown> = {};
+      for (const [key, value] of Object.entries(fields)) {
+        if (value === undefined) continue;
+        data[key] = value === null ? deleteField() : value;
+      }
+      batch.set(doc(col, id), data, { merge: true });
+    }
+    batch.commit().catch(console.error);
+  }
 }
 
+/** Hard delete — only used to purge tombstones past their retention window. */
 export function deleteShoppingItemDoc(uid: string, id: string): void {
   ensureFirestoreOnline();
   deleteDoc(doc(shoppingItemsCol(uid), id)).catch(console.error);
-}
-
-/** Batch write the shopping list with refreshed order indices. */
-export function saveShoppingItems(uid: string, items: ShoppingItem[]): void {
-  ensureFirestoreOnline();
-  const col = shoppingItemsCol(uid);
-  const batch = writeBatch(db!);
-  items.forEach((item, index) =>
-    batch.set(doc(col, item.id), stripUndefined({ ...item, order: index })),
-  );
-  batch.commit().catch(console.error);
 }
 
 // ── pantry items ──────────────────────────────────────────────────────────────

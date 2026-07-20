@@ -60,11 +60,22 @@ export interface ShoppingItem {
   manual?: boolean;
   mealSources?: MealSource[];
   ingredientKey?: string; // normalizeIngredientName(name)__normalizeUnit(unit) for dedup
-  // Epoch ms of the last content change (checked/name/category/add). Used to
-  // reconcile the local copy with incoming Firestore snapshots by recency, so a
-  // change that hasn't finished syncing is never clobbered by a stale snapshot.
-  // Optional for backward compat with items written before this field existed.
-  updatedAt?: number;
+  // Per-field-group sync clocks (epoch-ms hybrid logical clock — see
+  // lib/shoppingSync.ts). Each group of fields carries its own clock and syncs
+  // independently, so concurrent edits to different aspects of the same item
+  // (rename on one device, check-off on another) merge instead of overwriting
+  // each other. All optional for backward compat with docs written before the
+  // fields existed; a missing clock compares as 0 (oldest).
+  updatedAt?: number; // content group: name/category/manual/mealSources/ingredientKey
+  checkedAt?: number; // checked group
+  orderAt?: number; // order group
+  // Soft-delete tombstone (presence group). Deleted items keep their doc with
+  // deleted: true so an offline device's queued stale write can't resurrect
+  // them; the doc is only hard-deleted after TOMBSTONE_RETENTION_MS. An item is
+  // hidden when the deletion is newer than its last content edit — a content
+  // edit made after (unaware of) the deletion deliberately resurrects it.
+  deleted?: boolean;
+  deletedAt?: number;
 }
 
 export type ShoppingCategory =
@@ -111,6 +122,10 @@ export interface AppState {
   recipes: Recipe[];
   mealEntries: MealEntry[];
   shoppingItems: ShoppingItem[];
+  // Soft-deleted shopping item ids → deletion clock. Persisted so a delete made
+  // offline survives an app restart and a stale server copy arriving later
+  // can't resurrect the item. Entries are pruned after TOMBSTONE_RETENTION_MS.
+  shoppingTombstones: Record<string, number>;
   pantryItems: PantryItem[];
   knownSources: string[];
   hasGeminiApiKey: boolean;
