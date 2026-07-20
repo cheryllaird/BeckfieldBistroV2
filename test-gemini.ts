@@ -1,8 +1,11 @@
 /**
- * Quick smoke test for the Gemini 2.0 Flash vision integration.
+ * Quick smoke test for the Gemini Flash vision integration.
  * Run with:  npx tsx test-gemini.ts
  *
- * Requires GEMINI_API_KEY in .env.local
+ * Dev-only: the app itself does NOT use GEMINI_API_KEY — each user supplies
+ * their own key in Settings (stored encrypted in Firestore). This script uses
+ * GEMINI_API_KEY purely to check model/vision reachability from your machine.
+ * Requires GEMINI_API_KEY in .env.local.
  * Get a free key at: https://aistudio.google.com/app/apikey
  */
 
@@ -36,7 +39,7 @@ if (!apiKey) {
 
 const genAI = new GoogleGenerativeAI(apiKey);
 const model = genAI.getGenerativeModel({
-  model: 'gemini-2.5-flash',
+  model: 'gemini-flash-lite-latest',
   systemInstruction: 'You are a helpful assistant.',
 });
 
@@ -45,7 +48,7 @@ const TINY_PNG_BASE64 =
   'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAC0lEQVQI12NgAAIABQ' +
   'AABjkB6QAAAABJRU5ErkJggg==';
 
-console.log('Testing gemini-2.5-flash vision...\n');
+console.log('Testing gemini-flash-lite-latest vision...\n');
 
 try {
   const result = await model.generateContent([
@@ -55,7 +58,7 @@ try {
 
   const text = result.response.text();
   console.log('Response :', text);
-  console.log('\nConnection to gemini-2.5-flash vision is working correctly.');
+  console.log('\nConnection to gemini-flash-lite-latest vision is working correctly.');
 } catch (err) {
   const message = err instanceof Error ? err.message : String(err);
   console.error(`Gemini error: ${message}`);

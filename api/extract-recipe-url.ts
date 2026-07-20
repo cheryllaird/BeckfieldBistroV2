@@ -415,35 +415,66 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const genAI = new GoogleGenerativeAI(apiKey);
   const prompt = urlUserPrompt(source) + pageText;
 
-  let rawText: string;
-  try {
-    const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash', systemInstruction: URL_SYSTEM_PROMPT });
-    rawText = await model.generateContent(prompt).then((r) => r.response.text());
-  } catch (primaryErr) {
-    const primaryMsg = primaryErr instanceof Error ? primaryErr.message : String(primaryErr);
-    const isRateLimit =
-      primaryMsg.includes('429') ||
-      primaryMsg.includes('RESOURCE_EXHAUSTED') ||
-      primaryMsg.toLowerCase().includes('too many requests') ||
-      primaryMsg.toLowerCase().includes('quota exceeded');
+  const isRateLimitMsg = (msg: string) =>
+    msg.includes('429') ||
+    msg.includes('RESOURCE_EXHAUSTED') ||
+    msg.toLowerCase().includes('too many requests') ||
+    msg.toLowerCase().includes('quota exceeded');
+  // 503 UNAVAILABLE — model temporarily overloaded ("high demand"). Transient
+  // and not tied to our quota, so it's worth retrying the same model briefly.
+  const isOverloadMsg = (msg: string) => {
+    const m = msg.toLowerCase();
+    return (
+      m.includes('503') ||
+      m.includes('unavailable') ||
+      m.includes('overloaded') ||
+      m.includes('high demand') ||
+      m.includes('try again later')
+    );
+  };
+  const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
-    if (!isRateLimit) {
-      console.error('Gemini error:', primaryMsg);
-      return res.status(502).json({ error: 'AI service error. Please try again.' });
-    }
-
-    // Daily quota hit — fall back to gemini-2.5-flash-lite (separate quota bucket).
-    console.log('gemini-2.5-flash rate-limited on URL extraction, falling back to gemini-2.5-flash-lite');
+  let rawText: string | undefined;
+  let primaryMsg = '';
+  const backoffsMs = [0, 1000, 2500];
+  for (let attempt = 0; attempt < backoffsMs.length; attempt++) {
+    if (backoffsMs[attempt] > 0) await sleep(backoffsMs[attempt]);
     try {
-      const fallback = genAI.getGenerativeModel({ model: 'gemini-2.5-flash-lite', systemInstruction: URL_SYSTEM_PROMPT });
+      const model = genAI.getGenerativeModel({ model: 'gemini-flash-lite-latest', systemInstruction: URL_SYSTEM_PROMPT });
+      rawText = await model.generateContent(prompt).then((r) => r.response.text());
+      break;
+    } catch (primaryErr) {
+      primaryMsg = primaryErr instanceof Error ? primaryErr.message : String(primaryErr);
+      console.error(`gemini-flash-lite-latest failed on URL extraction: ${primaryMsg}`);
+      if (isOverloadMsg(primaryMsg) && attempt < backoffsMs.length - 1) continue; // transient — retry
+      if (isOverloadMsg(primaryMsg) || isRateLimitMsg(primaryMsg)) break; // fall back to lite
+      return res.status(502).json({ error: 'AI service error. Please try again.' }); // non-retryable
+    }
+  }
+
+  if (rawText === undefined) {
+    // Primary exhausted (quota or persistent overload) — try the fuller Flash model
+    // (separate quota bucket; more capable, though more prone to its own overloads).
+    console.log('gemini-flash-lite-latest unavailable on URL extraction, falling back to gemini-flash-latest');
+    try {
+      const fallback = genAI.getGenerativeModel({ model: 'gemini-flash-latest', systemInstruction: URL_SYSTEM_PROMPT });
       rawText = await fallback.generateContent(prompt).then((r) => r.response.text());
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       console.error('Gemini fallback error:', message);
+      if (isOverloadMsg(primaryMsg) || isOverloadMsg(message)) {
+        return res.status(503).json({
+          error: 'Gemini is experiencing high demand right now. Please try again in a moment.',
+        });
+      }
       return res.status(429).json({
         error: 'Your Gemini API key has hit its rate limit or daily quota. Wait a bit and try again, or upgrade your key at aistudio.google.com.',
       });
     }
+  }
+
+  if (rawText === undefined) {
+    return res.status(502).json({ error: 'AI service error. Please try again.' });
   }
 
   const cleaned = rawText

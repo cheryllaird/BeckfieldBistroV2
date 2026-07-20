@@ -131,30 +131,62 @@ function isRateLimitError(err: unknown): boolean {
   );
 }
 
+// 503 UNAVAILABLE — the model is temporarily overloaded ("high demand"). Unlike
+// a rate limit this is transient and not tied to our quota, so it's worth
+// retrying the same model after a short backoff before giving up.
+function isOverloadError(err: unknown): boolean {
+  const e = err as Record<string, unknown>;
+  const status = (e.status ?? e.httpStatus ?? e.statusCode) as number | undefined;
+  const message = (err instanceof Error ? err.message : String(err)).toLowerCase();
+  return (
+    status === 503 ||
+    message.includes('503') ||
+    message.includes('unavailable') ||
+    message.includes('overloaded') ||
+    message.includes('high demand') ||
+    message.includes('try again later')
+  );
+}
+
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
 async function callGeminiWithRetry(genAI: GoogleGenerativeAI, parts: (string | Part)[]): Promise<string> {
-  // Try primary model once. On any rate-limit error immediately fall back to the
-  // secondary model (separate quota bucket) rather than retrying — retrying the
-  // same model wastes the daily RPD allowance without any benefit.
-  console.log('gemini-2.5-flash attempt 1/1');
+  const PRIMARY = 'gemini-flash-lite-latest';
+  const FALLBACK = 'gemini-flash-latest';
+  // Backoff schedule for transient 503 overloads on the primary model. A
+  // rate-limit (429) does NOT retry the same model — retrying wastes the daily
+  // RPD allowance — it drops straight to the fallback's separate quota bucket.
+  const backoffsMs = [0, 1000, 2500];
   let primaryErr: unknown;
-  try {
-    const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash', systemInstruction: SYSTEM_PROMPT });
-    return await model.generateContent(parts).then((r) => r.response.text());
-  } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    console.error(`gemini-2.5-flash failed: ${message}`);
-    if (!isRateLimitError(err)) throw err;
-    primaryErr = err;
+
+  for (let attempt = 0; attempt < backoffsMs.length; attempt++) {
+    if (backoffsMs[attempt] > 0) await sleep(backoffsMs[attempt]);
+    console.log(`${PRIMARY} attempt ${attempt + 1}/${backoffsMs.length}`);
+    try {
+      const model = genAI.getGenerativeModel({ model: PRIMARY, systemInstruction: SYSTEM_PROMPT });
+      return await model.generateContent(parts).then((r) => r.response.text());
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      console.error(`${PRIMARY} failed: ${message}`);
+      primaryErr = err;
+      if (isOverloadError(err)) {
+        if (attempt < backoffsMs.length - 1) continue; // transient — retry primary
+        break; // out of retries — try the fallback model
+      }
+      if (isRateLimitError(err)) break; // quota — go straight to fallback
+      throw err; // anything else is non-retryable
+    }
   }
 
-  // Primary quota hit — fall back to gemini-2.5-flash-lite (separate quota bucket).
-  console.log('gemini-2.5-flash rate-limited, falling back to gemini-2.5-flash-lite');
+  // Primary exhausted (quota or persistent overload) — try the fuller Flash model
+  // (separate quota bucket; more capable, though more prone to its own overloads).
+  console.log(`${PRIMARY} unavailable, falling back to ${FALLBACK}`);
   try {
-    const fallback = genAI.getGenerativeModel({ model: 'gemini-2.5-flash-lite', systemInstruction: SYSTEM_PROMPT });
+    const fallback = genAI.getGenerativeModel({ model: FALLBACK, systemInstruction: SYSTEM_PROMPT });
     return await fallback.generateContent(parts).then((r) => r.response.text());
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
-    console.error(`gemini-2.5-flash-lite failed: ${message}`);
+    console.error(`${FALLBACK} failed: ${message}`);
     throw primaryErr;
   }
 }
@@ -259,6 +291,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (isRateLimitError(err)) {
       return res.status(429).json({
         error: 'Your Gemini API key has hit its rate limit or daily quota. Wait a bit and try again, or upgrade your key at aistudio.google.com.',
+      });
+    }
+    if (isOverloadError(err)) {
+      return res.status(503).json({
+        error: 'Gemini is experiencing high demand right now. Please try again in a moment.',
       });
     }
     return res.status(502).json({ error: 'AI service error. Please try again.' });
