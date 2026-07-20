@@ -438,17 +438,29 @@ export const useStore = create<Store>()(
       },
 
       signIn: (firebaseUser) => {
-        // Tear down any previous listeners (e.g. if signIn is called twice)
-        _unsubscribeUserData?.();
-        _unsubscribeShares?.();
-        _unsubscribeUserData = null;
-        _unsubscribeShares = null;
-        // Cancel pending empty-snapshot timers from the previous session so
-        // they can't fire against this account's freshly loaded data.
-        clearPendingEmptyTimers();
-        _purgedTombstoneIds.clear();
-
         const existingUid = get().user?.uid;
+
+        // If listeners are already live for this same account — the normal
+        // launch path, where resubscribe() attached them from the persisted
+        // session and Firebase then confirmed the same user — keep them.
+        // Tearing down and re-adding the same five listeners back-to-back
+        // churns watch-target adds/removes on the Listen stream, the race
+        // behind Firestore's fatal "INTERNAL ASSERTION FAILED (ID: ca9)"
+        // (firebase-js-sdk#9267), and buys nothing.
+        const keepListeners =
+          _unsubscribeUserData !== null && existingUid === firebaseUser.uid;
+
+        if (!keepListeners) {
+          // Tear down any previous listeners (e.g. switching accounts)
+          _unsubscribeUserData?.();
+          _unsubscribeShares?.();
+          _unsubscribeUserData = null;
+          _unsubscribeShares = null;
+          // Cancel pending empty-snapshot timers from the previous session so
+          // they can't fire against this account's freshly loaded data.
+          clearPendingEmptyTimers();
+          _purgedTombstoneIds.clear();
+        }
 
         set({
           isAuthenticated: true,
@@ -473,7 +485,9 @@ export const useStore = create<Store>()(
           }),
         });
 
-        attachListeners(firebaseUser.uid, firebaseUser.email, set, get);
+        if (!keepListeners) {
+          attachListeners(firebaseUser.uid, firebaseUser.email, set, get);
+        }
       },
 
       // Re-attaches Firestore listeners for a cached user without resetting
