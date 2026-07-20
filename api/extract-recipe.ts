@@ -135,26 +135,26 @@ async function callGeminiWithRetry(genAI: GoogleGenerativeAI, parts: (string | P
   // Try primary model once. On any rate-limit error immediately fall back to the
   // secondary model (separate quota bucket) rather than retrying — retrying the
   // same model wastes the daily RPD allowance without any benefit.
-  console.log('gemini-2.5-flash attempt 1/1');
+  console.log('gemini-flash-latest attempt 1/1');
   let primaryErr: unknown;
   try {
-    const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash', systemInstruction: SYSTEM_PROMPT });
+    const model = genAI.getGenerativeModel({ model: 'gemini-flash-latest', systemInstruction: SYSTEM_PROMPT });
     return await model.generateContent(parts).then((r) => r.response.text());
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
-    console.error(`gemini-2.5-flash failed: ${message}`);
+    console.error(`gemini-flash-latest failed: ${message}`);
     if (!isRateLimitError(err)) throw err;
     primaryErr = err;
   }
 
-  // Primary quota hit — fall back to gemini-2.5-flash-lite (separate quota bucket).
-  console.log('gemini-2.5-flash rate-limited, falling back to gemini-2.5-flash-lite');
+  // Primary quota hit — fall back to gemini-flash-lite-latest (separate quota bucket).
+  console.log('gemini-flash-latest rate-limited, falling back to gemini-flash-lite-latest');
   try {
-    const fallback = genAI.getGenerativeModel({ model: 'gemini-2.5-flash-lite', systemInstruction: SYSTEM_PROMPT });
+    const fallback = genAI.getGenerativeModel({ model: 'gemini-flash-lite-latest', systemInstruction: SYSTEM_PROMPT });
     return await fallback.generateContent(parts).then((r) => r.response.text());
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
-    console.error(`gemini-2.5-flash-lite failed: ${message}`);
+    console.error(`gemini-flash-lite-latest failed: ${message}`);
     throw primaryErr;
   }
 }

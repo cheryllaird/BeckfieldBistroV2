@@ -36,7 +36,7 @@ if (!apiKey) {
 
 const genAI = new GoogleGenerativeAI(apiKey);
 const model = genAI.getGenerativeModel({
-  model: 'gemini-2.5-flash',
+  model: 'gemini-flash-latest',
   systemInstruction: 'You are a helpful assistant.',
 });
 
@@ -45,7 +45,7 @@ const TINY_PNG_BASE64 =
   'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAC0lEQVQI12NgAAIABQ' +
   'AABjkB6QAAAABJRU5ErkJggg==';
 
-console.log('Testing gemini-2.5-flash vision...\n');
+console.log('Testing gemini-flash-latest vision...\n');
 
 try {
   const result = await model.generateContent([
@@ -55,7 +55,7 @@ try {
 
   const text = result.response.text();
   console.log('Response :', text);
-  console.log('\nConnection to gemini-2.5-flash vision is working correctly.');
+  console.log('\nConnection to gemini-flash-latest vision is working correctly.');
 } catch (err) {
   const message = err instanceof Error ? err.message : String(err);
   console.error(`Gemini error: ${message}`);
