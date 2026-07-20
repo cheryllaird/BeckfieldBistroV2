@@ -10,8 +10,7 @@ import {
   deleteRecipeDoc,
   saveMealEntry,
   deleteMealEntryDoc,
-  saveShoppingItem,
-  saveShoppingItems,
+  patchShoppingItems,
   deleteShoppingItemDoc,
   savePantryItem,
   savePantryItems,
@@ -23,6 +22,11 @@ import {
   acceptShare as firestoreAcceptShare,
   dismissShare as firestoreDismissShare,
 } from '../lib/firestore';
+import {
+  diffShoppingLists,
+  nextClock,
+  reconcileShoppingSnapshot,
+} from '../lib/shoppingSync';
 import type { Recipe, MealEntry, ShoppingItem, PantryItem, AppState, SharedRecipe } from '../types';
 
 // Module-level ref so it's never serialized into Zustand state or localStorage
@@ -95,6 +99,10 @@ function clearPendingEmptyTimers() {
 // — would clobber the correct local state and then re-persist the stale data
 // over it.
 //
+// Used for recipes, meal entries and pantry items. The shopping list — the
+// collection two devices actually edit concurrently — uses the stronger
+// field-level merge in lib/shoppingSync.ts instead.
+//
 // Rules:
 //  • An item present on both sides keeps whichever copy has the newer
 //    `updatedAt`. A locally-newer item (an unsynced edit) wins and is collected
@@ -156,11 +164,35 @@ function stampChanged<T extends { id: string; updatedAt?: number }>(
   });
 }
 
-const shoppingContentEqual = (a: ShoppingItem, b: ShoppingItem) =>
-  a.name === b.name && a.checked === b.checked && a.category === b.category;
-
 const pantryContentEqual = (a: PantryItem, b: PantryItem) =>
   a.name === b.name && a.normalizedName === b.normalizedName && a.category === b.category;
+
+// Tombstone docs already hard-deleted this session, so each is only purged
+// once no matter how many snapshots report it. Cleared on sign-in/out.
+const _purgedTombstoneIds = new Set<string>();
+
+// Routes every shopping-list mutation through the diff engine in
+// lib/shoppingSync.ts: the store keeps the freshly-stamped list, and only the
+// field groups that actually changed are written to Firestore as merge
+// patches (removed items become tombstones). See shoppingSync.ts for why this
+// is what makes two-device offline editing safe.
+function applyShoppingListUpdate(
+  next: ShoppingItem[],
+  set: (partial: Partial<Store>) => void,
+  get: () => Store,
+) {
+  const s = get();
+  const clock = nextClock(s.shoppingItems, s.shoppingTombstones);
+  const { items, patches, tombstones } = diffShoppingLists(
+    s.shoppingItems,
+    next,
+    clock,
+    s.shoppingTombstones,
+  );
+  set({ shoppingItems: items, shoppingTombstones: tombstones });
+  const uid = s.user?.uid;
+  if (uid && patches.length) patchShoppingItems(uid, patches);
+}
 
 // Applies an incoming Firestore snapshot to the store, debouncing empty
 // results so a transient "collection looks empty" read doesn't wipe out data
@@ -229,18 +261,29 @@ function attachListeners(
         if (toResend.length) toResend.forEach((e) => saveMealEntry(uid, e));
       });
     },
-    onShoppingItems: (shoppingItems) => {
-      applyCollectionSnapshot('shoppingItems', shoppingItems, get().shoppingItems.length, () => {
-        const { merged, toResend } = reconcileByRecency(
-          shoppingItems,
+    onShoppingItems: (incoming) => {
+      // `incoming` is raw docs, tombstoned ones included — deletions arrive as
+      // explicit `deleted: true` docs, never as absence, so a non-empty
+      // snapshot is always safe to apply immediately.
+      applyCollectionSnapshot('shoppingItems', incoming, get().shoppingItems.length, () => {
+        const { items, tombstones, resend, purgeIds } = reconcileShoppingSnapshot(
+          incoming,
           get().shoppingItems,
-          byUpdatedAt,
+          get().shoppingTombstones,
+          Date.now(),
         );
-        set({ shoppingItems: merged });
-        // Re-push any item the local copy won so the server catches up. The
-        // resent doc carries the same updatedAt, so the snapshot it triggers
-        // ties and is taken as-is — convergence terminates, no write loop.
-        if (toResend.length) toResend.forEach((item) => saveShoppingItem(uid, item));
+        set({ shoppingItems: items, shoppingTombstones: tombstones });
+        // Re-push the field groups the local copy won so the server catches
+        // up. Resent patches carry the same clocks, so when they echo back
+        // they tie and the incoming copy is taken — convergence terminates,
+        // no write loop.
+        if (resend.length) patchShoppingItems(uid, resend);
+        // Garbage-collect tombstones past retention (once per session each).
+        for (const id of purgeIds) {
+          if (_purgedTombstoneIds.has(id)) continue;
+          _purgedTombstoneIds.add(id);
+          deleteShoppingItemDoc(uid, id);
+        }
       });
     },
     onPantryItems: (pantryItems) => {
@@ -271,6 +314,7 @@ export const useStore = create<Store>()(
       recipes: [],
       mealEntries: [],
       shoppingItems: [],
+      shoppingTombstones: {},
       pantryItems: [],
       knownSources: [],
       hasGeminiApiKey: false,
@@ -328,57 +372,41 @@ export const useStore = create<Store>()(
         if (uid) deleteMealEntryDoc(uid, id);
       },
 
-      setShoppingItems: (items) => {
-        // Stamp only items whose content changed so the recency-based reconcile
-        // can distinguish a real edit from an untouched item on the next sync.
-        const stamped = stampChanged(get().shoppingItems, items, Date.now(), shoppingContentEqual);
-        set({ shoppingItems: stamped });
-        const uid = get().user?.uid;
-        if (uid) saveShoppingItems(uid, stamped);
-      },
+      setShoppingItems: (items) => applyShoppingListUpdate(items, set, get),
 
       toggleShoppingItem: (id) => {
-        const now = Date.now();
-        set((s) => ({
-          shoppingItems: s.shoppingItems.map((item) =>
-            item.id === id ? { ...item, checked: !item.checked, updatedAt: now } : item,
-          ),
-        }));
-        const uid = get().user?.uid;
-        if (uid) {
-          const item = get().shoppingItems.find((i) => i.id === id);
-          if (item) saveShoppingItem(uid, item);
-        }
+        const s = get();
+        const item = s.shoppingItems.find((i) => i.id === id);
+        if (!item) return;
+        // Patch only the checked group: a toggle replayed from an offline
+        // queue can then never clobber a rename/reorder made elsewhere.
+        const clock = nextClock(s.shoppingItems, s.shoppingTombstones);
+        const updated: ShoppingItem = { ...item, checked: !item.checked, checkedAt: clock };
+        set({
+          shoppingItems: s.shoppingItems.map((i) => (i.id === id ? updated : i)),
+        });
+        const uid = s.user?.uid;
+        if (uid) patchShoppingItems(uid, [{ id, checked: updated.checked, checkedAt: clock }]);
       },
 
-      addShoppingItem: (item) => {
-        const stamped: ShoppingItem = { ...item, updatedAt: Date.now() };
-        set((s) => ({ shoppingItems: [...s.shoppingItems, stamped] }));
-        const uid = get().user?.uid;
-        if (uid) saveShoppingItem(uid, stamped);
-      },
+      addShoppingItem: (item) =>
+        applyShoppingListUpdate([...get().shoppingItems, item], set, get),
 
-      removeShoppingItem: (id) => {
-        set((s) => ({ shoppingItems: s.shoppingItems.filter((i) => i.id !== id) }));
-        const uid = get().user?.uid;
-        if (uid) deleteShoppingItemDoc(uid, id);
-      },
+      removeShoppingItem: (id) =>
+        applyShoppingListUpdate(
+          get().shoppingItems.filter((i) => i.id !== id),
+          set,
+          get,
+        ),
 
-      reorderShoppingItems: (items) => {
-        // Reordering changes only position (carried by `order`), not item
-        // content, so no updatedAt bump — see stampChanged.
-        const stamped = stampChanged(get().shoppingItems, items, Date.now(), shoppingContentEqual);
-        set({ shoppingItems: stamped });
-        const uid = get().user?.uid;
-        if (uid) saveShoppingItems(uid, stamped);
-      },
+      reorderShoppingItems: (items) => applyShoppingListUpdate(items, set, get),
 
-      clearCheckedItems: () => {
-        const removed = get().shoppingItems.filter((i) => i.checked);
-        set((s) => ({ shoppingItems: s.shoppingItems.filter((i) => !i.checked) }));
-        const uid = get().user?.uid;
-        if (uid) removed.forEach((i) => deleteShoppingItemDoc(uid, i.id));
-      },
+      clearCheckedItems: () =>
+        applyShoppingListUpdate(
+          get().shoppingItems.filter((i) => !i.checked),
+          set,
+          get,
+        ),
 
       addPantryItem: (item) => {
         const stamped: PantryItem = { ...item, updatedAt: Date.now() };
@@ -418,6 +446,7 @@ export const useStore = create<Store>()(
         // Cancel pending empty-snapshot timers from the previous session so
         // they can't fire against this account's freshly loaded data.
         clearPendingEmptyTimers();
+        _purgedTombstoneIds.clear();
 
         const existingUid = get().user?.uid;
 
@@ -436,6 +465,7 @@ export const useStore = create<Store>()(
             recipes: [],
             mealEntries: [],
             shoppingItems: [],
+            shoppingTombstones: {},
             pantryItems: [],
             knownSources: [],
             hasGeminiApiKey: false,
@@ -462,6 +492,7 @@ export const useStore = create<Store>()(
         _unsubscribeShares?.();
         _unsubscribeShares = null;
         clearPendingEmptyTimers();
+        _purgedTombstoneIds.clear();
         if (auth) await firebaseSignOut(auth);
         set({
           isAuthenticated: false,
@@ -469,6 +500,7 @@ export const useStore = create<Store>()(
           recipes: [],
           mealEntries: [],
           shoppingItems: [],
+          shoppingTombstones: {},
           pantryItems: [],
           knownSources: [],
           hasGeminiApiKey: false,
@@ -571,6 +603,9 @@ export const useStore = create<Store>()(
         recipes: s.recipes,
         mealEntries: s.mealEntries,
         shoppingItems: s.shoppingItems,
+        // Persisted so a delete made offline survives an app restart — the
+        // tombstone must outlive the session to keep beating stale copies.
+        shoppingTombstones: s.shoppingTombstones,
         pantryItems: s.pantryItems,
         knownSources: s.knownSources,
         hasGeminiApiKey: s.hasGeminiApiKey,
