@@ -11,13 +11,29 @@ import { ensureFirestoreOnline, flushPendingWrites, recoverIfSdkCrashed } from '
 // foreground, or the device reports it's back online, wakes the listeners and
 // flushes any writes that were queued while dormant.
 //
-// enableNetwork() is idempotent, so calling it on every wake event is safe.
+// A resume commonly fires several of these signals at once — focus AND
+// visibilitychange, sometimes with online — and each enableNetwork can restart
+// the watch stream, whose mid-flight restart is what triggers the fatal ca9
+// assertion (see ensureFirestoreOnline). So coalesce the burst: schedule a
+// single forced wake on the next tick and let the duplicates collapse into it.
 
 let started = false;
 
 export function startConnectivityManager(): () => void {
   if (started || typeof window === 'undefined') return () => {};
   started = true;
+
+  // Coalesces the multiple resume signals that fire together into one forced
+  // enableNetwork. `force` bypasses the throttle because a real resume is when
+  // the SDK is most likely dormant and must be re-woken.
+  let wakeTimer: ReturnType<typeof setTimeout> | null = null;
+  const scheduleWake = () => {
+    if (wakeTimer !== null) return;
+    wakeTimer = setTimeout(() => {
+      wakeTimer = null;
+      ensureFirestoreOnline(true);
+    }, 250);
+  };
 
   // Becoming visible again: wake the connection so listeners resume.
   // Becoming hidden: the app is being backgrounded or closed — drain any
@@ -26,11 +42,11 @@ export function startConnectivityManager(): () => void {
   // launch. Best-effort: the browser may kill the page first, in which case the
   // durable IndexedDB queue replays on relaunch (see flushPendingWrites).
   const onVisibilityChange = () => {
-    if (document.visibilityState === 'visible') ensureFirestoreOnline();
+    if (document.visibilityState === 'visible') scheduleWake();
     else flushPendingWrites();
   };
   const wakeIfVisible = () => {
-    if (document.visibilityState === 'visible') ensureFirestoreOnline();
+    if (document.visibilityState === 'visible') scheduleWake();
   };
 
   // Fatal Firestore SDK crashes ("INTERNAL ASSERTION FAILED") are thrown from
@@ -41,7 +57,7 @@ export function startConnectivityManager(): () => void {
   const onWindowError = (e: ErrorEvent) => recoverIfSdkCrashed(e.error ?? e.message);
   const onUnhandledRejection = (e: PromiseRejectionEvent) => recoverIfSdkCrashed(e.reason);
 
-  window.addEventListener('online', ensureFirestoreOnline);
+  window.addEventListener('online', scheduleWake);
   window.addEventListener('focus', wakeIfVisible);
   document.addEventListener('visibilitychange', onVisibilityChange);
   window.addEventListener('error', onWindowError);
@@ -53,15 +69,16 @@ export function startConnectivityManager(): () => void {
 
   // Kick once on startup in case the SDK initialised while the connection was
   // dormant (cold launch from a locked phone).
-  ensureFirestoreOnline();
+  ensureFirestoreOnline(true);
 
   return () => {
-    window.removeEventListener('online', ensureFirestoreOnline);
+    window.removeEventListener('online', scheduleWake);
     window.removeEventListener('focus', wakeIfVisible);
     document.removeEventListener('visibilitychange', onVisibilityChange);
     window.removeEventListener('error', onWindowError);
     window.removeEventListener('unhandledrejection', onUnhandledRejection);
     window.removeEventListener('pagehide', flushPendingWrites);
+    if (wakeTimer !== null) clearTimeout(wakeTimer);
     started = false;
   };
 }

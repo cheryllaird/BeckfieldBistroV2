@@ -65,20 +65,43 @@ function logFirestoreError(err: unknown): void {
   recoverIfSdkCrashed(err);
 }
 
+// How long an enableNetwork() call suppresses the next one. See
+// ensureFirestoreOnline for why throttling matters.
+const ENABLE_NETWORK_THROTTLE_MS = 10_000;
+let _lastEnableNetworkAt = 0;
+
 /**
- * Forces the Firestore SDK back online (idempotent).
+ * Forces the Firestore SDK back online, throttled.
  *
  * On mobile PWAs the realtime connection goes dormant whenever the app is
  * backgrounded (screen locked / tab hidden) and does not always re-establish on
  * its own — the "SDK stuck offline" behaviour seen in production here. While
  * dormant the onSnapshot listeners stop receiving server pushes and queued
  * writes never reach the server, so an edit made on one device never appears on
- * another. Calling enableNetwork wakes the connection back up; we invoke it from
- * every write path and whenever the app regains the foreground (see
- * connectivity.ts) — exactly when cross-device sync is expected to resume.
+ * another. Calling enableNetwork wakes the connection back up, so we invoke it
+ * whenever cross-device sync is expected to resume.
+ *
+ * BUT enableNetwork is not free: each call can force the watch stream to
+ * restart, and a restart mid-flight is exactly what drives Firestore's fatal
+ * "INTERNAL ASSERTION FAILED (ID: ca9), pendingResponses < 0" crash
+ * (firebase-js-sdk#9267 / #8250) — the watch aggregator receives more target
+ * acks than it recorded requests for. This app used to call enableNetwork from
+ * every write path and every focus/visibility/online event, so two devices
+ * actively editing the shopping list produced a storm of enableNetwork calls —
+ * a continuous stream-restart pressure that made the race fire routinely.
+ *
+ * So collapse the storm: fire at most once per throttle window. The leading
+ * edge still fires immediately (the first write in a burst, or a resume after
+ * an idle period wakes the SDK right away); the rapid follow-ups that used to
+ * churn the stream are dropped. `force` bypasses the throttle for genuine
+ * resume transitions (app foregrounded / network restored), which are
+ * infrequent and are precisely when a dormant SDK must be re-woken.
  */
-export function ensureFirestoreOnline(): void {
+export function ensureFirestoreOnline(force = false): void {
   if (!db) return;
+  const now = Date.now();
+  if (!force && now - _lastEnableNetworkAt < ENABLE_NETWORK_THROTTLE_MS) return;
+  _lastEnableNetworkAt = now;
   enableNetwork(db).catch(() => {});
 }
 
@@ -102,7 +125,10 @@ export function ensureFirestoreOnline(): void {
  */
 export function flushPendingWrites(): Promise<void> {
   if (!db) return Promise.resolve();
-  enableNetwork(db).catch(() => {});
+  // Throttled wake (shared budget with writes), so rapid tab-flipping can't
+  // turn the hide handler into another enableNetwork storm. waitForPendingWrites
+  // still drains the queue regardless of whether the wake actually fired.
+  ensureFirestoreOnline();
   return waitForPendingWrites(db).catch(() => {});
 }
 
