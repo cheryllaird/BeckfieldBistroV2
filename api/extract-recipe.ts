@@ -151,8 +151,8 @@ function isOverloadError(err: unknown): boolean {
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 async function callGeminiWithRetry(genAI: GoogleGenerativeAI, parts: (string | Part)[]): Promise<string> {
-  const PRIMARY = 'gemini-flash-latest';
-  const FALLBACK = 'gemini-flash-lite-latest';
+  const PRIMARY = 'gemini-flash-lite-latest';
+  const FALLBACK = 'gemini-flash-latest';
   // Backoff schedule for transient 503 overloads on the primary model. A
   // rate-limit (429) does NOT retry the same model — retrying wastes the daily
   // RPD allowance — it drops straight to the fallback's separate quota bucket.
@@ -178,8 +178,8 @@ async function callGeminiWithRetry(genAI: GoogleGenerativeAI, parts: (string | P
     }
   }
 
-  // Primary exhausted (quota or persistent overload) — try gemini-flash-lite-latest
-  // (separate quota bucket, and often less contended when Flash is overloaded).
+  // Primary exhausted (quota or persistent overload) — try the fuller Flash model
+  // (separate quota bucket; more capable, though more prone to its own overloads).
   console.log(`${PRIMARY} unavailable, falling back to ${FALLBACK}`);
   try {
     const fallback = genAI.getGenerativeModel({ model: FALLBACK, systemInstruction: SYSTEM_PROMPT });

@@ -440,12 +440,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   for (let attempt = 0; attempt < backoffsMs.length; attempt++) {
     if (backoffsMs[attempt] > 0) await sleep(backoffsMs[attempt]);
     try {
-      const model = genAI.getGenerativeModel({ model: 'gemini-flash-latest', systemInstruction: URL_SYSTEM_PROMPT });
+      const model = genAI.getGenerativeModel({ model: 'gemini-flash-lite-latest', systemInstruction: URL_SYSTEM_PROMPT });
       rawText = await model.generateContent(prompt).then((r) => r.response.text());
       break;
     } catch (primaryErr) {
       primaryMsg = primaryErr instanceof Error ? primaryErr.message : String(primaryErr);
-      console.error(`gemini-flash-latest failed on URL extraction: ${primaryMsg}`);
+      console.error(`gemini-flash-lite-latest failed on URL extraction: ${primaryMsg}`);
       if (isOverloadMsg(primaryMsg) && attempt < backoffsMs.length - 1) continue; // transient — retry
       if (isOverloadMsg(primaryMsg) || isRateLimitMsg(primaryMsg)) break; // fall back to lite
       return res.status(502).json({ error: 'AI service error. Please try again.' }); // non-retryable
@@ -453,11 +453,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   if (rawText === undefined) {
-    // Primary exhausted (quota or persistent overload) — try gemini-flash-lite-latest
-    // (separate quota bucket, often less contended when Flash is overloaded).
-    console.log('gemini-flash-latest unavailable on URL extraction, falling back to gemini-flash-lite-latest');
+    // Primary exhausted (quota or persistent overload) — try the fuller Flash model
+    // (separate quota bucket; more capable, though more prone to its own overloads).
+    console.log('gemini-flash-lite-latest unavailable on URL extraction, falling back to gemini-flash-latest');
     try {
-      const fallback = genAI.getGenerativeModel({ model: 'gemini-flash-lite-latest', systemInstruction: URL_SYSTEM_PROMPT });
+      const fallback = genAI.getGenerativeModel({ model: 'gemini-flash-latest', systemInstruction: URL_SYSTEM_PROMPT });
       rawText = await fallback.generateContent(prompt).then((r) => r.response.text());
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
