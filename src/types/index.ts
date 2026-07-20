@@ -113,6 +113,7 @@ export interface AppState {
   shoppingItems: ShoppingItem[];
   pantryItems: PantryItem[];
   knownSources: string[];
+  hasGeminiApiKey: boolean;
   isAuthenticated: boolean;
   user: { uid: string; name: string; email: string; avatar?: string } | null;
   splashDone: boolean;

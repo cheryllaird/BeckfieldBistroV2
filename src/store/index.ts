@@ -17,6 +17,7 @@ import {
   savePantryItems,
   deletePantryItemDoc,
   saveKnownSources,
+  saveGeminiApiKey,
   sendRecipeShare,
   subscribeToIncomingShares,
   acceptShare as firestoreAcceptShare,
@@ -63,6 +64,9 @@ interface Store extends AppState {
 
   // Source actions
   addSource: (source: string) => void;
+
+  // Settings actions
+  setGeminiApiKey: (key: string) => Promise<void>;
 
   // Sharing actions
   sendRecipe: (recipe: Recipe, toEmail: string) => Promise<void>;
@@ -251,6 +255,7 @@ function attachListeners(
         set({ knownSources }),
       );
     },
+    onHasGeminiApiKey: (hasGeminiApiKey) => set({ hasGeminiApiKey }),
   });
 
   if (email) {
@@ -268,6 +273,7 @@ export const useStore = create<Store>()(
       shoppingItems: [],
       pantryItems: [],
       knownSources: [],
+      hasGeminiApiKey: false,
       isAuthenticated: false,
       user: null,
       splashDone: false,
@@ -432,6 +438,7 @@ export const useStore = create<Store>()(
             shoppingItems: [],
             pantryItems: [],
             knownSources: [],
+            hasGeminiApiKey: false,
             incomingShares: [],
           }),
         });
@@ -464,6 +471,7 @@ export const useStore = create<Store>()(
           shoppingItems: [],
           pantryItems: [],
           knownSources: [],
+          hasGeminiApiKey: false,
           incomingShares: [],
         });
       },
@@ -478,6 +486,12 @@ export const useStore = create<Store>()(
         }));
         const uid = get().user?.uid;
         if (uid) saveKnownSources(uid, get().knownSources);
+      },
+
+      setGeminiApiKey: async (key) => {
+        if (!get().user) return;
+        const hasGeminiApiKey = await saveGeminiApiKey(key);
+        set({ hasGeminiApiKey });
       },
 
       sendRecipe: async (recipe, toEmail) => {
@@ -559,6 +573,7 @@ export const useStore = create<Store>()(
         shoppingItems: s.shoppingItems,
         pantryItems: s.pantryItems,
         knownSources: s.knownSources,
+        hasGeminiApiKey: s.hasGeminiApiKey,
       }),
     },
   ),

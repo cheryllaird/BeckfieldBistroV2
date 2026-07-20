@@ -74,6 +74,7 @@ export interface UserDataCallbacks {
   onShoppingItems: (items: ShoppingItem[]) => void;
   onPantryItems: (items: PantryItem[]) => void;
   onKnownSources: (sources: string[]) => void;
+  onHasGeminiApiKey: (hasKey: boolean) => void;
   onError?: (err: Error) => void;
 }
 
@@ -141,6 +142,7 @@ export function subscribeToUserData(uid: string, callbacks: UserDataCallbacks): 
     (snap) => {
       if (snap.metadata.fromCache && !snap.exists()) return;
       callbacks.onKnownSources((snap.data()?.knownSources as string[]) ?? []);
+      callbacks.onHasGeminiApiKey(!!snap.data()?.geminiApiKeyEncrypted);
     },
     handleError
   );
@@ -247,6 +249,28 @@ export function logCategoryOverride(uid: string, entry: Omit<CategoryOverrideLog
 export function saveKnownSources(uid: string, sources: string[]): void {
   ensureFirestoreOnline();
   setDoc(profileDoc(uid), { knownSources: sources }, { merge: true }).catch(console.error);
+}
+
+// ── AI API key ────────────────────────────────────────────────────────────────
+// Each user supplies their own Gemini API key so recipe-extraction usage/cost is
+// billed to their own account rather than a single shared key. The key itself
+// never touches the client SDK's direct Firestore writes — it's sent once,
+// over HTTPS, to /api/save-gemini-key, which encrypts it server-side before
+// storing it. Firestore (and this client) only ever sees the ciphertext.
+
+export async function saveGeminiApiKey(apiKey: string): Promise<boolean> {
+  if (!auth?.currentUser) throw new Error('Not authenticated');
+  const token = await auth.currentUser.getIdToken();
+  const res = await fetch('/api/save-gemini-key', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+    body: JSON.stringify({ apiKey }),
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({})) as { error?: string };
+    throw new Error(body.error ?? 'Failed to save API key');
+  }
+  return ((await res.json()) as { hasKey: boolean }).hasKey;
 }
 
 // ── recipe sharing ────────────────────────────────────────────────────────────

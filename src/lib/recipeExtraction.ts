@@ -40,9 +40,15 @@ function parseDataUrl(dataUrl: string): { base64: string; mediaType: string } {
   return { base64, mediaType };
 }
 
-export async function extractRecipeFromImage(dataUrl: string): Promise<Partial<Recipe>> {
+export async function extractRecipeFromImage(
+  dataUrl: string,
+  hasApiKey: boolean
+): Promise<Partial<Recipe>> {
   if (!auth?.currentUser) {
     throw new RecipeExtractionError('You must be signed in to extract recipes from photos.');
+  }
+  if (!hasApiKey) {
+    throw new RecipeExtractionError('Add your Gemini API key in Settings to extract recipes.');
   }
 
   const token = await auth.currentUser.getIdToken();
@@ -70,9 +76,15 @@ export async function extractRecipeFromImage(dataUrl: string): Promise<Partial<R
   return response.json() as Promise<Partial<Recipe>>;
 }
 
-export async function extractRecipeFromUrl(url: string): Promise<Partial<Recipe>> {
+export async function extractRecipeFromUrl(
+  url: string,
+  hasApiKey: boolean
+): Promise<Partial<Recipe>> {
   if (!auth?.currentUser) {
     throw new RecipeExtractionError('You must be signed in to extract recipes from URLs.');
+  }
+  if (!hasApiKey) {
+    throw new RecipeExtractionError('Add your Gemini API key in Settings to extract recipes.');
   }
 
   const token = await auth.currentUser.getIdToken();

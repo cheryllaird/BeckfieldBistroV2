@@ -18,7 +18,7 @@ export function NewRecipePage() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const { id: editId } = useParams<{ id: string }>();
-  const { addRecipe, updateRecipe, knownSources, recipes } = useStore();
+  const { addRecipe, updateRecipe, knownSources, recipes, hasGeminiApiKey } = useStore();
 
   const existingRecipe = editId ? recipes.find((r) => r.id === editId) : undefined;
   const isEditMode = !!existingRecipe;
@@ -55,7 +55,7 @@ export function NewRecipePage() {
     setIsExtracting(true);
     setExtractError('');
     try {
-      const extracted = await extractRecipeFromUrl(urlInput.trim());
+      const extracted = await extractRecipeFromUrl(urlInput.trim(), hasGeminiApiKey);
       setDraft((prev) => ({ ...prev, ...extracted, sourceUrl: urlInput.trim() }));
       setMode('manual');
     } catch (err) {
@@ -84,7 +84,7 @@ export function NewRecipePage() {
     setExtractError('');
     try {
       const [extracted, resizedDataUrl] = await Promise.all([
-        extractRecipeFromImage(croppedDataUrl),
+        extractRecipeFromImage(croppedDataUrl, hasGeminiApiKey),
         resizeImage(croppedDataUrl),
       ]);
       setDraft({ ...extracted, coverImage: resizedDataUrl });
@@ -179,8 +179,17 @@ export function NewRecipePage() {
         </div>
       )}
 
+      {(mode === 'url' || mode === 'upload') && !hasGeminiApiKey && (
+        <div className="flex items-center justify-between gap-2 rounded-xl bg-amber-soft px-4 py-3 text-sm text-amber-800">
+          <span>Add your Gemini API key to extract recipes.</span>
+          <Button size="sm" variant="secondary" onClick={() => navigate('/settings')}>
+            Settings
+          </Button>
+        </div>
+      )}
+
       {/* URL mode */}
-      {mode === 'url' && (
+      {mode === 'url' && hasGeminiApiKey && (
         <div className="flex flex-col gap-3 animate-in">
           {!isOnline && (
             <div className="flex items-center gap-2 rounded-xl bg-slate-100 px-4 py-3 text-sm text-slate-500">
@@ -212,7 +221,7 @@ export function NewRecipePage() {
       )}
 
       {/* Upload mode */}
-      {mode === 'upload' && (
+      {mode === 'upload' && hasGeminiApiKey && (
         <div className="flex flex-col gap-3 animate-in">
           {!isOnline && (
             <div className="flex items-center gap-2 rounded-xl bg-slate-100 px-4 py-3 text-sm text-slate-500">

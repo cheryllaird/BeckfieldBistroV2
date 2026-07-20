@@ -2,6 +2,8 @@ import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { initializeApp, cert, getApps } from 'firebase-admin/app';
 import { getAuth } from 'firebase-admin/auth';
+import { getFirestore } from 'firebase-admin/firestore';
+import { decryptSecret, type EncryptedValue } from './_utils/crypto';
 
 export const config = {
   api: {
@@ -314,9 +316,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(401).json({ error: 'Missing authorization token' });
   }
 
+  let uid: string;
   try {
     initFirebaseAdmin();
-    await getAuth().verifyIdToken(token);
+    const decoded = await getAuth().verifyIdToken(token);
+    uid = decoded.uid;
   } catch {
     return res.status(401).json({ error: 'Invalid or expired token' });
   }
@@ -388,10 +392,22 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(200).json(result);
   }
 
-  // Gemini text fallback
-  const apiKey = process.env.GEMINI_API_KEY;
-  if (!apiKey) {
-    return res.status(500).json({ error: 'Server is not configured for AI extraction' });
+  // Gemini text fallback — each user supplies their own API key so usage is
+  // billed to them, not a single shared key. There is no server-wide fallback,
+  // and the key is looked up/decrypted here rather than sent by the client.
+  const profileSnap = await getFirestore()
+    .collection('users').doc(uid).collection('meta').doc('profile').get();
+  const encrypted = profileSnap.data()?.geminiApiKeyEncrypted as EncryptedValue | undefined;
+  if (!encrypted) {
+    return res.status(400).json({ error: 'Add your Gemini API key in Settings to extract recipes.' });
+  }
+
+  let apiKey: string;
+  try {
+    apiKey = decryptSecret(encrypted);
+  } catch (err) {
+    console.error('Failed to decrypt Gemini API key:', err);
+    return res.status(500).json({ error: 'Could not read your API key. Please re-enter it in Settings.' });
   }
 
   const pageText = htmlToText(html).slice(0, 40_000);
@@ -424,7 +440,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       console.error('Gemini fallback error:', message);
-      return res.status(502).json({ error: 'AI service error. Please try again.' });
+      return res.status(429).json({
+        error: 'Your Gemini API key has hit its rate limit or daily quota. Wait a bit and try again, or upgrade your key at aistudio.google.com.',
+      });
     }
   }
 

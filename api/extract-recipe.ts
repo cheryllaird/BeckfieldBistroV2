@@ -2,6 +2,8 @@ import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { GoogleGenerativeAI, type Part } from '@google/generative-ai';
 import { initializeApp, cert, getApps } from 'firebase-admin/app';
 import { getAuth } from 'firebase-admin/auth';
+import { getFirestore } from 'firebase-admin/firestore';
+import { decryptSecret, type EncryptedValue } from './_utils/crypto';
 
 export const config = {
   api: {
@@ -169,9 +171,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(401).json({ error: 'Missing authorization token' });
   }
 
+  let uid: string;
   try {
     initFirebaseAdmin();
-    await getAuth().verifyIdToken(token);
+    const decoded = await getAuth().verifyIdToken(token);
+    uid = decoded.uid;
   } catch {
     return res.status(401).json({ error: 'Invalid or expired token' });
   }
@@ -185,10 +189,23 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(400).json({ error: 'Provide either base64 image data or a url' });
   }
 
-  // Call Gemini
-  const apiKey = process.env.GEMINI_API_KEY;
-  if (!apiKey) {
-    return res.status(500).json({ error: 'Server is not configured for AI extraction' });
+  // Each user supplies their own Gemini API key so usage is billed to them,
+  // not a single shared key — there is no server-wide fallback. The key is
+  // looked up and decrypted here rather than accepted from the client, so it
+  // never has to cross the wire on every extraction request.
+  const profileSnap = await getFirestore()
+    .collection('users').doc(uid).collection('meta').doc('profile').get();
+  const encrypted = profileSnap.data()?.geminiApiKeyEncrypted as EncryptedValue | undefined;
+  if (!encrypted) {
+    return res.status(400).json({ error: 'Add your Gemini API key in Settings to extract recipes.' });
+  }
+
+  let apiKey: string;
+  try {
+    apiKey = decryptSecret(encrypted);
+  } catch (err) {
+    console.error('Failed to decrypt Gemini API key:', err);
+    return res.status(500).json({ error: 'Could not read your API key. Please re-enter it in Settings.' });
   }
 
   const genAI = new GoogleGenerativeAI(apiKey);
@@ -240,7 +257,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     rawText = await callGeminiWithRetry(genAI, parts);
   } catch (err) {
     if (isRateLimitError(err)) {
-      return res.status(429).json({ error: 'Too many requests. Please wait a moment and try again.' });
+      return res.status(429).json({
+        error: 'Your Gemini API key has hit its rate limit or daily quota. Wait a bit and try again, or upgrade your key at aistudio.google.com.',
+      });
     }
     return res.status(502).json({ error: 'AI service error. Please try again.' });
   }
