@@ -21,6 +21,50 @@ function stripUndefined<T extends object>(obj: T): T {
   return JSON.parse(JSON.stringify(obj));
 }
 
+// ── SDK crash recovery ────────────────────────────────────────────────────────
+
+let _recoveryTriggered = false;
+
+/**
+ * Detects a fatal Firestore SDK crash and restarts the app to recover.
+ *
+ * When the SDK hits an internal invariant violation ("INTERNAL ASSERTION
+ * FAILED", e.g. the watch-stream race in firebase-js-sdk#9267), its async
+ * queue shuts down permanently: every subsequent read, write and listener
+ * fails until the page is reloaded. Left alone, that looks like "sync
+ * silently stopped working until I force-closed the app". A reload is safe —
+ * queued writes are durable in Firestore's IndexedDB cache and replay on
+ * relaunch, and the Zustand store is persisted — so recover automatically.
+ *
+ * Guarded to fire at most once per page life and once per 5 minutes per tab,
+ * so a crash the reload doesn't cure can never cause a reload loop.
+ */
+export function recoverIfSdkCrashed(err: unknown): void {
+  const text =
+    err instanceof Error ? `${err.message}\n${err.stack ?? ''}` : String(err ?? '');
+  if (!text.includes('INTERNAL ASSERTION FAILED')) return;
+  if (_recoveryTriggered) return;
+  _recoveryTriggered = true;
+  try {
+    const key = 'bistro-firestore-recovery-at';
+    const last = Number(sessionStorage.getItem(key) ?? 0);
+    if (Date.now() - last < 5 * 60_000) return;
+    sessionStorage.setItem(key, String(Date.now()));
+  } catch {
+    // sessionStorage unavailable — _recoveryTriggered still limits this page
+    // to a single reload attempt.
+  }
+  console.error('Firestore SDK crashed with an internal assertion; reloading to recover.', err);
+  // Give the error log a beat to flush, then restart the app.
+  setTimeout(() => window.location.reload(), 300);
+}
+
+/** console.error plus fatal-crash detection — used by every write path. */
+function logFirestoreError(err: unknown): void {
+  console.error(err);
+  recoverIfSdkCrashed(err);
+}
+
 /**
  * Forces the Firestore SDK back online (idempotent).
  *
@@ -89,6 +133,7 @@ export interface UserDataCallbacks {
 export function subscribeToUserData(uid: string, callbacks: UserDataCallbacks): () => void {
   const handleError = (err: Error) => {
     console.error('Firestore subscription error:', err);
+    recoverIfSdkCrashed(err);
     callbacks.onError?.(err);
   };
 
@@ -178,19 +223,19 @@ export function saveRecipe(uid: string, recipe: Recipe): Promise<void> {
 
 export function deleteRecipeDoc(uid: string, id: string): void {
   ensureFirestoreOnline();
-  deleteDoc(doc(recipesCol(uid), id)).catch(console.error);
+  deleteDoc(doc(recipesCol(uid), id)).catch(logFirestoreError);
 }
 
 // ── meal entries ──────────────────────────────────────────────────────────────
 
 export function saveMealEntry(uid: string, entry: MealEntry): void {
   ensureFirestoreOnline();
-  setDoc(doc(mealEntriesCol(uid), entry.id), stripUndefined(entry)).catch(console.error);
+  setDoc(doc(mealEntriesCol(uid), entry.id), stripUndefined(entry)).catch(logFirestoreError);
 }
 
 export function deleteMealEntryDoc(uid: string, id: string): void {
   ensureFirestoreOnline();
-  deleteDoc(doc(mealEntriesCol(uid), id)).catch(console.error);
+  deleteDoc(doc(mealEntriesCol(uid), id)).catch(logFirestoreError);
 }
 
 // ── shopping items ────────────────────────────────────────────────────────────
@@ -219,26 +264,26 @@ export function patchShoppingItems(uid: string, patches: ShoppingItemPatch[]): v
       }
       batch.set(doc(col, id), data, { merge: true });
     }
-    batch.commit().catch(console.error);
+    batch.commit().catch(logFirestoreError);
   }
 }
 
 /** Hard delete — only used to purge tombstones past their retention window. */
 export function deleteShoppingItemDoc(uid: string, id: string): void {
   ensureFirestoreOnline();
-  deleteDoc(doc(shoppingItemsCol(uid), id)).catch(console.error);
+  deleteDoc(doc(shoppingItemsCol(uid), id)).catch(logFirestoreError);
 }
 
 // ── pantry items ──────────────────────────────────────────────────────────────
 
 export function savePantryItem(uid: string, item: PantryItem): void {
   ensureFirestoreOnline();
-  setDoc(doc(pantryItemsCol(uid), item.id), stripUndefined(item)).catch(console.error);
+  setDoc(doc(pantryItemsCol(uid), item.id), stripUndefined(item)).catch(logFirestoreError);
 }
 
 export function deletePantryItemDoc(uid: string, id: string): void {
   ensureFirestoreOnline();
-  deleteDoc(doc(pantryItemsCol(uid), id)).catch(console.error);
+  deleteDoc(doc(pantryItemsCol(uid), id)).catch(logFirestoreError);
 }
 
 export function savePantryItems(uid: string, items: PantryItem[]): void {
@@ -248,7 +293,7 @@ export function savePantryItems(uid: string, items: PantryItem[]): void {
   items.forEach((item, index) =>
     batch.set(doc(col, item.id), stripUndefined({ ...item, order: index })),
   );
-  batch.commit().catch(console.error);
+  batch.commit().catch(logFirestoreError);
 }
 
 // ── category override log ─────────────────────────────────────────────────────
@@ -258,14 +303,14 @@ const categoryOverrideLogsCol = (uid: string) =>
 
 export function logCategoryOverride(uid: string, entry: Omit<CategoryOverrideLog, 'id'>): void {
   ensureFirestoreOnline();
-  addDoc(categoryOverrideLogsCol(uid), stripUndefined(entry)).catch(console.error);
+  addDoc(categoryOverrideLogsCol(uid), stripUndefined(entry)).catch(logFirestoreError);
 }
 
 // ── sources ───────────────────────────────────────────────────────────────────
 
 export function saveKnownSources(uid: string, sources: string[]): void {
   ensureFirestoreOnline();
-  setDoc(profileDoc(uid), { knownSources: sources }, { merge: true }).catch(console.error);
+  setDoc(profileDoc(uid), { knownSources: sources }, { merge: true }).catch(logFirestoreError);
 }
 
 // ── AI API key ────────────────────────────────────────────────────────────────

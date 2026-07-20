@@ -1,4 +1,4 @@
-import { ensureFirestoreOnline, flushPendingWrites } from './firestore';
+import { ensureFirestoreOnline, flushPendingWrites, recoverIfSdkCrashed } from './firestore';
 
 // Keeps the Firestore realtime connection alive across the lifecycle events that
 // routinely put a mobile PWA to sleep.
@@ -33,9 +33,19 @@ export function startConnectivityManager(): () => void {
     if (document.visibilityState === 'visible') ensureFirestoreOnline();
   };
 
+  // Fatal Firestore SDK crashes ("INTERNAL ASSERTION FAILED") are thrown from
+  // the SDK's internal scheduler, so they surface as uncaught errors or
+  // unhandled rejections rather than through any of our own catch handlers.
+  // Detect them here and restart the app (see recoverIfSdkCrashed) — without
+  // this, sync stays silently dead until the user force-closes the app.
+  const onWindowError = (e: ErrorEvent) => recoverIfSdkCrashed(e.error ?? e.message);
+  const onUnhandledRejection = (e: PromiseRejectionEvent) => recoverIfSdkCrashed(e.reason);
+
   window.addEventListener('online', ensureFirestoreOnline);
   window.addEventListener('focus', wakeIfVisible);
   document.addEventListener('visibilitychange', onVisibilityChange);
+  window.addEventListener('error', onWindowError);
+  window.addEventListener('unhandledrejection', onUnhandledRejection);
   // pagehide is the most reliable "app is going away" signal on mobile Safari,
   // where it can fire without a preceding visibilitychange when the PWA is
   // swiped away.
@@ -49,6 +59,8 @@ export function startConnectivityManager(): () => void {
     window.removeEventListener('online', ensureFirestoreOnline);
     window.removeEventListener('focus', wakeIfVisible);
     document.removeEventListener('visibilitychange', onVisibilityChange);
+    window.removeEventListener('error', onWindowError);
+    window.removeEventListener('unhandledrejection', onUnhandledRejection);
     window.removeEventListener('pagehide', flushPendingWrites);
     started = false;
   };
