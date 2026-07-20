@@ -42,12 +42,12 @@ function parseDataUrl(dataUrl: string): { base64: string; mediaType: string } {
 
 export async function extractRecipeFromImage(
   dataUrl: string,
-  geminiApiKey: string
+  hasApiKey: boolean
 ): Promise<Partial<Recipe>> {
   if (!auth?.currentUser) {
     throw new RecipeExtractionError('You must be signed in to extract recipes from photos.');
   }
-  if (!geminiApiKey) {
+  if (!hasApiKey) {
     throw new RecipeExtractionError('Add your Gemini API key in Settings to extract recipes.');
   }
 
@@ -63,7 +63,7 @@ export async function extractRecipeFromImage(
       'Content-Type': 'application/json',
       'Authorization': `Bearer ${token}`,
     },
-    body: JSON.stringify({ base64, mediaType, apiKey: geminiApiKey }),
+    body: JSON.stringify({ base64, mediaType }),
   });
 
   if (!response.ok) {
@@ -78,12 +78,12 @@ export async function extractRecipeFromImage(
 
 export async function extractRecipeFromUrl(
   url: string,
-  geminiApiKey: string
+  hasApiKey: boolean
 ): Promise<Partial<Recipe>> {
   if (!auth?.currentUser) {
     throw new RecipeExtractionError('You must be signed in to extract recipes from URLs.');
   }
-  if (!geminiApiKey) {
+  if (!hasApiKey) {
     throw new RecipeExtractionError('Add your Gemini API key in Settings to extract recipes.');
   }
 
@@ -95,7 +95,7 @@ export async function extractRecipeFromUrl(
       'Content-Type': 'application/json',
       'Authorization': `Bearer ${token}`,
     },
-    body: JSON.stringify({ url, apiKey: geminiApiKey }),
+    body: JSON.stringify({ url }),
   });
 
   if (!response.ok) {

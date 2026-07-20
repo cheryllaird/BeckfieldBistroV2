@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, ExternalLink, Check } from 'lucide-react';
+import { ArrowLeft, ExternalLink, Check, Trash2 } from 'lucide-react';
 import { useStore } from '../../store';
 import { Card } from '../../components/ui/Card';
 import { Input } from '../../components/ui/Input';
@@ -8,17 +8,35 @@ import { Button } from '../../components/ui/Button';
 
 export function SettingsPage() {
   const navigate = useNavigate();
-  const { geminiApiKey, setGeminiApiKey } = useStore();
-  const [keyInput, setKeyInput] = useState(geminiApiKey);
+  const { hasGeminiApiKey, setGeminiApiKey } = useStore();
+  const [keyInput, setKeyInput] = useState('');
   const [isSaving, setIsSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [error, setError] = useState('');
 
   const handleSave = async () => {
     setIsSaving(true);
     setSaved(false);
+    setError('');
     try {
       await setGeminiApiKey(keyInput.trim());
+      setKeyInput('');
       setSaved(true);
+    } catch {
+      setError('Failed to save API key. Please try again.');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleRemove = async () => {
+    setIsSaving(true);
+    setSaved(false);
+    setError('');
+    try {
+      await setGeminiApiKey('');
+    } catch {
+      setError('Failed to remove API key. Please try again.');
     } finally {
       setIsSaving(false);
     }
@@ -43,7 +61,8 @@ export function SettingsPage() {
           <p className="text-xs text-slate-500 mt-1">
             Recipe extraction from photos and URLs runs on your own Gemini API key, so usage
             is billed to you, not shared with other users. Google offers a free tier with no
-            billing required.
+            billing required. Your key is encrypted before it's stored — it's never shown back
+            to you or any other user once saved.
           </p>
         </div>
 
@@ -57,8 +76,14 @@ export function SettingsPage() {
           <ExternalLink size={12} />
         </a>
 
+        {hasGeminiApiKey && (
+          <div className="flex items-center gap-1.5 text-xs font-medium text-green-700">
+            <Check size={13} /> A key is saved for your account
+          </div>
+        )}
+
         <Input
-          label="API Key"
+          label={hasGeminiApiKey ? 'Replace API Key' : 'API Key'}
           type="password"
           placeholder="AIza…"
           value={keyInput}
@@ -66,11 +91,9 @@ export function SettingsPage() {
           autoComplete="off"
         />
 
-        <Button
-          onClick={handleSave}
-          disabled={isSaving || keyInput.trim() === geminiApiKey}
-          fullWidth
-        >
+        {error && <p className="text-xs text-red-500">{error}</p>}
+
+        <Button onClick={handleSave} disabled={isSaving || !keyInput.trim()} fullWidth>
           {saved ? (
             <>
               <Check size={14} /> Saved
@@ -81,6 +104,12 @@ export function SettingsPage() {
             'Save'
           )}
         </Button>
+
+        {hasGeminiApiKey && (
+          <Button onClick={handleRemove} disabled={isSaving} variant="secondary" fullWidth>
+            <Trash2 size={14} /> Remove key
+          </Button>
+        )}
 
         <p className="text-xs text-slate-400">
           Free-tier keys have rate limits (roughly 10–15 requests per minute and a daily cap).

@@ -255,7 +255,7 @@ function attachListeners(
         set({ knownSources }),
       );
     },
-    onGeminiApiKey: (geminiApiKey) => set({ geminiApiKey }),
+    onHasGeminiApiKey: (hasGeminiApiKey) => set({ hasGeminiApiKey }),
   });
 
   if (email) {
@@ -273,7 +273,7 @@ export const useStore = create<Store>()(
       shoppingItems: [],
       pantryItems: [],
       knownSources: [],
-      geminiApiKey: '',
+      hasGeminiApiKey: false,
       isAuthenticated: false,
       user: null,
       splashDone: false,
@@ -438,7 +438,7 @@ export const useStore = create<Store>()(
             shoppingItems: [],
             pantryItems: [],
             knownSources: [],
-            geminiApiKey: '',
+            hasGeminiApiKey: false,
             incomingShares: [],
           }),
         });
@@ -471,7 +471,7 @@ export const useStore = create<Store>()(
           shoppingItems: [],
           pantryItems: [],
           knownSources: [],
-          geminiApiKey: '',
+          hasGeminiApiKey: false,
           incomingShares: [],
         });
       },
@@ -489,10 +489,9 @@ export const useStore = create<Store>()(
       },
 
       setGeminiApiKey: async (key) => {
-        const uid = get().user?.uid;
-        if (!uid) return;
-        set({ geminiApiKey: key });
-        await saveGeminiApiKey(uid, key);
+        if (!get().user) return;
+        const hasGeminiApiKey = await saveGeminiApiKey(key);
+        set({ hasGeminiApiKey });
       },
 
       sendRecipe: async (recipe, toEmail) => {
@@ -574,7 +573,7 @@ export const useStore = create<Store>()(
         shoppingItems: s.shoppingItems,
         pantryItems: s.pantryItems,
         knownSources: s.knownSources,
-        geminiApiKey: s.geminiApiKey,
+        hasGeminiApiKey: s.hasGeminiApiKey,
       }),
     },
   ),
