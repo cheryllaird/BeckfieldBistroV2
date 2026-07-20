@@ -2,7 +2,7 @@ import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { initializeApp, cert, getApps } from 'firebase-admin/app';
 import { getAuth } from 'firebase-admin/auth';
 import { getFirestore, FieldValue } from 'firebase-admin/firestore';
-import { encryptSecret } from './_utils/crypto';
+import { encryptSecret } from './_utils/crypto.js';
 
 function initFirebaseAdmin() {
   if (getApps().length > 0) return;

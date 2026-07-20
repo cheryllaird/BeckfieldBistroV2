@@ -3,7 +3,7 @@ import { GoogleGenerativeAI } from '@google/generative-ai';
 import { initializeApp, cert, getApps } from 'firebase-admin/app';
 import { getAuth } from 'firebase-admin/auth';
 import { getFirestore } from 'firebase-admin/firestore';
-import { decryptSecret, type EncryptedValue } from './_utils/crypto';
+import { decryptSecret, type EncryptedValue } from './_utils/crypto.js';
 
 export const config = {
   api: {
