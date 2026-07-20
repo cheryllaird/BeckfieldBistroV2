@@ -1,8 +1,11 @@
 /**
- * Quick smoke test for the Gemini 2.0 Flash vision integration.
+ * Quick smoke test for the Gemini Flash vision integration.
  * Run with:  npx tsx test-gemini.ts
  *
- * Requires GEMINI_API_KEY in .env.local
+ * Dev-only: the app itself does NOT use GEMINI_API_KEY — each user supplies
+ * their own key in Settings (stored encrypted in Firestore). This script uses
+ * GEMINI_API_KEY purely to check model/vision reachability from your machine.
+ * Requires GEMINI_API_KEY in .env.local.
  * Get a free key at: https://aistudio.google.com/app/apikey
  */
 
