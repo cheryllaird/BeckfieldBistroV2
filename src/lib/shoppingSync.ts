@@ -281,6 +281,10 @@ export function reconcileShoppingSnapshot(
   const purgeIds: string[] = [];
 
   for (const inc of incoming) {
+    // Drop any doc without a usable id. Every real doc has one (read from the
+    // document path), so a falsy id is corrupted data — keeping it would
+    // duplicate rows and later crash doc() with an empty path.
+    if (!inc.id) continue;
     seen.add(inc.id);
     const local = localById.get(inc.id);
     const localTombstone = localTombstones[inc.id];
@@ -321,6 +325,10 @@ export function reconcileShoppingSnapshot(
   // it, as long as it was touched recently enough that it can't be a stray
   // predating an already-purged tombstone.
   for (const local of localItems) {
+    // Self-heal: a falsy-id item is a ghost from an older buggy build that
+    // stored no id in the doc data. Dropping it here (rather than re-pushing)
+    // clears it from persisted state on the first snapshot after upgrade.
+    if (!local.id) continue;
     if (seen.has(local.id)) continue;
     const newest = Math.max(
       local.updatedAt ?? 0,

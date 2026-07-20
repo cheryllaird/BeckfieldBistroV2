@@ -194,7 +194,15 @@ export function subscribeToUserData(uid: string, callbacks: UserDataCallbacks): 
       if (skipIfCacheMiss(snap)) return;
       // Raw docs, tombstoned (soft-deleted) ones included — the store's
       // reconcile needs to see deletions explicitly (see shoppingSync.ts).
-      const items = snap.docs.map((d) => d.data() as ShoppingItem);
+      // `id` MUST come from the document path (d.id), not d.data(): the
+      // field-masked patch writer intentionally does not store `id` inside the
+      // document, so d.data() carries no id. Reading it from the path is both
+      // correct and the authoritative source (the path id is what every write
+      // targets). Without this, every item reads back with id === undefined,
+      // which breaks all id-based reconciliation — items fail to match their
+      // local copy and get duplicated, and re-writing them calls doc() with an
+      // empty path.
+      const items = snap.docs.map((d) => ({ ...(d.data() as ShoppingItem), id: d.id }));
       items.sort((a, b) => (a.order ?? Infinity) - (b.order ?? Infinity));
       callbacks.onShoppingItems(items);
     },
@@ -282,15 +290,21 @@ export function patchShoppingItems(uid: string, patches: ShoppingItemPatch[]): v
   // Firestore batches cap at 500 operations; chunk to stay under it.
   for (let i = 0; i < patches.length; i += 450) {
     const batch = writeBatch(db!);
+    let wrote = false;
     for (const { id, ...fields } of patches.slice(i, i + 450)) {
+      // Never call doc() with an empty path — it throws synchronously and
+      // would abort the whole batch. A falsy id can only come from corrupted
+      // local state (see the id: d.id fix above); skip it defensively.
+      if (!id) continue;
       const data: Record<string, unknown> = {};
       for (const [key, value] of Object.entries(fields)) {
         if (value === undefined) continue;
         data[key] = value === null ? deleteField() : value;
       }
       batch.set(doc(col, id), data, { merge: true });
+      wrote = true;
     }
-    batch.commit().catch(logFirestoreError);
+    if (wrote) batch.commit().catch(logFirestoreError);
   }
 }
 
