@@ -189,7 +189,7 @@ export function NewRecipePage() {
       )}
 
       {/* URL mode */}
-      {mode === 'url' && (
+      {mode === 'url' && geminiApiKey && (
         <div className="flex flex-col gap-3 animate-in">
           {!isOnline && (
             <div className="flex items-center gap-2 rounded-xl bg-slate-100 px-4 py-3 text-sm text-slate-500">
@@ -206,7 +206,7 @@ export function NewRecipePage() {
             disabled={!isOnline}
           />
           {extractError && <p className="text-xs text-red-500">{extractError}</p>}
-          <Button fullWidth onClick={handleUrlExtract} disabled={isExtracting || !urlInput.trim() || !isOnline || !geminiApiKey}>
+          <Button fullWidth onClick={handleUrlExtract} disabled={isExtracting || !urlInput.trim() || !isOnline}>
             {isExtracting ? (
               <>
                 <Loader size={14} className="animate-spin" /> Extracting…
@@ -221,7 +221,7 @@ export function NewRecipePage() {
       )}
 
       {/* Upload mode */}
-      {mode === 'upload' && (
+      {mode === 'upload' && geminiApiKey && (
         <div className="flex flex-col gap-3 animate-in">
           {!isOnline && (
             <div className="flex items-center gap-2 rounded-xl bg-slate-100 px-4 py-3 text-sm text-slate-500">
