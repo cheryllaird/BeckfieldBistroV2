@@ -149,12 +149,13 @@ function isOverloadError(err: unknown): boolean {
   );
 }
 
-// RECITATION — Gemini blocks a candidate when its output reproduces copyrighted
-// material (published cookbooks, recipe sites) too closely. Our prompt asks for
-// verbatim ingredient/step text, which is exactly what trips this filter. It's
-// not tied to quota and retrying the same prompt won't help. Because the filter
-// is model-specific we try the other model; if that's also blocked we surface a
-// clear error rather than altering the recipe's wording.
+// RECITATION — Gemini blocks a candidate when its OUTPUT reproduces copyrighted
+// material (published cookbooks, recipe sites) too closely. It is the generated
+// text that is flagged, not the prompt, and it is not tied to quota — retrying
+// the same prompt at the same settings won't help. Because the block is on the
+// decoded tokens, the recovery re-runs at a higher temperature (see
+// callGeminiWithRetry), which is Google's recommended mitigation; a persistent
+// block yields a clear 422 rather than a silently altered recipe.
 function isRecitationError(err: unknown): boolean {
   const message = (err instanceof Error ? err.message : String(err)).toLowerCase();
   return message.includes('recitation');
@@ -162,12 +163,25 @@ function isRecitationError(err: unknown): boolean {
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
+// Higher temperature loosens greedy decoding so the output is less likely to
+// land on a copyrighted recipe's exact wording — Google's recommended RECITATION
+// mitigation. It is applied only on the retry after a block, so normal
+// extractions keep the model's default (more faithful) decoding. Kept moderate
+// so the extraction stays grounded in the image (quantities/ingredients don't
+// drift) while still breaking the verbatim token match.
+const RECITATION_RETRY_TEMP = 1.3;
+
 function generateWithModel(
   genAI: GoogleGenerativeAI,
   modelName: string,
   parts: (string | Part)[],
+  temperature?: number,
 ): Promise<string> {
-  const model = genAI.getGenerativeModel({ model: modelName, systemInstruction: SYSTEM_PROMPT });
+  const model = genAI.getGenerativeModel({
+    model: modelName,
+    systemInstruction: SYSTEM_PROMPT,
+    ...(temperature !== undefined && { generationConfig: { temperature } }),
+  });
   return model.generateContent(parts).then((r) => r.response.text());
 }
 
@@ -194,25 +208,41 @@ async function callGeminiWithRetry(genAI: GoogleGenerativeAI, parts: (string | P
         break; // out of retries — try the fallback model
       }
       if (isRateLimitError(err)) break; // quota — go straight to fallback
-      if (isRecitationError(err)) break; // copyright block — try the other model
+      if (isRecitationError(err)) break; // copyright block — go to temperature retry
       throw err; // anything else is non-retryable
     }
   }
 
-  // Primary exhausted (quota, persistent overload, or a RECITATION block) — try
-  // the fuller Flash model. It has a separate quota bucket, and because the
-  // RECITATION filter is model-specific it may not block the same content.
-  console.log(`${PRIMARY} unavailable, falling back to ${FALLBACK}`);
-  try {
-    return await generateWithModel(genAI, FALLBACK, parts);
-  } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    console.error(`${FALLBACK} failed: ${message}`);
-    // Surface a RECITATION block from either model so the handler shows the
-    // copyright-specific guidance; otherwise surface the primary cause.
-    if (isRecitationError(err)) throw err;
-    throw primaryErr;
+  // Quota/overload fallback at default decoding — skipped when the primary was
+  // blocked by RECITATION, since a second model at the same settings tends to
+  // block the same content; that case drops straight to the temperature retry.
+  if (!isRecitationError(primaryErr)) {
+    console.log(`${PRIMARY} unavailable, falling back to ${FALLBACK}`);
+    try {
+      return await generateWithModel(genAI, FALLBACK, parts);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      console.error(`${FALLBACK} failed: ${message}`);
+      if (!isRecitationError(err)) throw primaryErr; // quota/overload/other — surface primary cause
+      primaryErr = err; // fallback recited too — fall through to the temperature retry
+    }
   }
+
+  // RECITATION recovery — the block is on the OUTPUT, so retry both models at a
+  // higher temperature (Google's recommended fix). The extraction stays grounded
+  // in the photo; only token-level phrasing loosens enough to clear the filter.
+  console.log('RECITATION block — retrying with higher temperature');
+  for (const model of [PRIMARY, FALLBACK]) {
+    try {
+      return await generateWithModel(genAI, model, parts, RECITATION_RETRY_TEMP);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      console.error(`${model} high-temperature retry failed: ${message}`);
+      if (!isRecitationError(err)) throw err; // a different failure — surface it
+      primaryErr = err;
+    }
+  }
+  throw primaryErr; // still RECITATION on both models — handler maps to a clear 422
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {

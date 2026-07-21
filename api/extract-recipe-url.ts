@@ -434,11 +434,26 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     );
   };
   // RECITATION — Gemini blocks output that reproduces copyrighted recipe text
-  // too closely. Not tied to quota; retrying the same prompt won't help. The
-  // model-specific filter means the other model may not block it; if both do,
-  // we surface a clear error rather than altering the recipe's wording.
+  // too closely. It's the generated text that's flagged, not the prompt, and
+  // retrying the same prompt at the same settings won't help. Because the block
+  // is on the decoded tokens, the recovery re-runs at a higher temperature (see
+  // RECITATION_RETRY_TEMP), Google's recommended mitigation; if both models still
+  // block, we surface a clear error rather than altering the recipe's wording.
   const isRecitationMsg = (msg: string) => msg.toLowerCase().includes('recitation');
   const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+  // Higher temperature loosens greedy decoding so the output is less likely to
+  // reproduce a copyrighted recipe verbatim. Applied only on the RECITATION
+  // retry; normal extractions keep the model's default (more faithful) decoding.
+  const RECITATION_RETRY_TEMP = 1.3;
+  const runModel = (modelName: string, temperature?: number) => {
+    const model = genAI.getGenerativeModel({
+      model: modelName,
+      systemInstruction: URL_SYSTEM_PROMPT,
+      ...(temperature !== undefined && { generationConfig: { temperature } }),
+    });
+    return model.generateContent(prompt).then((r) => r.response.text());
+  };
 
   let rawText: string | undefined;
   let primaryMsg = '';
@@ -447,44 +462,62 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   for (let attempt = 0; attempt < backoffsMs.length; attempt++) {
     if (backoffsMs[attempt] > 0) await sleep(backoffsMs[attempt]);
     try {
-      const model = genAI.getGenerativeModel({ model: 'gemini-3.1-flash-lite', systemInstruction: URL_SYSTEM_PROMPT });
-      rawText = await model.generateContent(prompt).then((r) => r.response.text());
+      rawText = await runModel('gemini-3.1-flash-lite');
       break;
     } catch (primaryErr) {
       primaryMsg = primaryErr instanceof Error ? primaryErr.message : String(primaryErr);
       console.error(`gemini-3.1-flash-lite failed on URL extraction: ${primaryMsg}`);
       if (isOverloadMsg(primaryMsg) && attempt < backoffsMs.length - 1) continue; // transient — retry
-      if (isRecitationMsg(primaryMsg)) { sawRecitation = true; break; } // copyright block — try fallback
-      if (isOverloadMsg(primaryMsg) || isRateLimitMsg(primaryMsg)) break; // fall back to lite
+      if (isRecitationMsg(primaryMsg)) { sawRecitation = true; break; } // copyright block — temperature retry
+      if (isOverloadMsg(primaryMsg) || isRateLimitMsg(primaryMsg)) break; // fall back to fuller model
       return res.status(502).json({ error: 'AI service error. Please try again.' }); // non-retryable
     }
   }
 
-  if (rawText === undefined) {
-    // Primary exhausted (quota, persistent overload, or a RECITATION block) — try
-    // the fuller Flash model. Separate quota bucket, and the model-specific
-    // RECITATION filter may not block the same content.
+  // Quota/overload fallback at default decoding — skipped when the primary was
+  // blocked by RECITATION, since a second model at the same settings tends to
+  // block the same content; that case drops straight to the temperature retry.
+  if (rawText === undefined && !sawRecitation) {
     console.log('gemini-3.1-flash-lite unavailable on URL extraction, falling back to gemini-3.5-flash');
     try {
-      const fallback = genAI.getGenerativeModel({ model: 'gemini-3.5-flash', systemInstruction: URL_SYSTEM_PROMPT });
-      rawText = await fallback.generateContent(prompt).then((r) => r.response.text());
+      rawText = await runModel('gemini-3.5-flash');
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       console.error('Gemini fallback error:', message);
-      if (isRecitationMsg(message) || sawRecitation) {
-        // Both models blocked the verbatim prompt — surface a clear error
-        // rather than reword the recipe away from the source.
-        return res.status(422).json({
-          error: 'This recipe matches a copyrighted source too closely for the AI to copy. Try a different URL or enter it manually.',
-        });
-      }
-      if (isOverloadMsg(primaryMsg) || isOverloadMsg(message)) {
+      if (isRecitationMsg(message)) {
+        sawRecitation = true; // fallback recited too — fall through to the temperature retry
+      } else if (isOverloadMsg(primaryMsg) || isOverloadMsg(message)) {
         return res.status(503).json({
           error: 'Gemini is experiencing high demand right now. Please try again in a moment.',
         });
+      } else {
+        return res.status(429).json({
+          error: 'Your Gemini API key has hit its rate limit or daily quota. Wait a bit and try again, or upgrade your key at aistudio.google.com.',
+        });
       }
-      return res.status(429).json({
-        error: 'Your Gemini API key has hit its rate limit or daily quota. Wait a bit and try again, or upgrade your key at aistudio.google.com.',
+    }
+  }
+
+  // RECITATION recovery — the block is on the OUTPUT, so retry both models at a
+  // higher temperature (Google's recommended fix). The extraction stays grounded
+  // in the page text; only token-level phrasing loosens enough to clear the filter.
+  if (rawText === undefined && sawRecitation) {
+    console.log('RECITATION on URL extraction — retrying with higher temperature');
+    for (const modelName of ['gemini-3.1-flash-lite', 'gemini-3.5-flash']) {
+      try {
+        rawText = await runModel(modelName, RECITATION_RETRY_TEMP);
+        break;
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        console.error(`${modelName} high-temperature retry failed on URL extraction: ${message}`);
+        if (!isRecitationMsg(message)) {
+          return res.status(502).json({ error: 'AI service error. Please try again.' });
+        }
+      }
+    }
+    if (rawText === undefined) {
+      return res.status(422).json({
+        error: 'This recipe matches a copyrighted source too closely for the AI to copy. Try a different URL or enter it manually.',
       });
     }
   }
