@@ -149,11 +149,31 @@ function isOverloadError(err: unknown): boolean {
   );
 }
 
+// RECITATION — Gemini blocks a candidate when its output reproduces copyrighted
+// material (published cookbooks, recipe sites) too closely. Our prompt asks for
+// verbatim ingredient/step text, which is exactly what trips this filter. It's
+// not tied to quota and retrying the same prompt won't help. Because the filter
+// is model-specific we try the other model; if that's also blocked we surface a
+// clear error rather than altering the recipe's wording.
+function isRecitationError(err: unknown): boolean {
+  const message = (err instanceof Error ? err.message : String(err)).toLowerCase();
+  return message.includes('recitation');
+}
+
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
+function generateWithModel(
+  genAI: GoogleGenerativeAI,
+  modelName: string,
+  parts: (string | Part)[],
+): Promise<string> {
+  const model = genAI.getGenerativeModel({ model: modelName, systemInstruction: SYSTEM_PROMPT });
+  return model.generateContent(parts).then((r) => r.response.text());
+}
+
 async function callGeminiWithRetry(genAI: GoogleGenerativeAI, parts: (string | Part)[]): Promise<string> {
-  const PRIMARY = 'gemini-flash-lite-latest';
-  const FALLBACK = 'gemini-flash-latest';
+  const PRIMARY = 'gemini-3.1-flash-lite';
+  const FALLBACK = 'gemini-3.5-flash';
   // Backoff schedule for transient 503 overloads on the primary model. A
   // rate-limit (429) does NOT retry the same model — retrying wastes the daily
   // RPD allowance — it drops straight to the fallback's separate quota bucket.
@@ -164,8 +184,7 @@ async function callGeminiWithRetry(genAI: GoogleGenerativeAI, parts: (string | P
     if (backoffsMs[attempt] > 0) await sleep(backoffsMs[attempt]);
     console.log(`${PRIMARY} attempt ${attempt + 1}/${backoffsMs.length}`);
     try {
-      const model = genAI.getGenerativeModel({ model: PRIMARY, systemInstruction: SYSTEM_PROMPT });
-      return await model.generateContent(parts).then((r) => r.response.text());
+      return await generateWithModel(genAI, PRIMARY, parts);
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       console.error(`${PRIMARY} failed: ${message}`);
@@ -175,19 +194,23 @@ async function callGeminiWithRetry(genAI: GoogleGenerativeAI, parts: (string | P
         break; // out of retries — try the fallback model
       }
       if (isRateLimitError(err)) break; // quota — go straight to fallback
+      if (isRecitationError(err)) break; // copyright block — try the other model
       throw err; // anything else is non-retryable
     }
   }
 
-  // Primary exhausted (quota or persistent overload) — try the fuller Flash model
-  // (separate quota bucket; more capable, though more prone to its own overloads).
+  // Primary exhausted (quota, persistent overload, or a RECITATION block) — try
+  // the fuller Flash model. It has a separate quota bucket, and because the
+  // RECITATION filter is model-specific it may not block the same content.
   console.log(`${PRIMARY} unavailable, falling back to ${FALLBACK}`);
   try {
-    const fallback = genAI.getGenerativeModel({ model: FALLBACK, systemInstruction: SYSTEM_PROMPT });
-    return await fallback.generateContent(parts).then((r) => r.response.text());
+    return await generateWithModel(genAI, FALLBACK, parts);
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     console.error(`${FALLBACK} failed: ${message}`);
+    // Surface a RECITATION block from either model so the handler shows the
+    // copyright-specific guidance; otherwise surface the primary cause.
+    if (isRecitationError(err)) throw err;
     throw primaryErr;
   }
 }
@@ -297,6 +320,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (isOverloadError(err)) {
       return res.status(503).json({
         error: 'Gemini is experiencing high demand right now. Please try again in a moment.',
+      });
+    }
+    if (isRecitationError(err)) {
+      return res.status(422).json({
+        error: "This recipe matches a copyrighted source too closely for the AI to copy. Try a clearer photo of just the ingredients and steps, or enter it manually.",
       });
     }
     return res.status(502).json({ error: 'AI service error. Please try again.' });
