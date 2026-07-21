@@ -151,20 +151,13 @@ function isOverloadError(err: unknown): boolean {
 // RECITATION — Gemini blocks a candidate when its output reproduces copyrighted
 // material (published cookbooks, recipe sites) too closely. Our prompt asks for
 // verbatim ingredient/step text, which is exactly what trips this filter. It's
-// not tied to quota and retrying the same prompt won't help; the fix is to try
-// the other model and, failing that, ask the model to reword (see below).
+// not tied to quota and retrying the same prompt won't help. Because the filter
+// is model-specific we try the other model; if that's also blocked we surface a
+// clear error rather than altering the recipe's wording.
 function isRecitationError(err: unknown): boolean {
   const message = (err instanceof Error ? err.message : String(err)).toLowerCase();
   return message.includes('recitation');
 }
-
-// Appended to the prompt on a retry after a RECITATION block. Telling the model
-// to put the instructions in its own words breaks the verbatim match with the
-// copyrighted source while keeping the recipe's substance intact. Ingredient
-// lines ("2 cups flour") are short factual measurements and are kept as-is.
-const RECITATION_SAFE_SUFFIX = `
-
-IMPORTANT: Do NOT copy the recipe's wording verbatim. Rewrite every instruction step in your own words while preserving all quantities, ingredients, temperatures, timings, and the order of steps exactly. Keep each ingredient's "originalText" to just its short measurement line (e.g. "2 cups flour").`;
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -178,14 +171,13 @@ function generateWithModel(
 }
 
 async function callGeminiWithRetry(genAI: GoogleGenerativeAI, parts: (string | Part)[]): Promise<string> {
-  const PRIMARY = 'gemini-flash-lite-latest';
-  const FALLBACK = 'gemini-flash-latest';
+  const PRIMARY = 'gemini-3.1-flash-lite';
+  const FALLBACK = 'gemini-3.5-flash';
   // Backoff schedule for transient 503 overloads on the primary model. A
   // rate-limit (429) does NOT retry the same model — retrying wastes the daily
   // RPD allowance — it drops straight to the fallback's separate quota bucket.
   const backoffsMs = [0, 1000, 2500];
   let primaryErr: unknown;
-  let sawRecitation = false;
 
   for (let attempt = 0; attempt < backoffsMs.length; attempt++) {
     if (backoffsMs[attempt] > 0) await sleep(backoffsMs[attempt]);
@@ -201,7 +193,7 @@ async function callGeminiWithRetry(genAI: GoogleGenerativeAI, parts: (string | P
         break; // out of retries — try the fallback model
       }
       if (isRateLimitError(err)) break; // quota — go straight to fallback
-      if (isRecitationError(err)) { sawRecitation = true; break; } // copyright block — try fallback
+      if (isRecitationError(err)) break; // copyright block — try the other model
       throw err; // anything else is non-retryable
     }
   }
@@ -215,21 +207,10 @@ async function callGeminiWithRetry(genAI: GoogleGenerativeAI, parts: (string | P
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     console.error(`${FALLBACK} failed: ${message}`);
-    if (isRecitationError(err)) sawRecitation = true;
-    if (!sawRecitation) throw primaryErr; // non-recitation failure — surface original cause
-  }
-
-  // Both models hit the RECITATION filter on the verbatim prompt. Retry once
-  // more asking the model to reword the recipe so its output no longer matches
-  // the copyrighted source. This is the path that recovers photo extractions of
-  // published cookbook recipes.
-  console.log('RECITATION block on both models — retrying with reword instruction');
-  try {
-    return await generateWithModel(genAI, PRIMARY, [...parts, RECITATION_SAFE_SUFFIX]);
-  } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    console.error(`${PRIMARY} reword retry failed: ${message}`);
-    throw err; // still blocked — handler maps RECITATION to a clear user message
+    // Surface a RECITATION block from either model so the handler shows the
+    // copyright-specific guidance; otherwise surface the primary cause.
+    if (isRecitationError(err)) throw err;
+    throw primaryErr;
   }
 }
 

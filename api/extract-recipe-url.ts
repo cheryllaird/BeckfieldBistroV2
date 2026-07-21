@@ -433,11 +433,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     );
   };
   // RECITATION — Gemini blocks output that reproduces copyrighted recipe text
-  // too closely. Not tied to quota; retrying the same prompt won't help. We fall
-  // back to the other model and, failing that, ask it to reword (rewordSuffix).
+  // too closely. Not tied to quota; retrying the same prompt won't help. The
+  // model-specific filter means the other model may not block it; if both do,
+  // we surface a clear error rather than altering the recipe's wording.
   const isRecitationMsg = (msg: string) => msg.toLowerCase().includes('recitation');
-  const rewordSuffix =
-    '\n\nIMPORTANT: Do NOT copy the recipe wording verbatim. Rewrite every instruction step in your own words while preserving all quantities, ingredients, temperatures, timings, and step order exactly.';
   const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
   let rawText: string | undefined;
@@ -447,12 +446,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   for (let attempt = 0; attempt < backoffsMs.length; attempt++) {
     if (backoffsMs[attempt] > 0) await sleep(backoffsMs[attempt]);
     try {
-      const model = genAI.getGenerativeModel({ model: 'gemini-flash-lite-latest', systemInstruction: URL_SYSTEM_PROMPT });
+      const model = genAI.getGenerativeModel({ model: 'gemini-3.1-flash-lite', systemInstruction: URL_SYSTEM_PROMPT });
       rawText = await model.generateContent(prompt).then((r) => r.response.text());
       break;
     } catch (primaryErr) {
       primaryMsg = primaryErr instanceof Error ? primaryErr.message : String(primaryErr);
-      console.error(`gemini-flash-lite-latest failed on URL extraction: ${primaryMsg}`);
+      console.error(`gemini-3.1-flash-lite failed on URL extraction: ${primaryMsg}`);
       if (isOverloadMsg(primaryMsg) && attempt < backoffsMs.length - 1) continue; // transient — retry
       if (isRecitationMsg(primaryMsg)) { sawRecitation = true; break; } // copyright block — try fallback
       if (isOverloadMsg(primaryMsg) || isRateLimitMsg(primaryMsg)) break; // fall back to lite
@@ -464,37 +463,28 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // Primary exhausted (quota, persistent overload, or a RECITATION block) — try
     // the fuller Flash model. Separate quota bucket, and the model-specific
     // RECITATION filter may not block the same content.
-    console.log('gemini-flash-lite-latest unavailable on URL extraction, falling back to gemini-flash-latest');
+    console.log('gemini-3.1-flash-lite unavailable on URL extraction, falling back to gemini-3.5-flash');
     try {
-      const fallback = genAI.getGenerativeModel({ model: 'gemini-flash-latest', systemInstruction: URL_SYSTEM_PROMPT });
+      const fallback = genAI.getGenerativeModel({ model: 'gemini-3.5-flash', systemInstruction: URL_SYSTEM_PROMPT });
       rawText = await fallback.generateContent(prompt).then((r) => r.response.text());
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       console.error('Gemini fallback error:', message);
-      if (isRecitationMsg(message)) sawRecitation = true;
-      if (sawRecitation) {
-        // Both models blocked the verbatim prompt — retry once asking the model
-        // to reword the recipe so its output no longer matches the source.
-        console.log('RECITATION block on both models — retrying URL extraction with reword instruction');
-        try {
-          const reworder = genAI.getGenerativeModel({ model: 'gemini-flash-lite-latest', systemInstruction: URL_SYSTEM_PROMPT });
-          rawText = await reworder.generateContent(prompt + rewordSuffix).then((r) => r.response.text());
-        } catch (rewordErr) {
-          const rewordMsg = rewordErr instanceof Error ? rewordErr.message : String(rewordErr);
-          console.error('Gemini reword retry error:', rewordMsg);
-          return res.status(422).json({
-            error: 'This recipe matches a copyrighted source too closely for the AI to copy. Try a different URL or enter it manually.',
-          });
-        }
-      } else if (isOverloadMsg(primaryMsg) || isOverloadMsg(message)) {
+      if (isRecitationMsg(message) || sawRecitation) {
+        // Both models blocked the verbatim prompt — surface a clear error
+        // rather than reword the recipe away from the source.
+        return res.status(422).json({
+          error: 'This recipe matches a copyrighted source too closely for the AI to copy. Try a different URL or enter it manually.',
+        });
+      }
+      if (isOverloadMsg(primaryMsg) || isOverloadMsg(message)) {
         return res.status(503).json({
           error: 'Gemini is experiencing high demand right now. Please try again in a moment.',
         });
-      } else {
-        return res.status(429).json({
-          error: 'Your Gemini API key has hit its rate limit or daily quota. Wait a bit and try again, or upgrade your key at aistudio.google.com.',
-        });
       }
+      return res.status(429).json({
+        error: 'Your Gemini API key has hit its rate limit or daily quota. Wait a bit and try again, or upgrade your key at aistudio.google.com.',
+      });
     }
   }
 
