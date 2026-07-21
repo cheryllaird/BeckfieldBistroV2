@@ -4,7 +4,8 @@
   ],
   "functions": {
     "api/extract-recipe.ts": {
-      "maxDuration": 60
+      "maxDuration": 60,
+      "includeFiles": "{api/_tessdata/**,node_modules/tesseract.js-core/**,node_modules/tesseract.js/src/worker-script/**}"
     },
     "api/extract-recipe-url.ts": {
       "maxDuration": 60

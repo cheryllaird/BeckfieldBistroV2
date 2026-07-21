@@ -4,6 +4,13 @@ import { initializeApp, cert, getApps } from 'firebase-admin/app';
 import { getAuth } from 'firebase-admin/auth';
 import { getFirestore } from 'firebase-admin/firestore';
 import { decryptSecret, type EncryptedValue } from './_utils/crypto.js';
+import {
+  parseIsoDuration,
+  flattenInstructions,
+  buildIngredientSections,
+  type Ingredient,
+  type IngredientSection,
+} from './_utils/recipeParsers.js';
 
 export const config = {
   api: {
@@ -86,88 +93,6 @@ function extractJsonLd(html: string): JsonLdRecipe | null {
   return null;
 }
 
-function parseIsoDuration(iso: string | undefined): string {
-  if (!iso) return '';
-  const h = iso.match(/(\d+)H/i);
-  const m = iso.match(/(\d+)M/i);
-  const hours = h ? parseInt(h[1], 10) : 0;
-  const mins = m ? parseInt(m[1], 10) : 0;
-  if (hours && mins) return `${hours}h ${mins}m`;
-  if (hours) return `${hours}h`;
-  if (mins) return `${mins} mins`;
-  return '';
-}
-
-interface Ingredient {
-  name: string;
-  quantity: number;
-  unit: string;
-  originalText: string;
-}
-
-function parseIngredientLine(line: string): Ingredient {
-  const trimmed = line.trim();
-
-  const qtyRe = /^([\d]+(?:[.,]\d+)?(?:\s*[/⁄]\s*[\d]+)?(?:\s*[¼½¾⅓⅔⅛])?)/;
-  const qtyMatch = trimmed.match(qtyRe);
-  const quantityStr = qtyMatch?.[1]?.trim() ?? '';
-  const remainder = trimmed.slice(quantityStr.length).trim();
-
-  const unitWords = [
-    'cup','cups','tbsp','tablespoon','tablespoons','tsp','teaspoon','teaspoons',
-    'oz','ounce','ounces','lb','pound','pounds','g','gram','grams','kg','kilogram',
-    'ml','milliliter','millilitre','l','liter','litre','liters','litres',
-    'clove','cloves','slice','slices','piece','pieces','bunch','handful',
-    'pinch','dash','can','cans','package','packages','pkg','sprig','sprigs',
-    'stalk','stalks','head','heads',
-  ];
-  const unitRe = new RegExp(`^(${unitWords.join('|')})\\b`, 'i');
-  const unitMatch = remainder.match(unitRe);
-  const unit = unitMatch?.[1]?.toLowerCase() ?? '';
-  const name = remainder.slice(unit.length).replace(/^[\s,of]+/, '').trim();
-
-  let quantity = 0;
-  if (quantityStr) {
-    const normalized = quantityStr
-      .replace('¼', '0.25').replace('½', '0.5').replace('¾', '0.75')
-      .replace('⅓', '0.333').replace('⅔', '0.667').replace('⅛', '0.125');
-    if (normalized.includes('/')) {
-      const parts = normalized.split('/');
-      const num = parseFloat(parts[0].trim());
-      const den = parseFloat(parts[1].trim());
-      quantity = den ? num / den : 0;
-    } else {
-      quantity = parseFloat(normalized.replace(',', '.')) || 0;
-    }
-  }
-
-  return { name: name || trimmed, quantity, unit, originalText: trimmed };
-}
-
-function flattenInstructions(instructions: unknown[]): string[] {
-  const steps: string[] = [];
-  for (const item of instructions) {
-    if (typeof item === 'string') {
-      steps.push(item.trim());
-    } else if (item && typeof item === 'object') {
-      const obj = item as Record<string, unknown>;
-      if (obj['@type'] === 'HowToSection' && Array.isArray(obj.itemListElement)) {
-        steps.push(...flattenInstructions(obj.itemListElement as unknown[]));
-      } else if (obj.text) {
-        steps.push(String(obj.text).trim());
-      } else if (obj.name) {
-        steps.push(String(obj.name).trim());
-      }
-    }
-  }
-  return steps.filter(Boolean);
-}
-
-interface IngredientSection {
-  title: string;
-  ingredients: Ingredient[];
-}
-
 interface RecipeResponse {
   title: string;
   source: string;
@@ -178,37 +103,6 @@ interface RecipeResponse {
   ingredients: Ingredient[];
   steps: string[];
   coverImage: string;
-}
-
-function looksLikeSectionHeader(line: string): boolean {
-  const trimmed = line.trim();
-  if (trimmed.length === 0 || trimmed.length > 60) return false;
-  // If it starts with a digit or fraction character it's an ingredient amount
-  if (/^[\d¼½¾⅓⅔⅛]/.test(trimmed)) return false;
-  // Explicit colon at end is a strong signal
-  if (trimmed.endsWith(':')) return true;
-  // Common section-heading prefixes
-  if (/^(for |to make |sauce|dressing|marinade|topping|garnish|glaze|filling|crust|batter|coating)/i.test(trimmed)) return true;
-  // If the ingredient parser finds nothing useful, treat as header
-  const parsed = parseIngredientLine(trimmed);
-  if (parsed.quantity === 0 && parsed.unit === '' && parsed.name === trimmed) return true;
-  return false;
-}
-
-function buildIngredientSections(lines: string[]): IngredientSection[] {
-  const sections: IngredientSection[] = [];
-  let current: IngredientSection = { title: '', ingredients: [] };
-
-  for (const line of lines) {
-    if (looksLikeSectionHeader(line)) {
-      if (current.ingredients.length > 0) sections.push(current);
-      current = { title: line.trim().replace(/:$/, ''), ingredients: [] };
-    } else {
-      current.ingredients.push(parseIngredientLine(line));
-    }
-  }
-  if (current.ingredients.length > 0 || sections.length === 0) sections.push(current);
-  return sections;
 }
 
 function parseJsonLdRecipe(ld: JsonLdRecipe, source: string, coverImage: string): RecipeResponse {
