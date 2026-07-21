@@ -4,6 +4,8 @@ import { initializeApp, cert, getApps } from 'firebase-admin/app';
 import { getAuth } from 'firebase-admin/auth';
 import { getFirestore } from 'firebase-admin/firestore';
 import { decryptSecret, type EncryptedValue } from './_utils/crypto.js';
+import { getOcrEngine, preprocessForOcr, assessOcrQuality, type OcrResult } from './_utils/ocr.js';
+import { parseRecipeText } from './_utils/recipeParsers.js';
 
 export const config = {
   api: {
@@ -26,9 +28,7 @@ function initFirebaseAdmin() {
 const SYSTEM_PROMPT =
   'You are a recipe extraction assistant. When given a recipe — either as an image (from a cookbook, handwritten card, screenshot, or printed page) or as text scraped from a webpage — extract the recipe details and return ONLY a valid JSON object — no markdown, no explanation, no code fences.';
 
-const USER_PROMPT = `Extract the recipe and return a JSON object with exactly these fields:
-
-{
+const RECIPE_JSON_SCHEMA = `{
   "title": "string — the recipe name",
   "source": "string — cookbook name, website, or 'Photo Upload' if unknown",
   "servings": number,
@@ -48,7 +48,11 @@ const USER_PROMPT = `Extract the recipe and return a JSON object with exactly th
     }
   ],
   "steps": ["string — one entry per numbered step or paragraph in the source method"]
-}
+}`;
+
+const USER_PROMPT = `Extract the recipe and return a JSON object with exactly these fields:
+
+${RECIPE_JSON_SCHEMA}
 
 Rules:
 - Return ONLY the JSON object. No markdown. No explanation.
@@ -59,6 +63,34 @@ Rules:
 - Keep "originalText" as faithful to the source as possible.
 - Match the "steps" array to the recipe's own method structure: create exactly one array entry per numbered step or paragraph in the source. Do NOT break a step into smaller pieces than the recipe does, and do NOT merge separate steps together.
 - If the recipe numbers its steps (1, 2, 3…), produce one entry per number, preserving that grouping — even when a single numbered step spans several sentences.`;
+
+// OCR-first path: the photo is transcribed deterministically by tesseract and
+// only the TEXT reaches Gemini. Restructuring text it was handed is far less
+// likely to trip the RECITATION filter than transcribing a copyrighted page,
+// and the verbatim rules below keep the output accurate to the scanned source.
+const OCR_SYSTEM_PROMPT =
+  'You are a recipe extraction assistant. You are given raw OCR text scanned from a photo of a recipe (cookbook page, recipe card, or printout). Structure it and return ONLY a valid JSON object — no markdown, no explanation, no code fences.';
+
+function ocrUserPrompt(ocrText: string): string {
+  return `The following is raw OCR text scanned from a photo of a recipe. Structure it into a JSON object with exactly these fields:
+
+${RECIPE_JSON_SCHEMA}
+
+Rules:
+- Return ONLY the JSON object. No markdown. No explanation.
+- The text comes from OCR and may contain artifacts: words broken by hyphenation at line ends, 1/l/I and 0/O confusions, stray punctuation. Fix ONLY obvious character-level OCR errors.
+- Copy each ingredient's "originalText" verbatim from the OCR text (character-level fixes only). Never rewrite, reorder, or normalize it.
+- Each entry in "steps" must preserve the source wording from the OCR text exactly. Do not paraphrase, summarise, or embellish.
+- Ignore page numbers, running headers and footers, and photo captions that are not part of the recipe.
+- If all ingredients belong to one unlabeled group, use a single section with title "".
+- If ingredients are split into named groups (e.g. main dish + dressing + sauce), create one section per group with a descriptive title.
+- If a field cannot be determined, use sensible defaults: empty string for strings, 4 for servings, empty arrays for arrays.
+- Match the "steps" array to the recipe's own method structure: create exactly one array entry per numbered step or paragraph in the source. Do NOT break a step into smaller pieces than the recipe does, and do NOT merge separate steps together.
+- If the recipe numbers its steps (1, 2, 3…), produce one entry per number, preserving that grouping — even when a single numbered step spans several sentences.
+
+OCR text:
+${ocrText.slice(0, 20_000)}`;
+}
 
 function resolveUrl(imageUrl: string, pageUrl: string): string {
   try {
@@ -175,17 +207,22 @@ function generateWithModel(
   genAI: GoogleGenerativeAI,
   modelName: string,
   parts: (string | Part)[],
+  systemInstruction: string,
   temperature?: number,
 ): Promise<string> {
   const model = genAI.getGenerativeModel({
     model: modelName,
-    systemInstruction: SYSTEM_PROMPT,
+    systemInstruction,
     ...(temperature !== undefined && { generationConfig: { temperature } }),
   });
   return model.generateContent(parts).then((r) => r.response.text());
 }
 
-async function callGeminiWithRetry(genAI: GoogleGenerativeAI, parts: (string | Part)[]): Promise<string> {
+async function callGeminiWithRetry(
+  genAI: GoogleGenerativeAI,
+  parts: (string | Part)[],
+  systemInstruction: string = SYSTEM_PROMPT,
+): Promise<string> {
   const PRIMARY = 'gemini-3.1-flash-lite';
   const FALLBACK = 'gemini-3.5-flash';
   // Backoff schedule for transient 503 overloads on the primary model. A
@@ -198,7 +235,7 @@ async function callGeminiWithRetry(genAI: GoogleGenerativeAI, parts: (string | P
     if (backoffsMs[attempt] > 0) await sleep(backoffsMs[attempt]);
     console.log(`${PRIMARY} attempt ${attempt + 1}/${backoffsMs.length}`);
     try {
-      return await generateWithModel(genAI, PRIMARY, parts);
+      return await generateWithModel(genAI, PRIMARY, parts, systemInstruction);
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       console.error(`${PRIMARY} failed: ${message}`);
@@ -219,7 +256,7 @@ async function callGeminiWithRetry(genAI: GoogleGenerativeAI, parts: (string | P
   if (!isRecitationError(primaryErr)) {
     console.log(`${PRIMARY} unavailable, falling back to ${FALLBACK}`);
     try {
-      return await generateWithModel(genAI, FALLBACK, parts);
+      return await generateWithModel(genAI, FALLBACK, parts, systemInstruction);
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       console.error(`${FALLBACK} failed: ${message}`);
@@ -234,7 +271,7 @@ async function callGeminiWithRetry(genAI: GoogleGenerativeAI, parts: (string | P
   console.log('RECITATION block — retrying with higher temperature');
   for (const model of [PRIMARY, FALLBACK]) {
     try {
-      return await generateWithModel(genAI, model, parts, RECITATION_RETRY_TEMP);
+      return await generateWithModel(genAI, model, parts, systemInstruction, RECITATION_RETRY_TEMP);
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       console.error(`${model} high-temperature retry failed: ${message}`);
@@ -243,6 +280,41 @@ async function callGeminiWithRetry(genAI: GoogleGenerativeAI, parts: (string | P
     }
   }
   throw primaryErr; // still RECITATION on both models — handler maps to a clear 422
+}
+
+function parseRecipeJson(rawText: string): Record<string, unknown> | null {
+  const cleaned = rawText
+    .trim()
+    .replace(/^```(?:json)?\s*/i, '')
+    .replace(/\s*```$/i, '')
+    .trim();
+  try {
+    const parsed = JSON.parse(cleaned);
+    if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) return null;
+    return parsed as Record<string, unknown>;
+  } catch {
+    return null;
+  }
+}
+
+function coerceIngredientSections(data: Record<string, unknown>) {
+  const parseIngredient = (ing: Record<string, unknown>) => ({
+    name: String(ing.name ?? ''),
+    quantity: Number(ing.quantity) || 0,
+    unit: String(ing.unit ?? ''),
+    originalText: String(ing.originalText ?? ''),
+  });
+
+  return Array.isArray(data.ingredientSections)
+    ? (data.ingredientSections as Record<string, unknown>[]).map((sec) => ({
+        title: String(sec.title ?? ''),
+        ingredients: Array.isArray(sec.ingredients)
+          ? (sec.ingredients as Record<string, unknown>[]).map(parseIngredient)
+          : [],
+      }))
+    : Array.isArray(data.ingredients)
+      ? [{ title: '', ingredients: (data.ingredients as Record<string, unknown>[]).map(parseIngredient) }]
+      : [{ title: '', ingredients: [] }];
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
@@ -305,6 +377,71 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       ? mediaType
       : 'image/jpeg';
     console.log(`extract-recipe: base64Length=${base64.length} mediaType=${resolvedMediaType}`);
+
+    // OCR-first: deterministic transcription can't trip RECITATION and is
+    // verbatim-accurate to the photo. forceVision skips it (debug/rollback lever).
+    let ocr: OcrResult | null = null;
+    if (req.body.forceVision !== true) {
+      try {
+        ocr = await getOcrEngine().recognize(await preprocessForOcr(Buffer.from(base64, 'base64')));
+      } catch (err) {
+        console.error('OCR failed:', err instanceof Error ? err.message : String(err));
+      }
+    }
+    const gate = ocr
+      ? assessOcrQuality(ocr)
+      : { ok: false, reason: req.body.forceVision === true ? 'force-vision' : 'ocr-crashed' };
+
+    if (gate.ok && ocr) {
+      const ocrText = ocr.text.trim();
+      console.log(`extract-recipe: ocr confidence=${Math.round(ocr.confidence)} chars=${ocrText.length}`);
+
+      let structured: Record<string, unknown> | null = null;
+      try {
+        const raw = await callGeminiWithRetry(genAI, [ocrUserPrompt(ocrText)], OCR_SYSTEM_PROMPT);
+        structured = parseRecipeJson(raw);
+        if (!structured) console.error('OCR structuring: JSON parse failure. Raw:', raw.slice(0, 500));
+      } catch (err) {
+        console.error('OCR structuring failed:', err instanceof Error ? err.message : String(err));
+      }
+
+      if (structured) {
+        const ingredientSections = coerceIngredientSections(structured);
+        return res.status(200).json({
+          title: String(structured.title ?? 'Extracted Recipe'),
+          source: String(structured.source ?? 'Photo Upload'),
+          servings: Number(structured.servings) || 4,
+          prepTime: String(structured.prepTime ?? ''),
+          totalTime: String(structured.totalTime ?? ''),
+          ingredientSections,
+          ingredients: ingredientSections.flatMap((s) => s.ingredients),
+          steps: Array.isArray(structured.steps) ? structured.steps.map(String) : [],
+          extractionMethod: 'ocr+gemini',
+          ocrText: ocrText.slice(0, 15_000),
+        });
+      }
+
+      // Gemini unavailable or blocked (incl. RECITATION on the text pass) —
+      // structure the verbatim OCR text locally so the user still gets a result.
+      const local = parseRecipeText(ocrText);
+      return res.status(200).json({
+        title: local.title,
+        source: 'Photo Upload',
+        servings: local.servings,
+        prepTime: local.prepTime,
+        totalTime: local.totalTime,
+        ingredientSections: local.ingredientSections,
+        ingredients: local.ingredientSections.flatMap((s) => s.ingredients),
+        steps: local.steps,
+        extractionMethod: 'ocr+local',
+        ocrText: ocrText.slice(0, 15_000),
+      });
+    }
+
+    // OCR couldn't read the photo (handwriting, stylized fonts, blur) — legacy
+    // Gemini vision is the last resort, so RECITATION is only reachable for
+    // photos OCR had no text for anyway.
+    console.log(`extract-recipe: ocr gate fail: ${gate.reason} — using gemini-vision`);
     parts = [
       { inlineData: { mimeType: resolvedMediaType, data: base64 } },
       USER_PROMPT,
@@ -361,48 +498,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   // Parse response
-  const cleaned = rawText
-    .trim()
-    .replace(/^```(?:json)?\s*/i, '')
-    .replace(/\s*```$/i, '')
-    .trim();
-
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(cleaned);
-  } catch {
+  const data = parseRecipeJson(rawText);
+  if (!data) {
     console.error('JSON parse failure. Raw response:', rawText);
     return res.status(422).json({
       error: 'Could not read the recipe. Please try again or enter it manually.',
     });
   }
 
-  if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
-    return res.status(422).json({
-      error: 'The AI returned an unexpected response. Please try again or enter the recipe manually.',
-    });
-  }
-
-  const data = parsed as Record<string, unknown>;
-
-  const parseIngredient = (ing: Record<string, unknown>) => ({
-    name: String(ing.name ?? ''),
-    quantity: Number(ing.quantity) || 0,
-    unit: String(ing.unit ?? ''),
-    originalText: String(ing.originalText ?? ''),
-  });
-
-  const ingredientSections = Array.isArray(data.ingredientSections)
-    ? (data.ingredientSections as Record<string, unknown>[]).map((sec) => ({
-        title: String(sec.title ?? ''),
-        ingredients: Array.isArray(sec.ingredients)
-          ? (sec.ingredients as Record<string, unknown>[]).map(parseIngredient)
-          : [],
-      }))
-    : Array.isArray(data.ingredients)
-      ? [{ title: '', ingredients: (data.ingredients as Record<string, unknown>[]).map(parseIngredient) }]
-      : [{ title: '', ingredients: [] }];
-
+  const ingredientSections = coerceIngredientSections(data);
   const ingredients = ingredientSections.flatMap((s) => s.ingredients);
 
   return res.status(200).json({
@@ -415,5 +519,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     ingredients,
     steps: Array.isArray(data.steps) ? data.steps.map(String) : [],
     ...(coverImage && { coverImage }),
+    ...(hasImage && { extractionMethod: 'gemini-vision' }),
   });
 }
