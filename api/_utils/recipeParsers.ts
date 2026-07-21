@@ -107,7 +107,7 @@ export function buildIngredientSections(lines: string[]): IngredientSection[] {
   for (const line of lines) {
     if (looksLikeSectionHeader(line)) {
       if (current.ingredients.length > 0) sections.push(current);
-      current = { title: line.trim().replace(/:$/, ''), ingredients: [] };
+      current = { title: line.trim().replace(/[\s/:]+$/, ''), ingredients: [] };
     } else {
       current.ingredients.push(parseIngredientLine(line));
     }
@@ -153,13 +153,20 @@ function firstMetaValue(captured: string): string {
   return captured.split(/\s+[-–—|•·]\s+/)[0].trim().slice(0, 40);
 }
 
+// Only treat a line as time metadata when it carries an explicit "time" label
+// or a colon after the keyword — otherwise "cook for 5 minutes" in a method
+// sentence would be misread as the total time (and drop the step).
 function matchPrepTime(line: string): string | null {
-  const m = line.match(/prep(?:aration)?\s*(?:time)?[:\s]+([^|•·]+)/i);
+  const m =
+    line.match(/prep(?:aration)?\s*time\s*[:\s]\s*([^|•·]+)/i) ??
+    line.match(/prep(?:aration)?\s*:\s*([^|•·]+)/i);
   return m ? firstMetaValue(m[1]) : null;
 }
 
 function matchTotalTime(line: string): string | null {
-  const m = line.match(/(?:total|cook(?:ing)?)\s*(?:time)?[:\s]+([^|•·]+)/i);
+  const m =
+    line.match(/(?:total|cook(?:ing)?)\s*time\s*[:\s]\s*([^|•·]+)/i) ??
+    line.match(/(?:total|cook(?:ing)?)\s*:\s*([^|•·]+)/i);
   return m ? firstMetaValue(m[1]) : null;
 }
 
@@ -239,13 +246,39 @@ export function parseRecipeText(ocrText: string): ParsedRecipeText {
       .filter((l) => QUANTITY_START_RE.test(l) && !NUMBERED_STEP_RE.test(l) && !isMetadataLine(l));
     stepLines = lines.slice(methodStart + 1);
   } else {
-    // No headers at all: amounts are ingredients, numbered or prose lines are steps
-    ingredientLines = lines.filter(
-      (l) => QUANTITY_START_RE.test(l) && !NUMBERED_STEP_RE.test(l) && !isMetadataLine(l),
-    );
-    stepLines = lines.filter(
-      (l) => NUMBERED_STEP_RE.test(l) || (l.length > 40 && !QUANTITY_START_RE.test(l) && !isMetadataLine(l)),
-    );
+    // No explicit "Ingredients"/"Method" headers (common in cookbooks that use
+    // "For the curry" style sub-headings instead). Ingredients are the
+    // contiguous block of amount-led lines; bound to that block so method prose
+    // that happens to start with a number ("4 minutes, stirring…") can't leak
+    // in, and keep section sub-headers inside the block so they title sections.
+    // Amount-led, but not a method sentence that merely opens with a number
+    // ("4 minutes, stirring…"): ingredient lines are short and lack a mid-line
+    // sentence break.
+    const isAmount = (l: string) =>
+      QUANTITY_START_RE.test(l) &&
+      !NUMBERED_STEP_RE.test(l) &&
+      !isMetadataLine(l) &&
+      l.length <= 60 &&
+      !/[a-z]\.\s/.test(l);
+    const amountIdx = lines.map((l, i) => (isAmount(l) ? i : -1)).filter((i) => i >= 0);
+
+    if (amountIdx.length > 0) {
+      const first = amountIdx[0];
+      const last = amountIdx[amountIdx.length - 1];
+      // A sub-header ends with "/" or ":" or opens with "For the…" — distinct
+      // enough not to swallow wrapped ingredient continuations ("cut into …")
+      const isSubHeader = (l: string) => /[/:]\s*$/.test(l) || /^(for |to make )/i.test(l.trim());
+      ingredientLines = lines.slice(first, last + 1).filter((l) => isAmount(l) || isSubHeader(l));
+      if (first > 0 && isSubHeader(lines[first - 1])) ingredientLines.unshift(lines[first - 1]);
+      stepLines = lines
+        .slice(last + 1)
+        .filter((l) => NUMBERED_STEP_RE.test(l) || (l.length > 40 && !QUANTITY_START_RE.test(l) && !isMetadataLine(l)));
+    } else {
+      ingredientLines = [];
+      stepLines = lines.filter(
+        (l) => NUMBERED_STEP_RE.test(l) || (l.length > 40 && !isMetadataLine(l)),
+      );
+    }
   }
 
   const titleZoneEnd = ingredientsStart >= 0 ? ingredientsStart : methodStart >= 0 ? methodStart : Math.min(lines.length, 5);

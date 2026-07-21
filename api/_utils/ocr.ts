@@ -61,8 +61,12 @@ class TesseractEngine implements OcrEngine {
     const run = async (): Promise<OcrResult> => {
       const worker = await getWorker();
       try {
-        const { data } = await worker.recognize(image);
-        return { text: data.text ?? '', confidence: data.confidence ?? 0 };
+        // Request the block/line/word hierarchy so we can reconstruct reading
+        // order — tesseract's flat `text` reads across side-by-side columns.
+        const { data } = await worker.recognize(image, {}, { blocks: true, text: true });
+        const lines = collectLines(data as unknown as TesseractData);
+        const reflowed = reflowColumns(lines);
+        return { text: reflowed ?? data.text ?? '', confidence: data.confidence ?? 0 };
       } catch (err) {
         // The worker thread may be wedged — drop it and re-init next call
         workerPromise = null;
@@ -74,6 +78,124 @@ class TesseractEngine implements OcrEngine {
     queue = result.catch(() => undefined);
     return result;
   }
+}
+
+// ─── Column reflow ───────────────────────────────────────────────────────────
+// Many recipes lay ingredients and method in side-by-side columns. Tesseract's
+// layout analysis often merges the two into single lines ("For the curry / and
+// leave them to crackle…"), which glues ingredient text to method text and makes
+// the structuring step drop whole ingredients. We rebuild the reading order from
+// word bounding boxes: detect the vertical gutter, then read the left column
+// fully top-to-bottom before the right. Single-column pages find no gutter and
+// pass through unchanged.
+
+interface BBox { x0: number; y0: number; x1: number; y1: number }
+interface TWord { text?: string; bbox?: BBox }
+interface TLine { text?: string; bbox?: BBox; words?: TWord[] }
+interface TPara { lines?: TLine[] }
+interface TBlock { paragraphs?: TPara[] }
+interface TesseractData { blocks?: TBlock[] | null }
+
+interface Line {
+  words: { text: string; x0: number; x1: number }[];
+  yTop: number;
+  width: number; // rightmost x across the line
+}
+
+function collectLines(data: TesseractData): Line[] {
+  const lines: Line[] = [];
+  for (const block of data.blocks ?? []) {
+    for (const para of block.paragraphs ?? []) {
+      for (const ln of para.lines ?? []) {
+        const words = (ln.words ?? [])
+          .filter((w) => (w.text ?? '').trim().length > 0 && w.bbox)
+          .map((w) => ({ text: (w.text ?? '').trim(), x0: w.bbox!.x0, x1: w.bbox!.x1 }))
+          .sort((a, b) => a.x0 - b.x0);
+        if (words.length > 0) {
+          lines.push({ words, yTop: ln.bbox?.y0 ?? 0, width: words[words.length - 1].x1 });
+        }
+      }
+    }
+  }
+  return lines;
+}
+
+function median(values: number[]): number {
+  if (values.length === 0) return 0;
+  const sorted = [...values].sort((a, b) => a - b);
+  const mid = Math.floor(sorted.length / 2);
+  return sorted.length % 2 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
+}
+
+/**
+ * Returns text re-threaded into left-then-right column order, or null when the
+ * page isn't confidently two-column (so the caller keeps tesseract's own text).
+ */
+function reflowColumns(lines: Line[]): string | null {
+  if (lines.length < 6) return null;
+
+  const pageWidth = Math.max(...lines.map((l) => l.width));
+  if (pageWidth <= 0) return null;
+
+  // Typical inter-word gap sets the scale; a real gutter is far wider.
+  const wordGaps: number[] = [];
+  for (const l of lines) {
+    for (let i = 1; i < l.words.length; i++) {
+      const g = l.words[i].x0 - l.words[i - 1].x1;
+      if (g > 0) wordGaps.push(g);
+    }
+  }
+  const medianGap = median(wordGaps) || 10;
+  const minGutter = Math.max(pageWidth * 0.045, medianGap * 3.5);
+
+  // Largest internal gap per line — candidate gutter positions
+  const bigGap = new Map<Line, { mid: number; splitIdx: number }>();
+  const candidateMids: number[] = [];
+  for (const l of lines) {
+    let best = { width: 0, mid: 0, splitIdx: -1 };
+    for (let i = 1; i < l.words.length; i++) {
+      const w = l.words[i].x0 - l.words[i - 1].x1;
+      if (w > best.width) best = { width: w, mid: (l.words[i].x0 + l.words[i - 1].x1) / 2, splitIdx: i };
+    }
+    if (best.width >= minGutter && best.splitIdx > 0) {
+      bigGap.set(l, { mid: best.mid, splitIdx: best.splitIdx });
+      candidateMids.push(best.mid);
+    }
+  }
+
+  // Need enough lines with a gutter, clustered at a consistent x
+  if (candidateMids.length < Math.max(3, lines.length * 0.15)) return null;
+  const gutterX = median(candidateMids);
+  const tolerance = pageWidth * 0.06;
+  const clustered = candidateMids.filter((m) => Math.abs(m - gutterX) <= tolerance).length;
+  if (clustered < Math.max(3, candidateMids.length * 0.6)) return null;
+
+  const left: { y: number; text: string }[] = [];
+  const right: { y: number; text: string }[] = [];
+  for (const l of lines) {
+    const gap = bigGap.get(l);
+    const splitHere = gap && Math.abs(gap.mid - gutterX) <= tolerance;
+    if (splitHere) {
+      const lw = l.words.slice(0, gap!.splitIdx);
+      const rw = l.words.slice(gap!.splitIdx);
+      if (lw.length) left.push({ y: l.yTop, text: lw.map((w) => w.text).join(' ') });
+      if (rw.length) right.push({ y: l.yTop, text: rw.map((w) => w.text).join(' ') });
+    } else {
+      // No gutter gap in this line. If it spans both sides of the gutter it's a
+      // full-width heading/intro row — send it left so it keeps its place in the
+      // top-of-page flow rather than polluting the right (method) column.
+      // Otherwise it lives in a single column; place it by its center.
+      const text = l.words.map((w) => w.text).join(' ');
+      const spansGutter = l.words[0].x0 < gutterX && l.width > gutterX;
+      const center = (l.words[0].x0 + l.width) / 2;
+      (spansGutter || center < gutterX ? left : right).push({ y: l.yTop, text });
+    }
+  }
+
+  if (left.length === 0 || right.length === 0) return null;
+  left.sort((a, b) => a.y - b.y);
+  right.sort((a, b) => a.y - b.y);
+  return left.map((o) => o.text).join('\n') + '\n\n' + right.map((o) => o.text).join('\n');
 }
 
 const tesseractEngine = new TesseractEngine();
