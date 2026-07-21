@@ -148,7 +148,34 @@ function isOverloadError(err: unknown): boolean {
   );
 }
 
+// RECITATION — Gemini blocks a candidate when its output reproduces copyrighted
+// material (published cookbooks, recipe sites) too closely. Our prompt asks for
+// verbatim ingredient/step text, which is exactly what trips this filter. It's
+// not tied to quota and retrying the same prompt won't help; the fix is to try
+// the other model and, failing that, ask the model to reword (see below).
+function isRecitationError(err: unknown): boolean {
+  const message = (err instanceof Error ? err.message : String(err)).toLowerCase();
+  return message.includes('recitation');
+}
+
+// Appended to the prompt on a retry after a RECITATION block. Telling the model
+// to put the instructions in its own words breaks the verbatim match with the
+// copyrighted source while keeping the recipe's substance intact. Ingredient
+// lines ("2 cups flour") are short factual measurements and are kept as-is.
+const RECITATION_SAFE_SUFFIX = `
+
+IMPORTANT: Do NOT copy the recipe's wording verbatim. Rewrite every instruction step in your own words while preserving all quantities, ingredients, temperatures, timings, and the order of steps exactly. Keep each ingredient's "originalText" to just its short measurement line (e.g. "2 cups flour").`;
+
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+function generateWithModel(
+  genAI: GoogleGenerativeAI,
+  modelName: string,
+  parts: (string | Part)[],
+): Promise<string> {
+  const model = genAI.getGenerativeModel({ model: modelName, systemInstruction: SYSTEM_PROMPT });
+  return model.generateContent(parts).then((r) => r.response.text());
+}
 
 async function callGeminiWithRetry(genAI: GoogleGenerativeAI, parts: (string | Part)[]): Promise<string> {
   const PRIMARY = 'gemini-flash-lite-latest';
@@ -158,13 +185,13 @@ async function callGeminiWithRetry(genAI: GoogleGenerativeAI, parts: (string | P
   // RPD allowance — it drops straight to the fallback's separate quota bucket.
   const backoffsMs = [0, 1000, 2500];
   let primaryErr: unknown;
+  let sawRecitation = false;
 
   for (let attempt = 0; attempt < backoffsMs.length; attempt++) {
     if (backoffsMs[attempt] > 0) await sleep(backoffsMs[attempt]);
     console.log(`${PRIMARY} attempt ${attempt + 1}/${backoffsMs.length}`);
     try {
-      const model = genAI.getGenerativeModel({ model: PRIMARY, systemInstruction: SYSTEM_PROMPT });
-      return await model.generateContent(parts).then((r) => r.response.text());
+      return await generateWithModel(genAI, PRIMARY, parts);
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       console.error(`${PRIMARY} failed: ${message}`);
@@ -174,20 +201,35 @@ async function callGeminiWithRetry(genAI: GoogleGenerativeAI, parts: (string | P
         break; // out of retries — try the fallback model
       }
       if (isRateLimitError(err)) break; // quota — go straight to fallback
+      if (isRecitationError(err)) { sawRecitation = true; break; } // copyright block — try fallback
       throw err; // anything else is non-retryable
     }
   }
 
-  // Primary exhausted (quota or persistent overload) — try the fuller Flash model
-  // (separate quota bucket; more capable, though more prone to its own overloads).
+  // Primary exhausted (quota, persistent overload, or a RECITATION block) — try
+  // the fuller Flash model. It has a separate quota bucket, and because the
+  // RECITATION filter is model-specific it may not block the same content.
   console.log(`${PRIMARY} unavailable, falling back to ${FALLBACK}`);
   try {
-    const fallback = genAI.getGenerativeModel({ model: FALLBACK, systemInstruction: SYSTEM_PROMPT });
-    return await fallback.generateContent(parts).then((r) => r.response.text());
+    return await generateWithModel(genAI, FALLBACK, parts);
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     console.error(`${FALLBACK} failed: ${message}`);
-    throw primaryErr;
+    if (isRecitationError(err)) sawRecitation = true;
+    if (!sawRecitation) throw primaryErr; // non-recitation failure — surface original cause
+  }
+
+  // Both models hit the RECITATION filter on the verbatim prompt. Retry once
+  // more asking the model to reword the recipe so its output no longer matches
+  // the copyrighted source. This is the path that recovers photo extractions of
+  // published cookbook recipes.
+  console.log('RECITATION block on both models — retrying with reword instruction');
+  try {
+    return await generateWithModel(genAI, PRIMARY, [...parts, RECITATION_SAFE_SUFFIX]);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.error(`${PRIMARY} reword retry failed: ${message}`);
+    throw err; // still blocked — handler maps RECITATION to a clear user message
   }
 }
 
@@ -296,6 +338,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (isOverloadError(err)) {
       return res.status(503).json({
         error: 'Gemini is experiencing high demand right now. Please try again in a moment.',
+      });
+    }
+    if (isRecitationError(err)) {
+      return res.status(422).json({
+        error: "This recipe matches a copyrighted source too closely for the AI to copy. Try a clearer photo of just the ingredients and steps, or enter it manually.",
       });
     }
     return res.status(502).json({ error: 'AI service error. Please try again.' });
