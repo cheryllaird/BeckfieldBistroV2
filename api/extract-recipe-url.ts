@@ -284,7 +284,7 @@ function urlUserPrompt(source: string): string {
       ]
     }
   ],
-  "steps": ["string — each step as a separate string"]
+  "steps": ["string — one entry per numbered step or paragraph in the source method"]
 }
 
 Rules:
@@ -295,7 +295,8 @@ Rules:
 - If a field cannot be determined, use sensible defaults: empty string for strings, 4 for servings, empty arrays.
 - Ingredients must separate name from quantity and unit.
 - Keep "originalText" faithful to the source text.
-- Split steps so each array entry is one complete instruction.
+- Match the "steps" array to the recipe's own method structure: create exactly one array entry per numbered step or paragraph in the source. Do NOT break a step into smaller pieces than the recipe does, and do NOT merge separate steps together.
+- If the recipe numbers its steps (1, 2, 3…), produce one entry per number, preserving that grouping — even when a single numbered step spans several sentences.
 - Ignore navigation, ads, comments, related recipes, and other non-recipe content.
 
 Webpage text:

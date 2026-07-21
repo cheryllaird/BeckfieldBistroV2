@@ -47,17 +47,18 @@ const USER_PROMPT = `Extract the recipe and return a JSON object with exactly th
       ]
     }
   ],
-  "steps": ["string — each step as a separate string"]
+  "steps": ["string — one entry per numbered step or paragraph in the source method"]
 }
 
 Rules:
 - Return ONLY the JSON object. No markdown. No explanation.
-- Be concise: keep step strings short (1-3 sentences each); do not pad or elaborate.
+- Do not pad or elaborate; keep each step faithful to the source wording.
 - If all ingredients belong to one unlabeled group, use a single section with title "".
 - If ingredients are split into named groups (e.g. main dish + dressing + sauce), create one section per group with a descriptive title.
 - If a field cannot be determined, use sensible defaults: empty string for strings, 4 for servings, empty arrays for arrays.
 - Keep "originalText" as faithful to the source as possible.
-- Split steps so each array entry is one paragraph of instruction.`;
+- Match the "steps" array to the recipe's own method structure: create exactly one array entry per numbered step or paragraph in the source. Do NOT break a step into smaller pieces than the recipe does, and do NOT merge separate steps together.
+- If the recipe numbers its steps (1, 2, 3…), produce one entry per number, preserving that grouping — even when a single numbered step spans several sentences.`;
 
 function resolveUrl(imageUrl: string, pageUrl: string): string {
   try {
