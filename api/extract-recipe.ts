@@ -321,7 +321,9 @@ function buildRecipePayload(data: Record<string, unknown>, defaultSource: string
 interface JsonLdRecipe {
   name?: string;
   recipeIngredient?: string[];
-  recipeInstructions?: unknown[];
+  // schema.org allows a single Text value as well as an array, so this is
+  // `unknown` — flattenInstructions normalizes every shape.
+  recipeInstructions?: unknown;
   recipeYield?: string | number;
   prepTime?: string;
   totalTime?: string;
@@ -569,12 +571,25 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   //    RECITATION-proof. Most recipe sites publish it.
   const ld = findJsonLdRecipe(html);
   const structured = ld ? jsonLdToRecipe(ld, hostname) : null;
-  if (structured) {
+  // Only short-circuit on structured data that actually carries a method. Some
+  // pages publish a JSON-LD Recipe with ingredients but an empty or unreadable
+  // recipeInstructions, which would return a recipe with no steps ("missing
+  // method"). When that happens, fall through to Gemini to recover the method —
+  // but keep the partial structured recipe as a last resort so we never lose the
+  // ingredients we already have.
+  const structuredHasSteps =
+    Array.isArray(structured?.steps) && (structured!.steps as unknown[]).length > 0;
+  const returnStructured = async () => {
+    await recordExtractionMethod('url+structured');
+    return res.status(200).json({ ...withCover(buildRecipePayload(structured!, hostname)), extractionMethod: 'url+structured' });
+  };
+  if (structured && structuredHasSteps) {
     await recordExtractionMethod('url+structured');
     return res.status(200).json({ ...withCover(buildRecipePayload(structured, hostname)), extractionMethod: 'url+structured' });
   }
 
-  // 2. No usable structured data — let Gemini structure the page text.
+  // 2. No usable structured data (or it was missing its method) — let Gemini
+  //    structure the page text.
   try {
     const rawText = await callGeminiWithRetry(genAI, [
       `The following is text extracted from ${hostname}.\n\n${pageText}\n\n${USER_PROMPT}`,
@@ -587,11 +602,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     console.error('URL structuring: JSON parse failure. Raw:', rawText.slice(0, 500));
   } catch (err) {
     console.error(`URL Gemini failed: ${err instanceof Error ? err.message : String(err)}`);
+    // Partial JSON-LD (ingredients but no method) still beats a hard failure.
+    if (structured) return returnStructured();
     await recordExtractionMethod('failed');
     return sendGeminiError(res, err);
   }
 
-  // 3. No structured data and Gemini returned nothing usable.
+  // 3. Gemini returned nothing usable. If we salvaged partial structured data
+  //    earlier, return that; otherwise it's a tracked failure.
+  if (structured) return returnStructured();
   console.log('extract-recipe: url extraction failed (no JSON-LD, Gemini unparseable)');
   await recordExtractionMethod('failed');
   return res.status(422).json({

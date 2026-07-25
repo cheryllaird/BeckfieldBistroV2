@@ -66,19 +66,59 @@ export function parseIngredientLine(line: string): Ingredient {
   return { name: name || trimmed, quantity, unit, originalText: trimmed };
 }
 
-export function flattenInstructions(instructions: unknown[]): string[] {
+// JSON-LD step text sometimes carries HTML (embedded <p>/<br>) or entities;
+// strip them so a step reads as plain prose.
+function cleanStepText(s: string): string {
+  return s
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#0?39;|&apos;|&#x27;/gi, "'")
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+// Flattens a schema.org `recipeInstructions` value into an ordered list of step
+// strings. schema.org permits it to be a single Text value, an array of strings,
+// or nested HowToStep/HowToSection objects — and real sites use all three, so
+// every shape is normalized here.
+//
+// Two shapes the previous version mishandled and that showed up as a "missing
+// method" on some recipe pages:
+//   1. A single Text string. Iterating it with `for..of` walked it character by
+//      character; it is now wrapped so the whole method is split into steps on
+//      its block separators (newlines, <p>/<br>/<li>) instead.
+//   2. A grouping node (HowToSection / ItemList / untyped wrapper) whose
+//      `@type` was absent or not exactly "HowToSection" — its nested
+//      `itemListElement` is now recursed into regardless of `@type`.
+export function flattenInstructions(instructions: unknown): string[] {
+  // A bare string must not be iterated as characters — wrap non-arrays.
+  const list = Array.isArray(instructions) ? instructions : [instructions];
   const steps: string[] = [];
-  for (const item of instructions) {
+  for (const item of list) {
     if (typeof item === 'string') {
-      steps.push(item.trim());
+      // A single Text value can hold the whole method; split on block-level
+      // separators, falling back to the whole string as one step.
+      for (const part of item.split(/\r?\n|<\/?(?:p|br|li|div)\b[^>]*>/i)) {
+        const text = cleanStepText(part);
+        if (text) steps.push(text);
+      }
     } else if (item && typeof item === 'object') {
       const obj = item as Record<string, unknown>;
-      if (obj['@type'] === 'HowToSection' && Array.isArray(obj.itemListElement)) {
-        steps.push(...flattenInstructions(obj.itemListElement as unknown[]));
-      } else if (obj.text) {
-        steps.push(String(obj.text).trim());
-      } else if (obj.name) {
-        steps.push(String(obj.name).trim());
+      // Recurse into any grouping node that carries a nested step list,
+      // whatever its @type (HowToSection, ItemList, or an untyped wrapper).
+      const nested = obj.itemListElement ?? obj.steps ?? obj.recipeInstructions;
+      if (Array.isArray(nested)) {
+        steps.push(...flattenInstructions(nested));
+      } else {
+        const text = obj.text ?? obj.name ?? obj.description;
+        if (text != null) {
+          const cleaned = cleanStepText(String(text));
+          if (cleaned) steps.push(cleaned);
+        }
       }
     }
   }
