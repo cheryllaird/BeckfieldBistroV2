@@ -11,6 +11,13 @@ export default defineConfig({
   define: {
     __APP_VERSION__: JSON.stringify(version),
   },
+  // Down-level the bundle for older iPad Safari (iPadOS 15/16). Vite 8's default
+  // target assumes ~Safari 16, so modern syntax from dependencies can throw on
+  // older Safari and leave the app painted but unresponsive to touch.
+  build: {
+    target: ['es2019', 'safari15'],
+    cssTarget: 'safari15',
+  },
   server: {
     port: process.env.PORT ? Number(process.env.PORT) : 5173,
   },

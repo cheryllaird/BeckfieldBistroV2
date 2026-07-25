@@ -11,6 +11,8 @@ export function Card({ children, className = '', onClick, padding = true }: Prop
   return (
     <div
       onClick={onClick}
+      role={onClick ? 'button' : undefined}
+      tabIndex={onClick ? 0 : undefined}
       className={[
         'bg-white rounded-2xl border border-slate-100 shadow-sm',
         padding ? 'p-4' : '',
