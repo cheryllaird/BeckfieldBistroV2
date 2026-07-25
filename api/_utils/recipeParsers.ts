@@ -1,5 +1,5 @@
-// Shared non-AI recipe parsers, used by both /api/extract-recipe (OCR fallback)
-// and /api/extract-recipe-url (JSON-LD fast path).
+// Shared non-AI recipe parsers used by /api/extract-recipe — the OCR-text
+// fallback (parseRecipeText) and the URL JSON-LD structuring.
 
 export interface Ingredient {
   name: string;

@@ -564,8 +564,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     ...(coverImage && { coverImage }),
   });
 
-  // 1. Gemini structures the page text.
-  let urlGeminiError: unknown = null;
+  // 1. Deterministic first: the page's own JSON-LD recipe data — the site's
+  //    machine-readable recipe, so it's exact to source, free, instant, and
+  //    RECITATION-proof. Most recipe sites publish it.
+  const ld = findJsonLdRecipe(html);
+  const structured = ld ? jsonLdToRecipe(ld, hostname) : null;
+  if (structured) {
+    await recordExtractionMethod('url+structured');
+    return res.status(200).json({ ...withCover(buildRecipePayload(structured, hostname)), extractionMethod: 'url+structured' });
+  }
+
+  // 2. No usable structured data — let Gemini structure the page text.
   try {
     const rawText = await callGeminiWithRetry(genAI, [
       `The following is text extracted from ${hostname}.\n\n${pageText}\n\n${USER_PROMPT}`,
@@ -577,22 +586,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
     console.error('URL structuring: JSON parse failure. Raw:', rawText.slice(0, 500));
   } catch (err) {
-    urlGeminiError = err;
-    console.error(`URL Gemini failed (${isRecitationError(err) ? 'recitation' : 'error'}): ${err instanceof Error ? err.message : String(err)} — trying JSON-LD`);
+    console.error(`URL Gemini failed: ${err instanceof Error ? err.message : String(err)}`);
+    await recordExtractionMethod('failed');
+    return sendGeminiError(res, err);
   }
 
-  // 2. Deterministic fallback: the page's own JSON-LD recipe data.
-  const ld = findJsonLdRecipe(html);
-  const structured = ld ? jsonLdToRecipe(ld, hostname) : null;
-  if (structured) {
-    await recordExtractionMethod('url+structured');
-    return res.status(200).json({ ...withCover(buildRecipePayload(structured, hostname)), extractionMethod: 'url+structured' });
-  }
-
-  // 3. Neither the model nor structured data yielded a recipe.
-  console.log('extract-recipe: url extraction failed (gemini + json-ld both unavailable)');
+  // 3. No structured data and Gemini returned nothing usable.
+  console.log('extract-recipe: url extraction failed (no JSON-LD, Gemini unparseable)');
   await recordExtractionMethod('failed');
-  if (urlGeminiError) return sendGeminiError(res, urlGeminiError);
   return res.status(422).json({
     error: 'Could not extract the recipe from that page. Try a different URL or enter it manually.',
   });
