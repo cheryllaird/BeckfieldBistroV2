@@ -51,10 +51,13 @@ export interface MealSource {
   ingredientName: string;
 }
 
+export type ShoppingListType = 'immediate' | 'stock-up';
+
 export interface ShoppingItem {
   id: string;
   name: string; // full plain text e.g. "2 cups flour" or "chicken breast"
   category: ShoppingCategory;
+  listType?: ShoppingListType; // which list this item belongs to; missing = 'immediate'
   checked: boolean;
   order?: number;
   manual?: boolean;
@@ -66,7 +69,7 @@ export interface ShoppingItem {
   // (rename on one device, check-off on another) merge instead of overwriting
   // each other. All optional for backward compat with docs written before the
   // fields existed; a missing clock compares as 0 (oldest).
-  updatedAt?: number; // content group: name/category/manual/mealSources/ingredientKey
+  updatedAt?: number; // content group: name/category/listType/manual/mealSources/ingredientKey
   checkedAt?: number; // checked group
   orderAt?: number; // order group
   // Soft-delete tombstone (presence group). Deleted items keep their doc with

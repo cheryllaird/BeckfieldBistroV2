@@ -80,6 +80,7 @@ export function isEffectivelyDeleted(item: ShoppingItem): boolean {
 const contentEqual = (a: ShoppingItem, b: ShoppingItem): boolean =>
   a.name === b.name &&
   a.category === b.category &&
+  (a.listType ?? 'immediate') === (b.listType ?? 'immediate') &&
   (a.manual ?? false) === (b.manual ?? false) &&
   (a.ingredientKey ?? '') === (b.ingredientKey ?? '') &&
   JSON.stringify(a.mealSources ?? null) === JSON.stringify(b.mealSources ?? null);
@@ -90,6 +91,7 @@ const contentEqual = (a: ShoppingItem, b: ShoppingItem): boolean =>
 function setContentPatch(patch: ShoppingItemPatch, item: ShoppingItem): void {
   patch.name = item.name;
   patch.category = item.category;
+  patch.listType = item.listType ?? null;
   patch.manual = item.manual ?? null;
   patch.mealSources = item.mealSources ?? null;
   patch.ingredientKey = item.ingredientKey ?? null;
@@ -101,6 +103,7 @@ function copyContent(from: ShoppingItem, into: ShoppingItem): ShoppingItem {
     ...into,
     name: from.name,
     category: from.category,
+    listType: from.listType,
     manual: from.manual,
     mealSources: from.mealSources,
     ingredientKey: from.ingredientKey,

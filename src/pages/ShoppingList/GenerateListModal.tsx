@@ -10,7 +10,7 @@ interface Props {
 }
 
 export function GenerateListModal({ onClose }: Props) {
-  const { mealEntries, recipes, pantryItems, setShoppingItems } = useStore();
+  const { mealEntries, recipes, pantryItems, shoppingItems, setShoppingItems } = useStore();
   const pantryNormalizedNames = new Set(pantryItems.map((p) => p.normalizedName));
 
   const allWeekDays = [...getWeekDays(0), ...getWeekDays(1)];
@@ -69,11 +69,18 @@ export function GenerateListModal({ onClose }: Props) {
       .filter((g) => g.ingredients);
 
     const allItems = consolidateIngredients(groups);
-    const items = allItems.filter((item) => {
-      const normalizedName = item.ingredientKey?.split('__')[0] ?? '';
-      return !pantryNormalizedNames.has(normalizedName);
-    });
-    setShoppingItems(items);
+    const items = allItems
+      .filter((item) => {
+        const normalizedName = item.ingredientKey?.split('__')[0] ?? '';
+        return !pantryNormalizedNames.has(normalizedName);
+      })
+      // Generated items always populate the Immediate list.
+      .map((item) => ({ ...item, listType: 'immediate' as const }));
+    // Replace only the Immediate list; leave Stock up items untouched.
+    const stockUp = shoppingItems.filter(
+      (i) => (i.listType ?? 'immediate') === 'stock-up'
+    );
+    setShoppingItems([...items, ...stockUp]);
     onClose();
   };
 
@@ -97,7 +104,7 @@ export function GenerateListModal({ onClose }: Props) {
           ) : (
             <div className="flex flex-col gap-2">
               <p className="text-xs text-slate-500 mb-1">
-                Select meals to include in your shopping list:
+                Select meals to add to your <span className="font-medium text-slate-600">Immediate</span> list:
               </p>
               {recipeEntries.map((entry) => {
                 const recipe = recipes.find((r) => r.id === entry.recipeId);
