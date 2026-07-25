@@ -183,11 +183,10 @@ function isOverloadError(err: unknown): boolean {
 
 // RECITATION — Gemini blocks a candidate when its OUTPUT reproduces copyrighted
 // material (published cookbooks, recipe sites) too closely. It is the generated
-// text that is flagged, not the prompt, and it is not tied to quota — retrying
-// the same prompt at the same settings won't help. Because the block is on the
-// decoded tokens, the recovery re-runs at a higher temperature (see
-// callGeminiWithRetry), which is Google's recommended mitigation; a persistent
-// block yields a clear 422 rather than a silently altered recipe.
+// text that is flagged, not the prompt, and it is not tied to quota. It is
+// surfaced to the caller, which recovers with something more faithful than a
+// phrasing-loosened retry: photos fall to deterministic OCR, and a URL yields a
+// clear "enter it manually" 422 rather than a silently altered recipe.
 function isRecitationError(err: unknown): boolean {
   const message = (err instanceof Error ? err.message : String(err)).toLowerCase();
   return message.includes('recitation');
@@ -195,26 +194,13 @@ function isRecitationError(err: unknown): boolean {
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
-// Higher temperature loosens greedy decoding so the output is less likely to
-// land on a copyrighted recipe's exact wording — Google's recommended RECITATION
-// mitigation. It is applied only on the retry after a block, so normal
-// extractions keep the model's default (more faithful) decoding. Kept moderate
-// so the extraction stays grounded in the image (quantities/ingredients don't
-// drift) while still breaking the verbatim token match.
-const RECITATION_RETRY_TEMP = 1.3;
-
 function generateWithModel(
   genAI: GoogleGenerativeAI,
   modelName: string,
   parts: (string | Part)[],
   systemInstruction: string,
-  temperature?: number,
 ): Promise<string> {
-  const model = genAI.getGenerativeModel({
-    model: modelName,
-    systemInstruction,
-    ...(temperature !== undefined && { generationConfig: { temperature } }),
-  });
+  const model = genAI.getGenerativeModel({ model: modelName, systemInstruction });
   return model.generateContent(parts).then((r) => r.response.text());
 }
 
@@ -222,18 +208,14 @@ async function callGeminiWithRetry(
   genAI: GoogleGenerativeAI,
   parts: (string | Part)[],
   systemInstruction: string = SYSTEM_PROMPT,
-  // When a deterministic fallback exists downstream (OCR for photos, the local
-  // parser for OCR text), fail fast on RECITATION instead of the temperature
-  // recovery — the fallback is more faithful than a phrasing-loosened retry.
-  { recitationRecovery = true }: { recitationRecovery?: boolean } = {},
 ): Promise<string> {
   const PRIMARY = 'gemini-3.1-flash-lite';
   const FALLBACK = 'gemini-3.5-flash';
   // Backoff schedule for transient 503 overloads on the primary model. A
   // rate-limit (429) does NOT retry the same model — retrying wastes the daily
   // RPD allowance — it drops straight to the fallback's separate quota bucket.
+  // RECITATION and any other error are surfaced to the caller to handle.
   const backoffsMs = [0, 1000, 2500];
-  let primaryErr: unknown;
 
   for (let attempt = 0; attempt < backoffsMs.length; attempt++) {
     if (backoffsMs[attempt] > 0) await sleep(backoffsMs[attempt]);
@@ -243,50 +225,18 @@ async function callGeminiWithRetry(
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       console.error(`${PRIMARY} failed: ${message}`);
-      primaryErr = err;
       if (isOverloadError(err)) {
         if (attempt < backoffsMs.length - 1) continue; // transient — retry primary
         break; // out of retries — try the fallback model
       }
       if (isRateLimitError(err)) break; // quota — go straight to fallback
-      if (isRecitationError(err)) {
-        if (!recitationRecovery) throw err; // caller falls back to OCR / local
-        break; // copyright block — go to temperature retry
-      }
-      throw err; // anything else is non-retryable
+      throw err; // RECITATION or anything else — the caller handles the fallback
     }
   }
 
-  // Quota/overload fallback at default decoding — skipped when the primary was
-  // blocked by RECITATION, since a second model at the same settings tends to
-  // block the same content; that case drops straight to the temperature retry.
-  if (!isRecitationError(primaryErr)) {
-    console.log(`${PRIMARY} unavailable, falling back to ${FALLBACK}`);
-    try {
-      return await generateWithModel(genAI, FALLBACK, parts, systemInstruction);
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      console.error(`${FALLBACK} failed: ${message}`);
-      if (!isRecitationError(err)) throw primaryErr; // quota/overload/other — surface primary cause
-      primaryErr = err; // fallback recited too — fall through to the temperature retry
-    }
-  }
-
-  // RECITATION recovery — the block is on the OUTPUT, so retry both models at a
-  // higher temperature (Google's recommended fix). The extraction stays grounded
-  // in the photo; only token-level phrasing loosens enough to clear the filter.
-  console.log('RECITATION block — retrying with higher temperature');
-  for (const model of [PRIMARY, FALLBACK]) {
-    try {
-      return await generateWithModel(genAI, model, parts, systemInstruction, RECITATION_RETRY_TEMP);
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      console.error(`${model} high-temperature retry failed: ${message}`);
-      if (!isRecitationError(err)) throw err; // a different failure — surface it
-      primaryErr = err;
-    }
-  }
-  throw primaryErr; // still RECITATION on both models — handler maps to a clear 422
+  // Quota/overload — try the fallback model on its separate quota bucket.
+  console.log(`${PRIMARY} unavailable, falling back to ${FALLBACK}`);
+  return generateWithModel(genAI, FALLBACK, parts, systemInstruction);
 }
 
 function parseRecipeJson(rawText: string): Record<string, unknown> | null {
@@ -444,14 +394,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     ];
 
     // 1. VISION FIRST — Gemini reads the photo directly; it's the most accurate
-    //    transcriber when it isn't blocked. On RECITATION it fails fast
-    //    (recitationRecovery: false) and drops to OCR, which is deterministic and
-    //    more faithful than a temperature-loosened vision retry. forceOcr skips
-    //    vision entirely (debug / rollback lever).
+    //    transcriber when it isn't blocked. A RECITATION block throws here and
+    //    drops to OCR, which is deterministic and faithful to the source.
+    //    forceOcr skips vision entirely (debug / rollback lever).
     let visionError: unknown = null;
     if (req.body.forceOcr !== true) {
       try {
-        const raw = await callGeminiWithRetry(genAI, imageParts, SYSTEM_PROMPT, { recitationRecovery: false });
+        const raw = await callGeminiWithRetry(genAI, imageParts, SYSTEM_PROMPT);
         const data = parseRecipeJson(raw);
         if (data) {
           await recordExtractionMethod('gemini-vision');
@@ -481,7 +430,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       //     the key is over quota (the same key would just fail again).
       if (!isRateLimitError(visionError)) {
         try {
-          const raw = await callGeminiWithRetry(genAI, [ocrUserPrompt(ocrText)], OCR_SYSTEM_PROMPT, { recitationRecovery: false });
+          const raw = await callGeminiWithRetry(genAI, [ocrUserPrompt(ocrText)], OCR_SYSTEM_PROMPT);
           const structured = parseRecipeJson(raw);
           if (structured) {
             await recordExtractionMethod('ocr+gemini');
@@ -523,8 +472,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     });
   }
 
-  // URL path — fetch the page, strip to plain text, structure with Gemini. No OCR
-  // fallback here, so the URL call keeps the default RECITATION temperature recovery.
+  // URL path — fetch the page, strip to plain text, structure with Gemini. There
+  // is no OCR fallback here, so a RECITATION block surfaces as a clear 422.
   let coverImage = '';
   let pageText: string;
   try {
