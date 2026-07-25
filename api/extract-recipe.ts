@@ -5,7 +5,12 @@ import { getAuth } from 'firebase-admin/auth';
 import { getFirestore, FieldValue } from 'firebase-admin/firestore';
 import { decryptSecret, type EncryptedValue } from './_utils/crypto.js';
 import { getOcrEngine, preprocessForOcr, assessOcrQuality, type OcrResult } from './_utils/ocr.js';
-import { parseRecipeText } from './_utils/recipeParsers.js';
+import {
+  parseRecipeText,
+  buildIngredientSections,
+  flattenInstructions,
+  parseIsoDuration,
+} from './_utils/recipeParsers.js';
 
 export const config = {
   api: {
@@ -313,6 +318,58 @@ function buildRecipePayload(data: Record<string, unknown>, defaultSource: string
   };
 }
 
+interface JsonLdRecipe {
+  name?: string;
+  recipeIngredient?: string[];
+  recipeInstructions?: unknown[];
+  recipeYield?: string | number;
+  prepTime?: string;
+  totalTime?: string;
+}
+
+// Finds a schema.org/Recipe node in the page's JSON-LD structured data — the
+// site's own machine-readable recipe, so it is exact to source and needs no model.
+function findJsonLdRecipe(html: string): JsonLdRecipe | null {
+  const scriptRe = /<script[^>]+type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi;
+  let match: RegExpExecArray | null;
+  while ((match = scriptRe.exec(html)) !== null) {
+    try {
+      const data = JSON.parse(match[1]) as unknown;
+      const graph = (data as Record<string, unknown>)['@graph'];
+      const items: unknown[] = Array.isArray(data) ? data : Array.isArray(graph) ? graph : [data];
+      for (const item of items) {
+        const type = (item as Record<string, unknown>)?.['@type'];
+        if (type === 'Recipe' || (Array.isArray(type) && type.includes('Recipe'))) {
+          return item as JsonLdRecipe;
+        }
+      }
+    } catch {
+      /* skip malformed JSON-LD */
+    }
+  }
+  return null;
+}
+
+// Structures a JSON-LD recipe into the response shape, or null when it carries
+// neither ingredients nor steps (nothing worth returning).
+function jsonLdToRecipe(ld: JsonLdRecipe, source: string): Record<string, unknown> | null {
+  const ingredientSections = buildIngredientSections(ld.recipeIngredient ?? []);
+  const ingredients = ingredientSections.flatMap((s) => s.ingredients);
+  const steps = flattenInstructions(ld.recipeInstructions ?? []);
+  if (ingredients.length === 0 && steps.length === 0) return null;
+  const servings = parseInt(String(ld.recipeYield ?? '').match(/\d+/)?.[0] ?? '4', 10) || 4;
+  return {
+    title: String(ld.name ?? 'Recipe'),
+    source,
+    servings,
+    prepTime: parseIsoDuration(ld.prepTime),
+    totalTime: parseIsoDuration(ld.totalTime),
+    ingredientSections,
+    ingredients,
+    steps,
+  };
+}
+
 function sendGeminiError(res: VercelResponse, err: unknown): VercelResponse {
   if (isRateLimitError(err)) {
     return res.status(429).json({
@@ -472,9 +529,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     });
   }
 
-  // URL path — fetch the page, strip to plain text, structure with Gemini. There
-  // is no OCR fallback here, so a RECITATION block surfaces as a clear 422.
+  // URL path — mirrors the photo ladder: an AI pass first, then a deterministic
+  // fallback (the page's own JSON-LD recipe data), then a tracked failure. So a
+  // Gemini outage or RECITATION no longer hard-fails a page that publishes
+  // structured data.
   let coverImage = '';
+  let html = '';
   let pageText: string;
   try {
     const resp = await fetch(url, {
@@ -486,7 +546,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (!contentType.includes('text/html')) {
       return res.status(400).json({ error: 'URL does not point to an HTML page' });
     }
-    const html = await resp.text();
+    html = await resp.text();
     coverImage = extractPageImage(html, url);
     pageText = stripHtml(html);
   } catch (err) {
@@ -499,29 +559,41 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   const hostname = new URL(url).hostname.replace('www.', '');
   console.log(`extract-recipe: url=${hostname} textLength=${pageText.length}`);
-  const parts: (string | Part)[] = [
-    `The following is text extracted from ${hostname}.\n\n${pageText}\n\n${USER_PROMPT}`,
-  ];
-
-  let rawText: string;
-  try {
-    rawText = await callGeminiWithRetry(genAI, parts);
-  } catch (err) {
-    return sendGeminiError(res, err);
-  }
-
-  const data = parseRecipeJson(rawText);
-  if (!data) {
-    console.error('JSON parse failure. Raw response:', rawText);
-    return res.status(422).json({
-      error: 'Could not read the recipe. Please try again or enter it manually.',
-    });
-  }
-
-  await recordExtractionMethod('url');
-  return res.status(200).json({
-    ...buildRecipePayload(data, hostname),
+  const withCover = (payload: Record<string, unknown>) => ({
+    ...payload,
     ...(coverImage && { coverImage }),
-    extractionMethod: 'url',
+  });
+
+  // 1. Gemini structures the page text.
+  let urlGeminiError: unknown = null;
+  try {
+    const rawText = await callGeminiWithRetry(genAI, [
+      `The following is text extracted from ${hostname}.\n\n${pageText}\n\n${USER_PROMPT}`,
+    ]);
+    const data = parseRecipeJson(rawText);
+    if (data) {
+      await recordExtractionMethod('url+gemini');
+      return res.status(200).json({ ...withCover(buildRecipePayload(data, hostname)), extractionMethod: 'url+gemini' });
+    }
+    console.error('URL structuring: JSON parse failure. Raw:', rawText.slice(0, 500));
+  } catch (err) {
+    urlGeminiError = err;
+    console.error(`URL Gemini failed (${isRecitationError(err) ? 'recitation' : 'error'}): ${err instanceof Error ? err.message : String(err)} — trying JSON-LD`);
+  }
+
+  // 2. Deterministic fallback: the page's own JSON-LD recipe data.
+  const ld = findJsonLdRecipe(html);
+  const structured = ld ? jsonLdToRecipe(ld, hostname) : null;
+  if (structured) {
+    await recordExtractionMethod('url+structured');
+    return res.status(200).json({ ...withCover(buildRecipePayload(structured, hostname)), extractionMethod: 'url+structured' });
+  }
+
+  // 3. Neither the model nor structured data yielded a recipe.
+  console.log('extract-recipe: url extraction failed (gemini + json-ld both unavailable)');
+  await recordExtractionMethod('failed');
+  if (urlGeminiError) return sendGeminiError(res, urlGeminiError);
+  return res.status(422).json({
+    error: 'Could not extract the recipe from that page. Try a different URL or enter it manually.',
   });
 }
