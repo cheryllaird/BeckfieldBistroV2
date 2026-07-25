@@ -37,6 +37,46 @@ export function RecipeDetailPage() {
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
 
+  const tabs: Tab[] = ['ingredients', 'method'];
+  const touchStartX = useRef<number | null>(null);
+  const touchStartY = useRef<number | null>(null);
+  const isScrollGesture = useRef<boolean | null>(null);
+
+  const handleTouchStart = (e: React.TouchEvent) => {
+    touchStartX.current = e.touches[0].clientX;
+    touchStartY.current = e.touches[0].clientY;
+    isScrollGesture.current = null;
+  };
+
+  const handleTouchMove = (e: React.TouchEvent) => {
+    if (touchStartX.current === null || touchStartY.current === null) return;
+    const deltaX = e.touches[0].clientX - touchStartX.current;
+    const deltaY = e.touches[0].clientY - touchStartY.current;
+
+    // Determine gesture direction once we have enough movement
+    if (isScrollGesture.current === null && (Math.abs(deltaX) > 8 || Math.abs(deltaY) > 8)) {
+      isScrollGesture.current = Math.abs(deltaY) > Math.abs(deltaX);
+    }
+  };
+
+  const handleTouchEnd = (e: React.TouchEvent) => {
+    if (touchStartX.current === null) return;
+    const delta = e.changedTouches[0].clientX - touchStartX.current;
+    const wasScroll = isScrollGesture.current;
+    touchStartX.current = null;
+    touchStartY.current = null;
+    isScrollGesture.current = null;
+
+    // Ignore vertical scroll gestures and sub-threshold swipes
+    if (wasScroll || Math.abs(delta) <= 80) return;
+
+    const currentIndex = tabs.indexOf(tab);
+    const nextIndex = delta < 0 ? currentIndex + 1 : currentIndex - 1;
+    if (nextIndex >= 0 && nextIndex < tabs.length) {
+      setTab(tabs[nextIndex]);
+    }
+  };
+
   useEffect(() => {
     if (!menuOpen) return;
     const handleOutside = (e: MouseEvent) => {
@@ -189,7 +229,7 @@ export function RecipeDetailPage() {
 
       {/* Tabs */}
       <div className="flex bg-slate-100 rounded-xl p-1 mb-4">
-        {(['ingredients', 'method'] as Tab[]).map((t) => (
+        {tabs.map((t) => (
           <button
             key={t}
             onClick={() => setTab(t)}
@@ -205,6 +245,12 @@ export function RecipeDetailPage() {
         ))}
       </div>
 
+      {/* Swipeable tab content — swipe left/right to switch tabs */}
+      <div
+        onTouchStart={handleTouchStart}
+        onTouchMove={handleTouchMove}
+        onTouchEnd={handleTouchEnd}
+      >
       {tab === 'ingredients' && (
         <div className="animate-in">
           {/* Serving adjuster */}
@@ -272,6 +318,7 @@ export function RecipeDetailPage() {
           ))}
         </ol>
       )}
+      </div>
 
       {/* Back button */}
       <div className="mt-8">
