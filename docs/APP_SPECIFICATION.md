@@ -258,8 +258,9 @@ The list turns the plan into something you actually shop from.
 
 ### 7.0 Two lists — Immediate and Stock up
 The shopping list is split into **two independent lists the user switches between
-with tabs**: an **Immediate** list for the current shop, and a **Stock up** list
-for staples to top up later. Each list keeps its own items, progress, and
+with tabs (or a left/right swipe on the list, with a sliding transition)**: an
+**Immediate** list for the current shop, and a **Stock up** list for staples to
+top up later. Each list keeps its own items, progress, and
 "In basket" group, and every shopping action — adding, checking off, reordering,
 auto-sorting, and clearing — acts only on the list currently in view; the other
 list is left untouched. Items that predate this split (and any item without an
