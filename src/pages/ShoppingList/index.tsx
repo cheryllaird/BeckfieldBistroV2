@@ -15,16 +15,24 @@ import {
   UtensilsCrossed,
   ChevronDown,
   ChevronRight,
+  Package,
 } from 'lucide-react';
 import { useStore } from '../../store';
 import { Button } from '../../components/ui/Button';
 import { categorize, formatQuantity, generateId } from '../../lib/utils';
 import { logCategoryOverride } from '../../lib/firestore';
-import type { MealSource, ShoppingCategory, ShoppingItem } from '../../types';
+import type { MealSource, ShoppingCategory, ShoppingItem, ShoppingListType } from '../../types';
 import { GenerateListModal } from './GenerateListModal';
 import { ModalPortal } from '../../components/ui/ModalPortal';
 
 type Mode = 'shop' | 'edit';
+
+const LIST_TABS: { id: ShoppingListType; label: string; Icon: typeof ShoppingCart }[] = [
+  { id: 'immediate', label: 'Immediate', Icon: ShoppingCart },
+  { id: 'stock-up', label: 'Stock up', Icon: Package },
+];
+
+const listTypeOf = (item: ShoppingItem): ShoppingListType => item.listType ?? 'immediate';
 
 const CATEGORY_ORDER: ShoppingCategory[] = [
   'Vegetables',
@@ -47,11 +55,11 @@ export function ShoppingListPage() {
     removeShoppingItem,
     setShoppingItems,
     reorderShoppingItems,
-    clearCheckedItems,
     user,
   } = useStore();
 
   const [mode, setMode] = useState<Mode>('shop');
+  const [activeList, setActiveList] = useState<ShoppingListType>('immediate');
   const [generateOpen, setGenerateOpen] = useState(false);
   const [manualItem, setManualItem] = useState('');
   const [history, setHistory] = useState<ShoppingItem[][]>([]);
@@ -84,11 +92,11 @@ export function ShoppingListPage() {
 
   const handleAutoSort = () => {
     pushHistory();
-    const sorted = [...shoppingItems].sort(
+    const sorted = [...listItems].sort(
       (a, b) =>
         CATEGORY_ORDER.indexOf(a.category) - CATEGORY_ORDER.indexOf(b.category)
     );
-    setShoppingItems(sorted);
+    setShoppingItems(withActiveList(sorted));
   };
 
   const handleAddManual = () => {
@@ -97,6 +105,7 @@ export function ShoppingListPage() {
       id: generateId(),
       name: manualItem.trim(),
       category: categorize(manualItem.trim()),
+      listType: activeList,
       checked: false,
       manual: true,
     };
@@ -167,7 +176,7 @@ export function ShoppingListPage() {
         const items = [...unchecked];
         const [moved] = items.splice(sourceIndex, 1);
         items.splice(targetIndex, 0, moved);
-        reorderShoppingItems([...items, ...checked]);
+        reorderShoppingItems(withActiveList([...items, ...checked]));
       }
     }
   };
@@ -190,8 +199,18 @@ export function ShoppingListPage() {
   }, []);
 
 
-  const unchecked = shoppingItems.filter((i) => !i.checked);
-  const checked = shoppingItems.filter((i) => i.checked);
+  const listItems = shoppingItems.filter((i) => listTypeOf(i) === activeList);
+  const unchecked = listItems.filter((i) => !i.checked);
+  const checked = listItems.filter((i) => i.checked);
+
+  // Rebuild the full shoppingItems array from a reordered/sorted copy of the
+  // active list, leaving the inactive list's items in their existing slots so
+  // they aren't dragged into spurious order-conflict patches. `nextActive` must
+  // be a permutation of the active-list items (same set, new order).
+  const withActiveList = (nextActive: ShoppingItem[]): ShoppingItem[] => {
+    const queue = [...nextActive];
+    return shoppingItems.map((i) => (listTypeOf(i) === activeList ? queue.shift()! : i));
+  };
 
   const previewUnchecked = (() => {
     if (!draggingItemId || dropTargetIndex === null) return unchecked;
@@ -202,46 +221,6 @@ export function ShoppingListPage() {
     items.splice(dropTargetIndex, 0, moved);
     return items;
   })();
-
-  if (shoppingItems.length === 0) {
-    return (
-      <div className="flex flex-col gap-5">
-        <div className="flex flex-col gap-1">
-          <h2 className="text-xl font-bold text-slate-800">Shopping List</h2>
-          <button
-            onClick={() => navigate('/pantry')}
-            className="flex items-center gap-1.5 text-xs text-slate-400 hover:text-amber-600 transition-colors self-start"
-          >
-            View store cupboard <ChevronRight size={12} />
-          </button>
-        </div>
-        <div className="flex flex-col items-center gap-4 py-10 text-center animate-fade">
-          <ShoppingCart size={48} className="text-slate-200" />
-          <div>
-            <p className="text-base font-semibold text-slate-700">Your list is empty</p>
-            <p className="text-sm text-slate-400 mt-1">Generate from your meal plan or add items manually</p>
-          </div>
-          <Button onClick={() => setGenerateOpen(true)}>
-            <Zap size={14} /> Generate from Plan
-          </Button>
-        </div>
-        <div className="flex gap-2">
-          <input
-            value={manualItem}
-            onChange={(e) => setManualItem(e.target.value)}
-            onKeyDown={(e) => e.key === 'Enter' && handleAddManual()}
-            placeholder="Add item manually…"
-            className="flex-1 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-800 placeholder-slate-400 outline-none focus:border-amber-400 focus:ring-2 focus:ring-amber-100 transition-colors"
-          />
-          <Button size="sm" onClick={handleAddManual} disabled={!manualItem.trim()} aria-label="Add">
-            <Plus size={14} />
-          </Button>
-        </div>
-        {generateOpen && <GenerateListModal onClose={() => setGenerateOpen(false)} />}
-
-      </div>
-    );
-  }
 
   return (
     <div className="flex flex-col gap-4">
@@ -290,17 +269,89 @@ export function ShoppingListPage() {
         </button>
       </div>
 
+      {/* List tabs: Immediate / Stock up */}
+      <div className="flex gap-1 bg-slate-100 rounded-xl p-1">
+        {LIST_TABS.map(({ id, label, Icon }) => {
+          const count = shoppingItems.filter(
+            (i) => listTypeOf(i) === id && !i.checked
+          ).length;
+          return (
+            <button
+              key={id}
+              onClick={() => setActiveList(id)}
+              className={[
+                'flex-1 flex items-center justify-center gap-1.5 px-3 py-2 text-sm font-medium rounded-lg transition-all',
+                activeList === id
+                  ? 'bg-white text-slate-800 shadow-sm'
+                  : 'text-slate-500 hover:text-slate-700',
+              ].join(' ')}
+            >
+              <Icon size={14} /> {label}
+              {count > 0 && (
+                <span
+                  className={[
+                    'text-[10px] font-semibold rounded-full px-1.5 py-0.5 leading-none',
+                    activeList === id ? 'bg-amber-100 text-amber-700' : 'bg-slate-200 text-slate-500',
+                  ].join(' ')}
+                >
+                  {count}
+                </span>
+              )}
+            </button>
+          );
+        })}
+      </div>
+
+      {listItems.length === 0 ? (
+        <div className="flex flex-col gap-5">
+          <div className="flex flex-col items-center gap-4 py-10 text-center animate-fade">
+            {activeList === 'immediate' ? (
+              <ShoppingCart size={48} className="text-slate-200" />
+            ) : (
+              <Package size={48} className="text-slate-200" />
+            )}
+            <div>
+              <p className="text-base font-semibold text-slate-700">
+                Your {activeList === 'immediate' ? 'Immediate' : 'Stock up'} list is empty
+              </p>
+              <p className="text-sm text-slate-400 mt-1">
+                {activeList === 'immediate'
+                  ? 'Generate from your meal plan or add items manually'
+                  : 'Add items you want to keep topped up'}
+              </p>
+            </div>
+            {activeList === 'immediate' && (
+              <Button onClick={() => setGenerateOpen(true)}>
+                <Zap size={14} /> Generate from Plan
+              </Button>
+            )}
+          </div>
+          <div className="flex gap-2">
+            <input
+              value={manualItem}
+              onChange={(e) => setManualItem(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && handleAddManual()}
+              placeholder="Add item manually…"
+              className="flex-1 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-800 placeholder-slate-400 outline-none focus:border-amber-400 focus:ring-2 focus:ring-amber-100 transition-colors"
+            />
+            <Button size="sm" onClick={handleAddManual} disabled={!manualItem.trim()} aria-label="Add">
+              <Plus size={14} />
+            </Button>
+          </div>
+        </div>
+      ) : (
+      <>
       {/* Progress (shop mode only) */}
       {mode === 'shop' && (
         <div className="flex items-center gap-2">
           <div className="flex-1 h-1.5 bg-slate-100 rounded-full overflow-hidden">
             <div
               className="h-full bg-amber-400 rounded-full transition-all duration-300"
-              style={{ width: `${shoppingItems.length > 0 ? (checked.length / shoppingItems.length) * 100 : 0}%` }}
+              style={{ width: `${listItems.length > 0 ? (checked.length / listItems.length) * 100 : 0}%` }}
             />
           </div>
           <span className="text-xs text-slate-400 shrink-0">
-            {checked.length}/{shoppingItems.length}
+            {checked.length}/{listItems.length}
           </span>
         </div>
       )}
@@ -373,7 +424,16 @@ export function ShoppingListPage() {
             </span>
             {mode === 'edit' && (
               <button
-                onClick={() => { pushHistory(); clearCheckedItems(); }}
+                onClick={() => {
+                  pushHistory();
+                  // Clear only the active list's checked items (the store's
+                  // clearCheckedItems would clear both lists).
+                  setShoppingItems(
+                    shoppingItems.filter(
+                      (i) => !(i.checked && listTypeOf(i) === activeList)
+                    )
+                  );
+                }}
                 className="text-xs text-slate-400 hover:text-red-500 transition-colors"
               >
                 Clear all
@@ -407,6 +467,8 @@ export function ShoppingListPage() {
             )
           )}
         </div>
+      )}
+      </>
       )}
 
       {generateOpen && <GenerateListModal onClose={() => setGenerateOpen(false)} />}
