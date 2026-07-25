@@ -76,10 +76,12 @@ flowchart TD
     end
 
     subgraph URL [URL ladder — JSON-LD first]
-        U1[url+structured<br/>page JSON-LD] -->|found| R4([return url+structured])
-        U1 -->|absent| U2[url+gemini<br/>page text → Gemini]
+        U1[url+structured<br/>page JSON-LD] -->|found with steps| R4([return url+structured])
+        U1 -->|absent / no steps| U2[url+gemini<br/>page text → Gemini]
         U2 -->|ok| R5([return url+gemini])
-        U2 -->|fail / bad JSON| FAILU([failed → error])
+        U2 -->|fail / bad JSON| U3{partial JSON-LD?}
+        U3 -->|yes| R4
+        U3 -->|no| FAILU([failed → error])
     end
 ```
 
@@ -135,10 +137,17 @@ uses 2048/0.9, which stays under the endpoint's 8 MB body limit.
 1. Fetch the page (5 s timeout, must be `text/html`); derive `coverImage`
    (`extractPageImage`) and `pageText` (`stripHtml`, newline‑collapsing).
 2. **`url+structured`** — `findJsonLdRecipe(html)` + `jsonLdToRecipe(ld, hostname)`.
-   A `schema.org/Recipe` node (exact to source, free, RECITATION‑proof) → return.
+   A `schema.org/Recipe` node (exact to source, free, RECITATION‑proof) → return —
+   **but only when it actually carries a method.** A page that publishes a Recipe
+   with ingredients but an empty/unreadable `recipeInstructions` would otherwise
+   return a recipe with no steps ("missing method"), so that case **falls through
+   to Gemini** to recover the method, keeping the partial structured recipe as a
+   last‑resort return so the ingredients are never lost.
 3. **`url+gemini`** — `callGeminiWithRetry([<page text prompt>])`. Parseable → return;
-   thrown error → **`failed`** via `sendGeminiError`.
-4. Unparseable / nothing usable → **`failed`** 422.
+   thrown error → the salvaged partial JSON‑LD if there was one, else **`failed`**
+   via `sendGeminiError`.
+4. Unparseable / nothing usable → the salvaged partial JSON‑LD if there was one,
+   else **`failed`** 422.
 
 > Note: the URL local parser `parseRecipeText` is **not** used here because
 > `stripHtml` collapses newlines and that parser is line‑based. JSON‑LD is the URL
@@ -204,7 +213,12 @@ JSON‑LD path.
   unicode (½, ⅓…). Preserves the full line as `originalText`.
 - `buildIngredientSections(lines)` / `looksLikeSectionHeader(line)` — group ingredients
   under sub‑headers ("For the curry").
-- `flattenInstructions(list)` — flattens `HowToStep` / `HowToSection` JSON‑LD steps.
+- `flattenInstructions(value)` — normalizes a `schema.org` `recipeInstructions`
+  value into an ordered step list. Handles every shape real sites use: a single
+  `Text` string (split on block separators — a bare string is **not** walked
+  character‑by‑character), an array of strings, and nested
+  `HowToStep`/`HowToSection`/`ItemList` (or untyped) wrappers, stripping any HTML
+  tags/entities embedded in step text.
 - `parseIsoDuration(iso)` — `PT15M` → "15 mins".
 - `parseRecipeText(ocrText)` — the OCR last‑resort structurer: rejoins hyphenation,
   finds INGREDIENTS/METHOD headers (or bounds the contiguous amount‑led block when a
