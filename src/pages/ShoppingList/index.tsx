@@ -27,9 +27,9 @@ import { ModalPortal } from '../../components/ui/ModalPortal';
 
 type Mode = 'shop' | 'edit';
 
-const LIST_TABS: { id: ShoppingListType; label: string; Icon: typeof ShoppingCart }[] = [
-  { id: 'immediate', label: 'Immediate', Icon: ShoppingCart },
-  { id: 'stock-up', label: 'Stock up', Icon: Package },
+const LIST_TABS: { id: ShoppingListType; label: string }[] = [
+  { id: 'immediate', label: 'Immediate' },
+  { id: 'stock-up', label: 'Stock up' },
 ];
 
 const listTypeOf = (item: ShoppingItem): ShoppingListType => item.listType ?? 'immediate';
@@ -271,35 +271,20 @@ export function ShoppingListPage() {
 
       {/* List tabs: Immediate / Stock up */}
       <div className="flex gap-1 bg-slate-100 rounded-xl p-1">
-        {LIST_TABS.map(({ id, label, Icon }) => {
-          const count = shoppingItems.filter(
-            (i) => listTypeOf(i) === id && !i.checked
-          ).length;
-          return (
-            <button
-              key={id}
-              onClick={() => setActiveList(id)}
-              className={[
-                'flex-1 flex items-center justify-center gap-1.5 px-3 py-2 text-sm font-medium rounded-lg transition-all',
-                activeList === id
-                  ? 'bg-white text-slate-800 shadow-sm'
-                  : 'text-slate-500 hover:text-slate-700',
-              ].join(' ')}
-            >
-              <Icon size={14} /> {label}
-              {count > 0 && (
-                <span
-                  className={[
-                    'text-[10px] font-semibold rounded-full px-1.5 py-0.5 leading-none',
-                    activeList === id ? 'bg-amber-100 text-amber-700' : 'bg-slate-200 text-slate-500',
-                  ].join(' ')}
-                >
-                  {count}
-                </span>
-              )}
-            </button>
-          );
-        })}
+        {LIST_TABS.map(({ id, label }) => (
+          <button
+            key={id}
+            onClick={() => setActiveList(id)}
+            className={[
+              'flex-1 flex items-center justify-center px-3 py-2 text-sm font-medium rounded-lg transition-all',
+              activeList === id
+                ? 'bg-white text-slate-800 shadow-sm'
+                : 'text-slate-500 hover:text-slate-700',
+            ].join(' ')}
+          >
+            {label}
+          </button>
+        ))}
       </div>
 
       {listItems.length === 0 ? (
