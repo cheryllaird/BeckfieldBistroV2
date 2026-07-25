@@ -2,8 +2,15 @@ import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { GoogleGenerativeAI, type Part } from '@google/generative-ai';
 import { initializeApp, cert, getApps } from 'firebase-admin/app';
 import { getAuth } from 'firebase-admin/auth';
-import { getFirestore } from 'firebase-admin/firestore';
+import { getFirestore, FieldValue } from 'firebase-admin/firestore';
 import { decryptSecret, type EncryptedValue } from './_utils/crypto.js';
+import { getOcrEngine, preprocessForOcr, assessOcrQuality, type OcrResult } from './_utils/ocr.js';
+import {
+  parseRecipeText,
+  buildIngredientSections,
+  flattenInstructions,
+  parseIsoDuration,
+} from './_utils/recipeParsers.js';
 
 export const config = {
   api: {
@@ -26,9 +33,7 @@ function initFirebaseAdmin() {
 const SYSTEM_PROMPT =
   'You are a recipe extraction assistant. When given a recipe — either as an image (from a cookbook, handwritten card, screenshot, or printed page) or as text scraped from a webpage — extract the recipe details and return ONLY a valid JSON object — no markdown, no explanation, no code fences.';
 
-const USER_PROMPT = `Extract the recipe and return a JSON object with exactly these fields:
-
-{
+const RECIPE_JSON_SCHEMA = `{
   "title": "string — the recipe name",
   "source": "string — cookbook name, website, or 'Photo Upload' if unknown",
   "servings": number,
@@ -48,7 +53,11 @@ const USER_PROMPT = `Extract the recipe and return a JSON object with exactly th
     }
   ],
   "steps": ["string — one entry per numbered step or paragraph in the source method"]
-}
+}`;
+
+const USER_PROMPT = `Extract the recipe and return a JSON object with exactly these fields:
+
+${RECIPE_JSON_SCHEMA}
 
 Rules:
 - Return ONLY the JSON object. No markdown. No explanation.
@@ -59,6 +68,34 @@ Rules:
 - Keep "originalText" as faithful to the source as possible.
 - Match the "steps" array to the recipe's own method structure: create exactly one array entry per numbered step or paragraph in the source. Do NOT break a step into smaller pieces than the recipe does, and do NOT merge separate steps together.
 - If the recipe numbers its steps (1, 2, 3…), produce one entry per number, preserving that grouping — even when a single numbered step spans several sentences.`;
+
+// OCR-first path: the photo is transcribed deterministically by tesseract and
+// only the TEXT reaches Gemini. Restructuring text it was handed is far less
+// likely to trip the RECITATION filter than transcribing a copyrighted page,
+// and the verbatim rules below keep the output accurate to the scanned source.
+const OCR_SYSTEM_PROMPT =
+  'You are a recipe extraction assistant. You are given raw OCR text scanned from a photo of a recipe (cookbook page, recipe card, or printout). Structure it and return ONLY a valid JSON object — no markdown, no explanation, no code fences.';
+
+function ocrUserPrompt(ocrText: string): string {
+  return `The following is raw OCR text scanned from a photo of a recipe. Structure it into a JSON object with exactly these fields:
+
+${RECIPE_JSON_SCHEMA}
+
+Rules:
+- Return ONLY the JSON object. No markdown. No explanation.
+- The text comes from OCR and may contain artifacts: words broken by hyphenation at line ends, 1/l/I and 0/O confusions, stray punctuation. Fix ONLY obvious character-level OCR errors.
+- Copy each ingredient's "originalText" verbatim from the OCR text (character-level fixes only). Never rewrite, reorder, or normalize it.
+- Each entry in "steps" must preserve the source wording from the OCR text exactly. Do not paraphrase, summarise, or embellish.
+- Ignore page numbers, running headers and footers, and photo captions that are not part of the recipe.
+- If all ingredients belong to one unlabeled group, use a single section with title "".
+- If ingredients are split into named groups (e.g. main dish + dressing + sauce), create one section per group with a descriptive title.
+- If a field cannot be determined, use sensible defaults: empty string for strings, 4 for servings, empty arrays for arrays.
+- Match the "steps" array to the recipe's own method structure: create exactly one array entry per numbered step or paragraph in the source. Do NOT break a step into smaller pieces than the recipe does, and do NOT merge separate steps together.
+- If the recipe numbers its steps (1, 2, 3…), produce one entry per number, preserving that grouping — even when a single numbered step spans several sentences.
+
+OCR text:
+${ocrText.slice(0, 20_000)}`;
+}
 
 function resolveUrl(imageUrl: string, pageUrl: string): string {
   try {
@@ -151,11 +188,10 @@ function isOverloadError(err: unknown): boolean {
 
 // RECITATION — Gemini blocks a candidate when its OUTPUT reproduces copyrighted
 // material (published cookbooks, recipe sites) too closely. It is the generated
-// text that is flagged, not the prompt, and it is not tied to quota — retrying
-// the same prompt at the same settings won't help. Because the block is on the
-// decoded tokens, the recovery re-runs at a higher temperature (see
-// callGeminiWithRetry), which is Google's recommended mitigation; a persistent
-// block yields a clear 422 rather than a silently altered recipe.
+// text that is flagged, not the prompt, and it is not tied to quota. It is
+// surfaced to the caller, which recovers with something more faithful than a
+// phrasing-loosened retry: photos fall to deterministic OCR, and a URL yields a
+// clear "enter it manually" 422 rather than a silently altered recipe.
 function isRecitationError(err: unknown): boolean {
   const message = (err instanceof Error ? err.message : String(err)).toLowerCase();
   return message.includes('recitation');
@@ -163,86 +199,194 @@ function isRecitationError(err: unknown): boolean {
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
-// Higher temperature loosens greedy decoding so the output is less likely to
-// land on a copyrighted recipe's exact wording — Google's recommended RECITATION
-// mitigation. It is applied only on the retry after a block, so normal
-// extractions keep the model's default (more faithful) decoding. Kept moderate
-// so the extraction stays grounded in the image (quantities/ingredients don't
-// drift) while still breaking the verbatim token match.
-const RECITATION_RETRY_TEMP = 1.3;
-
 function generateWithModel(
   genAI: GoogleGenerativeAI,
   modelName: string,
   parts: (string | Part)[],
-  temperature?: number,
+  systemInstruction: string,
 ): Promise<string> {
-  const model = genAI.getGenerativeModel({
-    model: modelName,
-    systemInstruction: SYSTEM_PROMPT,
-    ...(temperature !== undefined && { generationConfig: { temperature } }),
-  });
+  const model = genAI.getGenerativeModel({ model: modelName, systemInstruction });
   return model.generateContent(parts).then((r) => r.response.text());
 }
 
-async function callGeminiWithRetry(genAI: GoogleGenerativeAI, parts: (string | Part)[]): Promise<string> {
+async function callGeminiWithRetry(
+  genAI: GoogleGenerativeAI,
+  parts: (string | Part)[],
+  systemInstruction: string = SYSTEM_PROMPT,
+): Promise<string> {
   const PRIMARY = 'gemini-3.1-flash-lite';
   const FALLBACK = 'gemini-3.5-flash';
   // Backoff schedule for transient 503 overloads on the primary model. A
   // rate-limit (429) does NOT retry the same model — retrying wastes the daily
   // RPD allowance — it drops straight to the fallback's separate quota bucket.
+  // RECITATION and any other error are surfaced to the caller to handle.
   const backoffsMs = [0, 1000, 2500];
-  let primaryErr: unknown;
 
   for (let attempt = 0; attempt < backoffsMs.length; attempt++) {
     if (backoffsMs[attempt] > 0) await sleep(backoffsMs[attempt]);
     console.log(`${PRIMARY} attempt ${attempt + 1}/${backoffsMs.length}`);
     try {
-      return await generateWithModel(genAI, PRIMARY, parts);
+      return await generateWithModel(genAI, PRIMARY, parts, systemInstruction);
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       console.error(`${PRIMARY} failed: ${message}`);
-      primaryErr = err;
       if (isOverloadError(err)) {
         if (attempt < backoffsMs.length - 1) continue; // transient — retry primary
         break; // out of retries — try the fallback model
       }
       if (isRateLimitError(err)) break; // quota — go straight to fallback
-      if (isRecitationError(err)) break; // copyright block — go to temperature retry
-      throw err; // anything else is non-retryable
+      throw err; // RECITATION or anything else — the caller handles the fallback
     }
   }
 
-  // Quota/overload fallback at default decoding — skipped when the primary was
-  // blocked by RECITATION, since a second model at the same settings tends to
-  // block the same content; that case drops straight to the temperature retry.
-  if (!isRecitationError(primaryErr)) {
-    console.log(`${PRIMARY} unavailable, falling back to ${FALLBACK}`);
-    try {
-      return await generateWithModel(genAI, FALLBACK, parts);
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      console.error(`${FALLBACK} failed: ${message}`);
-      if (!isRecitationError(err)) throw primaryErr; // quota/overload/other — surface primary cause
-      primaryErr = err; // fallback recited too — fall through to the temperature retry
-    }
-  }
+  // Quota/overload — try the fallback model on its separate quota bucket.
+  console.log(`${PRIMARY} unavailable, falling back to ${FALLBACK}`);
+  return generateWithModel(genAI, FALLBACK, parts, systemInstruction);
+}
 
-  // RECITATION recovery — the block is on the OUTPUT, so retry both models at a
-  // higher temperature (Google's recommended fix). The extraction stays grounded
-  // in the photo; only token-level phrasing loosens enough to clear the filter.
-  console.log('RECITATION block — retrying with higher temperature');
-  for (const model of [PRIMARY, FALLBACK]) {
+function parseRecipeJson(rawText: string): Record<string, unknown> | null {
+  const cleaned = rawText
+    .trim()
+    .replace(/^```(?:json)?\s*/i, '')
+    .replace(/\s*```$/i, '')
+    .trim();
+  try {
+    const parsed = JSON.parse(cleaned);
+    if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) return null;
+    return parsed as Record<string, unknown>;
+  } catch {
+    return null;
+  }
+}
+
+function coerceIngredientSections(data: Record<string, unknown>) {
+  const parseIngredient = (ing: Record<string, unknown>) => ({
+    name: String(ing.name ?? ''),
+    quantity: Number(ing.quantity) || 0,
+    unit: String(ing.unit ?? ''),
+    originalText: String(ing.originalText ?? ''),
+  });
+
+  return Array.isArray(data.ingredientSections)
+    ? (data.ingredientSections as Record<string, unknown>[]).map((sec) => ({
+        title: String(sec.title ?? ''),
+        ingredients: Array.isArray(sec.ingredients)
+          ? (sec.ingredients as Record<string, unknown>[]).map(parseIngredient)
+          : [],
+      }))
+    : Array.isArray(data.ingredients)
+      ? [{ title: '', ingredients: (data.ingredients as Record<string, unknown>[]).map(parseIngredient) }]
+      : [{ title: '', ingredients: [] }];
+}
+
+// Records which extraction path produced (or failed to produce) a recipe, so
+// the fallback rate can be watched over time and the method order revisited if
+// one path starts dominating. Aggregated lifetime + per-day counters live in
+// Firestore under analytics/; failures never block or fail the request.
+async function recordExtractionMethod(method: string): Promise<void> {
+  console.log(`extract-recipe: extractionMethod=${method}`);
+  try {
+    const db = getFirestore();
+    const inc = FieldValue.increment(1);
+    const day = new Date().toISOString().slice(0, 10);
+    await Promise.all([
+      db.collection('analytics').doc('extractionStats').set(
+        { counts: { [method]: inc }, total: inc, updatedAt: FieldValue.serverTimestamp() },
+        { merge: true },
+      ),
+      db.collection('analytics').doc(`extractionStats-${day}`).set(
+        { counts: { [method]: inc }, total: inc, date: day },
+        { merge: true },
+      ),
+    ]);
+  } catch (err) {
+    console.error('Failed to record extraction metric:', err instanceof Error ? err.message : String(err));
+  }
+}
+
+function buildRecipePayload(data: Record<string, unknown>, defaultSource: string): Record<string, unknown> {
+  const ingredientSections = coerceIngredientSections(data);
+  return {
+    title: String(data.title ?? 'Extracted Recipe'),
+    source: String(data.source ?? defaultSource),
+    servings: Number(data.servings) || 4,
+    prepTime: String(data.prepTime ?? ''),
+    totalTime: String(data.totalTime ?? ''),
+    ingredientSections,
+    ingredients: ingredientSections.flatMap((s) => s.ingredients),
+    steps: Array.isArray(data.steps) ? data.steps.map(String) : [],
+  };
+}
+
+interface JsonLdRecipe {
+  name?: string;
+  recipeIngredient?: string[];
+  recipeInstructions?: unknown[];
+  recipeYield?: string | number;
+  prepTime?: string;
+  totalTime?: string;
+}
+
+// Finds a schema.org/Recipe node in the page's JSON-LD structured data — the
+// site's own machine-readable recipe, so it is exact to source and needs no model.
+function findJsonLdRecipe(html: string): JsonLdRecipe | null {
+  const scriptRe = /<script[^>]+type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi;
+  let match: RegExpExecArray | null;
+  while ((match = scriptRe.exec(html)) !== null) {
     try {
-      return await generateWithModel(genAI, model, parts, RECITATION_RETRY_TEMP);
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      console.error(`${model} high-temperature retry failed: ${message}`);
-      if (!isRecitationError(err)) throw err; // a different failure — surface it
-      primaryErr = err;
+      const data = JSON.parse(match[1]) as unknown;
+      const graph = (data as Record<string, unknown>)['@graph'];
+      const items: unknown[] = Array.isArray(data) ? data : Array.isArray(graph) ? graph : [data];
+      for (const item of items) {
+        const type = (item as Record<string, unknown>)?.['@type'];
+        if (type === 'Recipe' || (Array.isArray(type) && type.includes('Recipe'))) {
+          return item as JsonLdRecipe;
+        }
+      }
+    } catch {
+      /* skip malformed JSON-LD */
     }
   }
-  throw primaryErr; // still RECITATION on both models — handler maps to a clear 422
+  return null;
+}
+
+// Structures a JSON-LD recipe into the response shape, or null when it carries
+// neither ingredients nor steps (nothing worth returning).
+function jsonLdToRecipe(ld: JsonLdRecipe, source: string): Record<string, unknown> | null {
+  const ingredientSections = buildIngredientSections(ld.recipeIngredient ?? []);
+  const ingredients = ingredientSections.flatMap((s) => s.ingredients);
+  const steps = flattenInstructions(ld.recipeInstructions ?? []);
+  if (ingredients.length === 0 && steps.length === 0) return null;
+  const servings = parseInt(String(ld.recipeYield ?? '').match(/\d+/)?.[0] ?? '4', 10) || 4;
+  return {
+    title: String(ld.name ?? 'Recipe'),
+    source,
+    servings,
+    prepTime: parseIsoDuration(ld.prepTime),
+    totalTime: parseIsoDuration(ld.totalTime),
+    ingredientSections,
+    ingredients,
+    steps,
+  };
+}
+
+function sendGeminiError(res: VercelResponse, err: unknown): VercelResponse {
+  if (isRateLimitError(err)) {
+    return res.status(429).json({
+      error: 'Your Gemini API key has hit its rate limit or daily quota. Wait a bit and try again, or upgrade your key at aistudio.google.com.',
+    });
+  }
+  if (isOverloadError(err)) {
+    return res.status(503).json({
+      error: 'Gemini is experiencing high demand right now. Please try again in a moment.',
+    });
+  }
+  if (isRecitationError(err)) {
+    return res.status(422).json({
+      error: 'This recipe matches a copyrighted source too closely for the AI to copy. Try a clearer photo of just the ingredients and steps, or enter it manually.',
+    });
+  }
+  return res.status(502).json({ error: 'AI service error. Please try again.' });
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
@@ -296,124 +440,161 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   const genAI = new GoogleGenerativeAI(apiKey);
 
-  // Build content parts based on input type
-  let parts: (string | Part)[];
-  let coverImage = '';
-
   if (hasImage) {
     const resolvedMediaType: SupportedMediaType = SUPPORTED_MEDIA_TYPES.includes(mediaType)
       ? mediaType
       : 'image/jpeg';
     console.log(`extract-recipe: base64Length=${base64.length} mediaType=${resolvedMediaType}`);
-    parts = [
+    const imageParts: (string | Part)[] = [
       { inlineData: { mimeType: resolvedMediaType, data: base64 } },
       USER_PROMPT,
     ];
-  } else {
-    // URL path — fetch page and strip to plain text
-    let pageText: string;
-    try {
-      const resp = await fetch(url, {
-        headers: { 'User-Agent': 'Mozilla/5.0 (compatible; BistroBot/1.0)' },
-        signal: AbortSignal.timeout(5000),
-      });
-      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-      const contentType = resp.headers.get('content-type') ?? '';
-      if (!contentType.includes('text/html')) {
-        return res.status(400).json({ error: 'URL does not point to an HTML page' });
+
+    // 1. VISION FIRST — Gemini reads the photo directly; it's the most accurate
+    //    transcriber when it isn't blocked. A RECITATION block throws here and
+    //    drops to OCR, which is deterministic and faithful to the source.
+    //    forceOcr skips vision entirely (debug / rollback lever).
+    let visionError: unknown = null;
+    if (req.body.forceOcr !== true) {
+      try {
+        const raw = await callGeminiWithRetry(genAI, imageParts, SYSTEM_PROMPT);
+        const data = parseRecipeJson(raw);
+        if (data) {
+          await recordExtractionMethod('gemini-vision');
+          return res.status(200).json({ ...buildRecipePayload(data, 'Photo Upload'), extractionMethod: 'gemini-vision' });
+        }
+        console.error('vision: JSON parse failure — falling back to OCR. Raw:', raw.slice(0, 500));
+      } catch (err) {
+        visionError = err;
+        console.error(`vision failed (${isRecitationError(err) ? 'recitation' : 'error'}): ${err instanceof Error ? err.message : String(err)} — falling back to OCR`);
       }
-      const html = await resp.text();
-      coverImage = extractPageImage(html, url);
-      pageText = stripHtml(html);
+    }
+
+    // 2. OCR FALLBACK — transcribe deterministically, then structure the text.
+    let ocr: OcrResult | null = null;
+    try {
+      ocr = await getOcrEngine().recognize(await preprocessForOcr(Buffer.from(base64, 'base64')));
     } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      console.error(`URL fetch error: ${msg}`);
-      return res.status(400).json({
-        error: 'Could not fetch the recipe page. Check the URL and try again.',
+      console.error('OCR failed:', err instanceof Error ? err.message : String(err));
+    }
+    const gate = ocr ? assessOcrQuality(ocr) : { ok: false, reason: 'ocr-crashed' };
+
+    if (gate.ok && ocr) {
+      const ocrText = ocr.text.trim();
+      console.log(`extract-recipe: ocr confidence=${Math.round(ocr.confidence)} chars=${ocrText.length} columnsReflowed=${ocr.columnsReflowed}`);
+
+      // 2a. Structure the OCR TEXT with Gemini — skip when vision already showed
+      //     the key is over quota (the same key would just fail again).
+      if (!isRateLimitError(visionError)) {
+        try {
+          const raw = await callGeminiWithRetry(genAI, [ocrUserPrompt(ocrText)], OCR_SYSTEM_PROMPT);
+          const structured = parseRecipeJson(raw);
+          if (structured) {
+            await recordExtractionMethod('ocr+gemini');
+            return res.status(200).json({
+              ...buildRecipePayload(structured, 'Photo Upload'),
+              extractionMethod: 'ocr+gemini',
+              ocrText: ocrText.slice(0, 15_000),
+            });
+          }
+          console.error('OCR structuring: JSON parse failure. Raw:', raw.slice(0, 500));
+        } catch (err) {
+          console.error('OCR structuring failed:', err instanceof Error ? err.message : String(err));
+        }
+      }
+
+      // 2b. Deterministic local parser — always yields a result from the OCR text.
+      const local = parseRecipeText(ocrText);
+      await recordExtractionMethod('ocr+local');
+      return res.status(200).json({
+        title: local.title,
+        source: 'Photo Upload',
+        servings: local.servings,
+        prepTime: local.prepTime,
+        totalTime: local.totalTime,
+        ingredientSections: local.ingredientSections,
+        ingredients: local.ingredientSections.flatMap((s) => s.ingredients),
+        steps: local.steps,
+        extractionMethod: 'ocr+local',
+        ocrText: ocrText.slice(0, 15_000),
       });
     }
 
-    const hostname = new URL(url).hostname.replace('www.', '');
-    console.log(`extract-recipe: url=${hostname} textLength=${pageText.length}`);
-    parts = [`The following is text extracted from ${hostname}.\n\n${pageText}\n\n${USER_PROMPT}`];
+    // 3. Neither vision nor OCR could read the photo.
+    console.log(`extract-recipe: vision + OCR both failed (ocr gate: ${gate.reason})`);
+    await recordExtractionMethod('failed');
+    if (visionError) return sendGeminiError(res, visionError);
+    return res.status(422).json({
+      error: 'Could not read the recipe from that photo. Try a clearer, well-lit photo of just the ingredients and steps, or enter it manually.',
+    });
   }
 
-  let rawText: string;
+  // URL path — mirrors the photo ladder: an AI pass first, then a deterministic
+  // fallback (the page's own JSON-LD recipe data), then a tracked failure. So a
+  // Gemini outage or RECITATION no longer hard-fails a page that publishes
+  // structured data.
+  let coverImage = '';
+  let html = '';
+  let pageText: string;
   try {
-    rawText = await callGeminiWithRetry(genAI, parts);
+    const resp = await fetch(url, {
+      headers: { 'User-Agent': 'Mozilla/5.0 (compatible; BistroBot/1.0)' },
+      signal: AbortSignal.timeout(5000),
+    });
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+    const contentType = resp.headers.get('content-type') ?? '';
+    if (!contentType.includes('text/html')) {
+      return res.status(400).json({ error: 'URL does not point to an HTML page' });
+    }
+    html = await resp.text();
+    coverImage = extractPageImage(html, url);
+    pageText = stripHtml(html);
   } catch (err) {
-    if (isRateLimitError(err)) {
-      return res.status(429).json({
-        error: 'Your Gemini API key has hit its rate limit or daily quota. Wait a bit and try again, or upgrade your key at aistudio.google.com.',
-      });
-    }
-    if (isOverloadError(err)) {
-      return res.status(503).json({
-        error: 'Gemini is experiencing high demand right now. Please try again in a moment.',
-      });
-    }
-    if (isRecitationError(err)) {
-      return res.status(422).json({
-        error: "This recipe matches a copyrighted source too closely for the AI to copy. Try a clearer photo of just the ingredients and steps, or enter it manually.",
-      });
-    }
-    return res.status(502).json({ error: 'AI service error. Please try again.' });
-  }
-
-  // Parse response
-  const cleaned = rawText
-    .trim()
-    .replace(/^```(?:json)?\s*/i, '')
-    .replace(/\s*```$/i, '')
-    .trim();
-
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(cleaned);
-  } catch {
-    console.error('JSON parse failure. Raw response:', rawText);
-    return res.status(422).json({
-      error: 'Could not read the recipe. Please try again or enter it manually.',
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error(`URL fetch error: ${msg}`);
+    return res.status(400).json({
+      error: 'Could not fetch the recipe page. Check the URL and try again.',
     });
   }
 
-  if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
-    return res.status(422).json({
-      error: 'The AI returned an unexpected response. Please try again or enter the recipe manually.',
-    });
-  }
-
-  const data = parsed as Record<string, unknown>;
-
-  const parseIngredient = (ing: Record<string, unknown>) => ({
-    name: String(ing.name ?? ''),
-    quantity: Number(ing.quantity) || 0,
-    unit: String(ing.unit ?? ''),
-    originalText: String(ing.originalText ?? ''),
+  const hostname = new URL(url).hostname.replace('www.', '');
+  console.log(`extract-recipe: url=${hostname} textLength=${pageText.length}`);
+  const withCover = (payload: Record<string, unknown>) => ({
+    ...payload,
+    ...(coverImage && { coverImage }),
   });
 
-  const ingredientSections = Array.isArray(data.ingredientSections)
-    ? (data.ingredientSections as Record<string, unknown>[]).map((sec) => ({
-        title: String(sec.title ?? ''),
-        ingredients: Array.isArray(sec.ingredients)
-          ? (sec.ingredients as Record<string, unknown>[]).map(parseIngredient)
-          : [],
-      }))
-    : Array.isArray(data.ingredients)
-      ? [{ title: '', ingredients: (data.ingredients as Record<string, unknown>[]).map(parseIngredient) }]
-      : [{ title: '', ingredients: [] }];
+  // 1. Deterministic first: the page's own JSON-LD recipe data — the site's
+  //    machine-readable recipe, so it's exact to source, free, instant, and
+  //    RECITATION-proof. Most recipe sites publish it.
+  const ld = findJsonLdRecipe(html);
+  const structured = ld ? jsonLdToRecipe(ld, hostname) : null;
+  if (structured) {
+    await recordExtractionMethod('url+structured');
+    return res.status(200).json({ ...withCover(buildRecipePayload(structured, hostname)), extractionMethod: 'url+structured' });
+  }
 
-  const ingredients = ingredientSections.flatMap((s) => s.ingredients);
+  // 2. No usable structured data — let Gemini structure the page text.
+  try {
+    const rawText = await callGeminiWithRetry(genAI, [
+      `The following is text extracted from ${hostname}.\n\n${pageText}\n\n${USER_PROMPT}`,
+    ]);
+    const data = parseRecipeJson(rawText);
+    if (data) {
+      await recordExtractionMethod('url+gemini');
+      return res.status(200).json({ ...withCover(buildRecipePayload(data, hostname)), extractionMethod: 'url+gemini' });
+    }
+    console.error('URL structuring: JSON parse failure. Raw:', rawText.slice(0, 500));
+  } catch (err) {
+    console.error(`URL Gemini failed: ${err instanceof Error ? err.message : String(err)}`);
+    await recordExtractionMethod('failed');
+    return sendGeminiError(res, err);
+  }
 
-  return res.status(200).json({
-    title: String(data.title ?? 'Extracted Recipe'),
-    source: String(data.source ?? (hasUrl ? new URL(url).hostname.replace('www.', '') : 'Photo Upload')),
-    servings: Number(data.servings) || 4,
-    prepTime: String(data.prepTime ?? ''),
-    totalTime: String(data.totalTime ?? ''),
-    ingredientSections,
-    ingredients,
-    steps: Array.isArray(data.steps) ? data.steps.map(String) : [],
-    ...(coverImage && { coverImage }),
+  // 3. No structured data and Gemini returned nothing usable.
+  console.log('extract-recipe: url extraction failed (no JSON-LD, Gemini unparseable)');
+  await recordExtractionMethod('failed');
+  return res.status(422).json({
+    error: 'Could not extract the recipe from that page. Try a different URL or enter it manually.',
   });
 }
