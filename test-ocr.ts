@@ -49,6 +49,7 @@ const letters = (text.match(/[A-Za-z]/g) ?? []).length;
 console.log(`Confidence: ${result.confidence.toFixed(1)}`);
 console.log(`Characters: ${text.length}, alpha ratio: ${nonWs ? (letters / nonWs).toFixed(2) : 'n/a'}`);
 
+console.log(`Columns reflowed: ${result.columnsReflowed}`);
 const gate = assessOcrQuality(result);
 console.log(`Quality gate: ${gate.ok ? 'PASS' : `FAIL (${gate.reason})`}\n`);
 

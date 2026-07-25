@@ -15,6 +15,8 @@ export interface OcrResult {
   text: string;
   /** Mean word confidence, 0-100. Clean print scores 80-95, garbage <50. */
   confidence: number;
+  /** True when a two-column layout was detected and text was re-threaded. */
+  columnsReflowed: boolean;
 }
 
 export interface OcrEngine {
@@ -66,7 +68,11 @@ class TesseractEngine implements OcrEngine {
         const { data } = await worker.recognize(image, {}, { blocks: true, text: true });
         const lines = collectLines(data as unknown as TesseractData);
         const reflowed = reflowColumns(lines);
-        return { text: reflowed ?? data.text ?? '', confidence: data.confidence ?? 0 };
+        return {
+          text: reflowed ?? data.text ?? '',
+          confidence: data.confidence ?? 0,
+          columnsReflowed: reflowed !== null,
+        };
       } catch (err) {
         // The worker thread may be wedged — drop it and re-init next call
         workerPromise = null;
@@ -148,47 +154,79 @@ function reflowColumns(lines: Line[]): string | null {
   const medianGap = median(wordGaps) || 10;
   const minGutter = Math.max(pageWidth * 0.045, medianGap * 3.5);
 
-  // Largest internal gap per line — candidate gutter positions
-  const bigGap = new Map<Line, { mid: number; splitIdx: number }>();
-  const candidateMids: number[] = [];
+  // Wide inter-word gaps are gutter candidates. Keep each gap's row (y), midpoint
+  // and facing edges so we can recover the empty gutter band precisely.
+  const gaps: { y: number; mid: number; left: number; right: number }[] = [];
   for (const l of lines) {
-    let best = { width: 0, mid: 0, splitIdx: -1 };
     for (let i = 1; i < l.words.length; i++) {
-      const w = l.words[i].x0 - l.words[i - 1].x1;
-      if (w > best.width) best = { width: w, mid: (l.words[i].x0 + l.words[i - 1].x1) / 2, splitIdx: i };
-    }
-    if (best.width >= minGutter && best.splitIdx > 0) {
-      bigGap.set(l, { mid: best.mid, splitIdx: best.splitIdx });
-      candidateMids.push(best.mid);
+      const left = l.words[i - 1].x1;
+      const right = l.words[i].x0;
+      if (right - left >= minGutter) gaps.push({ y: l.yTop, mid: (left + right) / 2, left, right });
     }
   }
 
-  // Need enough lines with a gutter, clustered at a consistent x
-  if (candidateMids.length < Math.max(3, lines.length * 0.15)) return null;
-  const gutterX = median(candidateMids);
-  const tolerance = pageWidth * 0.06;
-  const clustered = candidateMids.filter((m) => Math.abs(m - gutterX) <= tolerance).length;
-  if (clustered < Math.max(3, candidateMids.length * 0.6)) return null;
+  // Need enough gutter gaps, clustered at a consistent x (a real column break
+  // recurs down the page; an incidental wide space in one line does not).
+  if (gaps.length < Math.max(3, lines.length * 0.12)) return null;
+  const gutterMedian = median(gaps.map((g) => g.mid));
+  const tolerance = pageWidth * 0.08;
+  const near = gaps.filter((g) => Math.abs(g.mid - gutterMedian) <= tolerance);
+  if (near.length < Math.max(3, gaps.length * 0.5)) return null;
+
+  // The divider is the SECOND column's left edge, not the gap midpoint: ingredient
+  // lines vary in length (so the midpoint wanders and long ingredients reach deep
+  // into a mid-band), but the method column always starts at the same x. Fit that
+  // edge as a sloped line — hand-held photos are tilted/curved, so it drifts down
+  // the page — by least squares on the gap right-edges, judged locally per row.
+  const meanY = near.reduce((s, g) => s + g.y, 0) / near.length;
+  const meanEdge = near.reduce((s, g) => s + g.right, 0) / near.length;
+  let num = 0;
+  let den = 0;
+  for (const g of near) {
+    num += (g.y - meanY) * (g.right - meanEdge);
+    den += (g.y - meanY) ** 2;
+  }
+  let slope = den > 0 ? num / den : 0;
+  slope = Math.max(-0.2, Math.min(0.2, slope)); // clamp to a plausible tilt
+  const intercept = meanEdge - slope * meanY;
+  const edgeAt = (y: number) => slope * y + intercept;
+  const margin = Math.max(pageWidth * 0.012, medianGap);
+
+  // The two-column band is the y-range where gutter gaps actually occur. Rows
+  // inside it are split at the method edge (even if OCR fused an ingredient's
+  // last word with the method word beside it — the split still separates the
+  // clean words). Rows outside it are the full-width title/intro/note/footer,
+  // placed whole by which side they sit on.
+  const nearYs = near.map((g) => g.y);
+  const bandTop = Math.min(...nearYs);
+  const bandBottom = Math.max(...nearYs);
+  const pitches: number[] = [];
+  const sortedYs = lines.map((l) => l.yTop).sort((a, b) => a - b);
+  for (let i = 1; i < sortedYs.length; i++) {
+    const d = sortedYs[i] - sortedYs[i - 1];
+    if (d > 0) pitches.push(d);
+  }
+  const slack = (median(pitches) || 20) * 1.5;
 
   const left: { y: number; text: string }[] = [];
   const right: { y: number; text: string }[] = [];
   for (const l of lines) {
-    const gap = bigGap.get(l);
-    const splitHere = gap && Math.abs(gap.mid - gutterX) <= tolerance;
-    if (splitHere) {
-      const lw = l.words.slice(0, gap!.splitIdx);
-      const rw = l.words.slice(gap!.splitIdx);
+    const edge = edgeAt(l.yTop);
+    const rw = l.words.filter((w) => w.x0 >= edge - margin);
+    const lw = l.words.filter((w) => w.x0 < edge - margin);
+    const inBand = l.yTop >= bandTop - slack && l.yTop <= bandBottom + slack;
+    if (inBand) {
+      // Both columns are live here — split at the method edge.
       if (lw.length) left.push({ y: l.yTop, text: lw.map((w) => w.text).join(' ') });
       if (rw.length) right.push({ y: l.yTop, text: rw.map((w) => w.text).join(' ') });
+    } else if (lw.length && rw.length) {
+      // Full-width heading/intro row — keep whole in the left flow.
+      left.push({ y: l.yTop, text: l.words.map((w) => w.text).join(' ') });
+    } else if (rw.length) {
+      // Method-only row past the ingredient list — keep in the method column.
+      right.push({ y: l.yTop, text: rw.map((w) => w.text).join(' ') });
     } else {
-      // No gutter gap in this line. If it spans both sides of the gutter it's a
-      // full-width heading/intro row — send it left so it keeps its place in the
-      // top-of-page flow rather than polluting the right (method) column.
-      // Otherwise it lives in a single column; place it by its center.
-      const text = l.words.map((w) => w.text).join(' ');
-      const spansGutter = l.words[0].x0 < gutterX && l.width > gutterX;
-      const center = (l.words[0].x0 + l.width) / 2;
-      (spansGutter || center < gutterX ? left : right).push({ y: l.yTop, text });
+      left.push({ y: l.yTop, text: lw.map((w) => w.text).join(' ') });
     }
   }
 

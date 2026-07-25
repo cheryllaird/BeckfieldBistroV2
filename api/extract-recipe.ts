@@ -394,7 +394,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     if (gate.ok && ocr) {
       const ocrText = ocr.text.trim();
-      console.log(`extract-recipe: ocr confidence=${Math.round(ocr.confidence)} chars=${ocrText.length}`);
+      console.log(`extract-recipe: ocr confidence=${Math.round(ocr.confidence)} chars=${ocrText.length} columnsReflowed=${ocr.columnsReflowed}`);
 
       let structured: Record<string, unknown> | null = null;
       try {
