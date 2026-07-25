@@ -54,9 +54,10 @@ account and syncs across that account's devices.
 - **Meal-plan entry** — a dated entry attaching either a saved recipe, a free-text
   "custom" meal, or a "dining out" note to a specific calendar date, with a
   servings count and an optional meal time (breakfast / lunch / dinner / snack).
-- **Shopping-list item** — a line of text, a category, a checked/in-basket flag, a
-  sort order, an optional link back to the **meal sources** that contributed it,
-  and (for generated items) a normalised dedup key.
+- **Shopping-list item** — a line of text, a category, which of the two lists it
+  belongs to (**Immediate** or **Stock up**), a checked/in-basket flag, a sort
+  order, an optional link back to the **meal sources** that contributed it, and
+  (for generated items) a normalised dedup key.
 - **Pantry ("Store Cupboard") item** — a staple the user always keeps in stock,
   with a category; used to *exclude* ingredients from generated shopping lists.
 - **Recipe share** — a full copy of a recipe addressed to a recipient's email, so
@@ -255,6 +256,16 @@ breakdown, and re-adding the same meal is idempotent (never double-counts).
 
 The list turns the plan into something you actually shop from.
 
+### 7.0 Two lists — Immediate and Stock up
+The shopping list is split into **two independent lists the user switches between
+with tabs (or a left/right swipe on the list, with a sliding transition)**: an
+**Immediate** list for the current shop, and a **Stock up** list for staples to
+top up later. Each list keeps its own items, progress, and
+"In basket" group, and every shopping action — adding, checking off, reordering,
+auto-sorting, and clearing — acts only on the list currently in view; the other
+list is left untouched. Items that predate this split (and any item without an
+explicit list) belong to **Immediate**, so existing lists carry over unchanged.
+
 ### 7.1 Generation from the plan
 - The user picks which of the **recipe meals planned across the current and next
   week** to include (all pre-selected; deselect to exclude).
@@ -264,13 +275,16 @@ The list turns the plan into something you actually shop from.
 - **Pantry exclusion:** any ingredient the user keeps in their **Store Cupboard**
   (§8) is omitted, and the count of skipped staples is shown up front. This is the
   key "don't buy what you already have" behaviour.
+- **Targets the Immediate list:** generated items always populate the **Immediate**
+  list (replacing its previous contents); the **Stock up** list is never altered by
+  generation.
 
 ### 7.2 Incremental building
 - Individual planned meals can be added to an existing list one at a time; their
   ingredients merge into what's already there (deduping by the same key logic, and
   refusing to add the same meal twice).
 - Items can also be **added manually** by typing; manual items are auto-categorised
-  from their text.
+  from their text and land on the list currently in view (Immediate or Stock up).
 
 ### 7.3 Shopping & curating
 - **Check-off** with running progress (checked/total); checked items collect in an
@@ -378,6 +392,7 @@ appears on another without manual refresh. The functional guarantees:
 | Ingredient engine | Unit + name normalisation, synonym folding, quantity consolidation |
 | Category detection | Auto-sorts every ingredient into 10 grocery aisles |
 | Shopping generation | Scales + consolidates planned meals into one list |
+| Dual shopping lists | Separate Immediate and Stock up lists, switchable by tab and managed independently |
 | Pantry exclusion | Omits staples the user already owns |
 | Meal-source tracking | Shows which meals drove each shopping item; idempotent adds |
 | Recipe sharing | Single/bulk copy-share to another user by email, with an inbox |
