@@ -19,7 +19,7 @@ import {
 } from 'lucide-react';
 import { useStore } from '../../store';
 import { Button } from '../../components/ui/Button';
-import { categorize, formatQuantity, generateId } from '../../lib/utils';
+import { categorize, findPantryMatch, formatQuantity, generateId } from '../../lib/utils';
 import { logCategoryOverride } from '../../lib/firestore';
 import type { MealSource, ShoppingCategory, ShoppingItem, ShoppingListType } from '../../types';
 import { GenerateListModal } from './GenerateListModal';
@@ -55,6 +55,7 @@ export function ShoppingListPage() {
     removeShoppingItem,
     setShoppingItems,
     reorderShoppingItems,
+    pantryItems,
     user,
   } = useStore();
 
@@ -62,6 +63,7 @@ export function ShoppingListPage() {
   const [activeList, setActiveList] = useState<ShoppingListType>('immediate');
   const [generateOpen, setGenerateOpen] = useState(false);
   const [manualItem, setManualItem] = useState('');
+  const [cupboardNotice, setCupboardNotice] = useState<string | null>(null);
   const [history, setHistory] = useState<ShoppingItem[][]>([]);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editingValue, setEditingValue] = useState('');
@@ -107,6 +109,15 @@ export function ShoppingListPage() {
 
   const handleAddManual = () => {
     if (!manualItem.trim()) return;
+    // Don't buy what's already a store cupboard staple ("sea salt" when the
+    // cupboard has "salt").
+    const staple = findPantryMatch(manualItem, pantryItems);
+    if (staple) {
+      setCupboardNotice(`${staple.name} is in your store cupboard — not added`);
+      setManualItem('');
+      return;
+    }
+    setCupboardNotice(null);
     const newItem: ShoppingItem = {
       id: generateId(),
       name: manualItem.trim(),
@@ -391,7 +402,10 @@ export function ShoppingListPage() {
           <div className="flex gap-2">
             <input
               value={manualItem}
-              onChange={(e) => setManualItem(e.target.value)}
+              onChange={(e) => {
+                setManualItem(e.target.value);
+                if (cupboardNotice) setCupboardNotice(null);
+              }}
               onKeyDown={(e) => e.key === 'Enter' && handleAddManual()}
               placeholder="Add item manually…"
               className="flex-1 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-800 placeholder-slate-400 outline-none focus:border-amber-400 focus:ring-2 focus:ring-amber-100 transition-colors"
@@ -400,6 +414,12 @@ export function ShoppingListPage() {
               <Plus size={14} />
             </Button>
           </div>
+          {cupboardNotice && (
+            <div className="flex items-center gap-1.5 text-xs text-slate-400">
+              <Package size={11} className="shrink-0" />
+              <span>{cupboardNotice}</span>
+            </div>
+          )}
         </div>
       ) : (
       <>
@@ -424,7 +444,10 @@ export function ShoppingListPage() {
           <div className="flex gap-2">
             <input
               value={manualItem}
-              onChange={(e) => setManualItem(e.target.value)}
+              onChange={(e) => {
+                setManualItem(e.target.value);
+                if (cupboardNotice) setCupboardNotice(null);
+              }}
               onKeyDown={(e) => e.key === 'Enter' && handleAddManual()}
               placeholder="Add item manually…"
               className="flex-1 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-800 placeholder-slate-400 outline-none focus:border-amber-400 focus:ring-2 focus:ring-amber-100 transition-colors"
@@ -433,6 +456,12 @@ export function ShoppingListPage() {
               <Plus size={14} />
             </Button>
           </div>
+          {cupboardNotice && (
+            <div className="flex items-center gap-1.5 text-xs text-slate-400">
+              <Package size={11} className="shrink-0" />
+              <span>{cupboardNotice}</span>
+            </div>
+          )}
         </>
       )}
 
