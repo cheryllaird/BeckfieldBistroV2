@@ -285,9 +285,10 @@ explicit list) belong to **Immediate**, so existing lists carry over unchanged.
   refusing to add the same meal twice).
 - Items can also be **added manually** by typing; manual items are auto-categorised
   from their text and land on the list currently in view (Immediate or Stock up).
-- **Pantry exclusion applies to every add path** (§8), not just generation: adding a
-  single meal silently skips its store cupboard ingredients, and a manually typed
-  staple is not added — the list says which cupboard item covers it instead.
+- **Pantry exclusion applies to every recipe-derived add** (§8), not just
+  generation: adding a single planned meal silently skips its store cupboard
+  ingredients. **Manually typed items are always added** — typing is an explicit
+  request to buy something, so the cupboard never blocks it.
 
 ### 7.3 Shopping & curating
 - **Check-off** with running progress (checked/total); checked items collect in an
@@ -306,10 +307,11 @@ explicit list) belong to **Immediate**, so existing lists carry over unchanged.
 
 - A user-maintained list of **staples always in stock** (oils, spices, flour,
   etc.), each auto-categorised.
-- Its sole functional purpose: **ingredients matching a pantry item are excluded
-  from the shopping list**, however they were added (matched via the same
-  normalised-name logic as §6, so "olive oil" in the pantry suppresses
-  "extra-virgin olive oil" from the list).
+- Its sole functional purpose: **recipe ingredients matching a pantry item are
+  excluded from the shopping list** — whether the list is generated wholesale or a
+  single meal is added to it (matched via the same normalised-name logic as §6, so
+  "olive oil" in the pantry suppresses "extra-virgin olive oil" from the list).
+  Manually typed items are never suppressed.
 - Matching also covers **variants of a staple**: qualifiers that describe a kind of
   the same thing ("sea", "flaky", "ground", "fresh", "caster", …) are ignored, so
   "salt" in the cupboard suppresses "sea salt flakes"; and a staple suppresses
