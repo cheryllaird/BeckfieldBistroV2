@@ -3,7 +3,8 @@ import { X, Check, Package } from 'lucide-react';
 import { useStore } from '../../store';
 import { Button } from '../../components/ui/Button';
 import { ModalPortal } from '../../components/ui/ModalPortal';
-import { consolidateIngredients, getRecipeIngredients, isoDate, getWeekDays } from '../../lib/utils';
+import { consolidateIngredients, findPantryMatch, getRecipeIngredients, isoDate, getWeekDays } from '../../lib/utils';
+import type { ShoppingItem } from '../../types';
 
 interface Props {
   onClose: () => void;
@@ -11,7 +12,8 @@ interface Props {
 
 export function GenerateListModal({ onClose }: Props) {
   const { mealEntries, recipes, pantryItems, shoppingItems, setShoppingItems } = useStore();
-  const pantryNormalizedNames = new Set(pantryItems.map((p) => p.normalizedName));
+  const isInCupboard = (item: ShoppingItem) =>
+    !!findPantryMatch(item.ingredientKey?.split('__')[0] ?? '', pantryItems);
 
   const allWeekDays = [...getWeekDays(0), ...getWeekDays(1)];
   const plannedEntries = mealEntries.filter((e) =>
@@ -40,10 +42,7 @@ export function GenerateListModal({ onClose }: Props) {
       })
       .filter((g) => g.ingredients);
     const allItems = consolidateIngredients(groups);
-    return allItems.filter((item) => {
-      const normalizedName = item.ingredientKey?.split('__')[0] ?? '';
-      return pantryNormalizedNames.has(normalizedName);
-    }).length;
+    return allItems.filter(isInCupboard).length;
   })();
 
   const toggle = (id: string) =>
@@ -70,10 +69,7 @@ export function GenerateListModal({ onClose }: Props) {
 
     const allItems = consolidateIngredients(groups);
     const items = allItems
-      .filter((item) => {
-        const normalizedName = item.ingredientKey?.split('__')[0] ?? '';
-        return !pantryNormalizedNames.has(normalizedName);
-      })
+      .filter((item) => !isInCupboard(item))
       // Generated items always populate the Immediate list.
       .map((item) => ({ ...item, listType: 'immediate' as const }));
     // Replace only the Immediate list; leave Stock up items untouched.

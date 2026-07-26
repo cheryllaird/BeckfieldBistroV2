@@ -107,6 +107,8 @@ export function ShoppingListPage() {
 
   const handleAddManual = () => {
     if (!manualItem.trim()) return;
+    // Manually typed items are always added — the store cupboard only filters
+    // ingredients pulled in from recipes.
     const newItem: ShoppingItem = {
       id: generateId(),
       name: manualItem.trim(),
