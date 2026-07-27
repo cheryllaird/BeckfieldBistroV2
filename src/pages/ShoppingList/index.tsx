@@ -294,7 +294,9 @@ export function ShoppingListPage() {
   };
 
   return (
-    <div className="flex flex-col gap-4">
+    // flex-1 so the page fills the layout's <main>; the swipe body below then
+    // stretches to the bottom of the screen even when the list is short.
+    <div className="flex-1 flex flex-col gap-4">
       {/* Header */}
       <div className="flex flex-col gap-1">
         <div className="flex items-center justify-between gap-2">
@@ -358,14 +360,17 @@ export function ShoppingListPage() {
         ))}
       </div>
 
-      {/* Swipeable list body — swipe left/right to switch between lists */}
+      {/* Swipeable list body — swipe left/right to switch between lists.
+          flex-1 (with the default min-height:auto, so long lists still push the
+          page taller instead of being clipped) makes the gesture target run to
+          the bottom of the screen, so a short list is still swipeable. */}
       <div
-        className="overflow-hidden"
+        className="flex-1 flex flex-col overflow-hidden"
         onTouchStart={handleSwipeStart}
         onTouchMove={handleSwipeMove}
         onTouchEnd={handleSwipeEnd}
       >
-      <div ref={listBodyRef} className="flex flex-col gap-4">
+      <div ref={listBodyRef} className="flex-1 flex flex-col gap-4">
       {listItems.length === 0 ? (
         <div className="flex flex-col gap-5">
           <div className="flex flex-col items-center gap-4 py-10 text-center animate-fade">
