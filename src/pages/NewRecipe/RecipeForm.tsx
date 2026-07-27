@@ -7,6 +7,22 @@ import { resizeImage } from '../../lib/recipeExtraction';
 import { ImageCropper } from '../../components/ImageCropper';
 import { CameraCapture } from '../../components/CameraCapture';
 
+/**
+ * Tidies a hand-typed recipe link. Accepts a bare host ("bbcgoodfood.com/x")
+ * and assumes https. Returns '' when blank, or null when it isn't a usable URL.
+ */
+function normaliseUrl(raw: string): string | null {
+  const trimmed = raw.trim();
+  if (!trimmed) return '';
+  const withProtocol = /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
+  try {
+    const url = new URL(withProtocol);
+    return url.hostname.includes('.') ? url.toString() : null;
+  } catch {
+    return null;
+  }
+}
+
 interface Props {
   initial: Partial<Recipe>;
   knownSources: string[];
@@ -18,6 +34,7 @@ interface Props {
 export function RecipeForm({ initial, knownSources, onSave, onCancel, isSaving }: Props) {
   const [title, setTitle] = useState(initial.title ?? '');
   const [source, setSource] = useState(initial.source ?? '');
+  const [sourceUrl, setSourceUrl] = useState(initial.sourceUrl ?? '');
   const [servings, setServings] = useState(initial.servings ?? 4);
   const [prepTime, setPrepTime] = useState(initial.prepTime ?? '');
   const [totalTime, setTotalTime] = useState(initial.totalTime ?? '');
@@ -56,6 +73,7 @@ export function RecipeForm({ initial, knownSources, onSave, onCancel, isSaving }
     const e: Record<string, string> = {};
     if (!title.trim()) e.title = 'Title is required';
     if (servings < 1) e.servings = 'Servings must be at least 1';
+    if (normaliseUrl(sourceUrl) === null) e.sourceUrl = 'Enter a valid link, e.g. bbcgoodfood.com/recipe';
     return e;
   };
 
@@ -82,7 +100,7 @@ export function RecipeForm({ initial, knownSources, onSave, onCancel, isSaving }
       totalTime: totalTime.trim(),
       coverImage: coverImage.trim() || undefined,
       originalImage: initial.originalImage,
-      sourceUrl: initial.sourceUrl,
+      sourceUrl: normaliseUrl(sourceUrl) || undefined,
       ingredientSections: filledSections,
       ingredients: flatIngredients,
       steps: steps.filter((s) => s.trim()),
@@ -159,6 +177,18 @@ export function RecipeForm({ initial, knownSources, onSave, onCancel, isSaving }
             ))}
           </datalist>
         </div>
+
+        {/* Optional link to go with the source — e.g. a book plus its listing */}
+        <Input
+          label="Source Link"
+          type="url"
+          inputMode="url"
+          placeholder="https://cooking.nytimes.com/recipes/…"
+          value={sourceUrl}
+          onChange={(e) => setSourceUrl(e.target.value)}
+          error={errors.sourceUrl}
+          hint="Optional — the source name links here when set"
+        />
 
         <div className="grid grid-cols-3 gap-3">
           <Input
