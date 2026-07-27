@@ -178,9 +178,9 @@ Extraction runs on **each user's own Google Gemini API key**:
   ingredients + ordered steps), including multi-section ingredient grouping.
 - **Original preserved:** when a recipe was extracted from a photo, the app retains
   the photo the text was read from; when extracted from a URL it retains the source
-  link. From the recipe's overflow menu — alongside Edit — the user can open either
-  the **original photo** or the **cover image** full-screen, whether the image is
-  hosted or was captured in-app.
+  link. When an original image exists, the recipe's overflow menu offers — alongside
+  Edit — **View original image**, opening it full-screen whether it is hosted or was
+  captured in-app. Recipes with no original image simply don't show the entry.
 - **Deletion** removes the recipe from the library across all devices (with
   confirmation).
 

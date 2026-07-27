@@ -11,7 +11,6 @@ import {
   Edit,
   MoreVertical,
   ExternalLink,
-  Image,
   ScanText,
   UtensilsCrossed,
   Share2,
@@ -154,24 +153,12 @@ export function RecipeDetailPage() {
               {recipe.originalImage && (
                 <button
                   onClick={() => {
-                    setViewingImage({ src: recipe.originalImage!, title: 'Original photo' });
+                    setViewingImage({ src: recipe.originalImage!, title: 'Original image' });
                     setMenuOpen(false);
                   }}
                   className="flex items-center gap-2.5 w-full px-4 py-2.5 text-sm text-slate-700 whitespace-nowrap hover:bg-slate-50 transition-colors"
                 >
-                  <ScanText size={14} /> View original photo
-                </button>
-              )}
-
-              {recipe.coverImage && (
-                <button
-                  onClick={() => {
-                    setViewingImage({ src: recipe.coverImage!, title: 'Cover image' });
-                    setMenuOpen(false);
-                  }}
-                  className="flex items-center gap-2.5 w-full px-4 py-2.5 text-sm text-slate-700 whitespace-nowrap hover:bg-slate-50 transition-colors"
-                >
-                  <Image size={14} /> View cover image
+                  <ScanText size={14} /> View original image
                 </button>
               )}
 
