@@ -460,3 +460,21 @@ export function formatDayLabel(date: Date): { weekday: string; monthDay: string;
     isToday,
   };
 }
+
+/**
+ * What to show as a recipe's source. Recipes saved without one fall back to
+ * "Unknown", which reads poorly when there's a link to name it by instead —
+ * so prefer the link's host in that case.
+ */
+export function recipeSourceLabel(recipe: Pick<Recipe, 'source' | 'sourceUrl'>): string {
+  const source = recipe.source?.trim();
+  if (source && source.toLowerCase() !== 'unknown') return source;
+  if (recipe.sourceUrl) {
+    try {
+      return new URL(recipe.sourceUrl).hostname.replace(/^www\./, '');
+    } catch {
+      // fall through to the plain source
+    }
+  }
+  return source || 'Unknown';
+}
