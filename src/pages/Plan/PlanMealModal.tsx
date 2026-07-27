@@ -4,7 +4,7 @@ import { useStore } from '../../store';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
 import { ModalPortal } from '../../components/ui/ModalPortal';
-import { generateId } from '../../lib/utils';
+import { generateId, recipeSourceLabel } from '../../lib/utils';
 import type { Recipe } from '../../types';
 
 function RecipeListItem({ recipe, onClick }: { recipe: Recipe; onClick: () => void }) {
@@ -28,7 +28,7 @@ function RecipeListItem({ recipe, onClick }: { recipe: Recipe; onClick: () => vo
       )}
       <div className="min-w-0">
         <p className="text-sm font-medium text-slate-800 truncate">{recipe.title}</p>
-        <p className="text-xs text-slate-400">{recipe.source}</p>
+        <p className="text-xs text-slate-400">{recipeSourceLabel(recipe)}</p>
       </div>
     </button>
   );

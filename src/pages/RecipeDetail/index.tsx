@@ -17,7 +17,7 @@ import {
 } from 'lucide-react';
 import { useStore } from '../../store';
 import { Button } from '../../components/ui/Button';
-import { scaleIngredient, formatQuantity } from '../../lib/utils';
+import { scaleIngredient, formatQuantity, recipeSourceLabel } from '../../lib/utils';
 import { PlanDateModal } from './PlanDateModal';
 import { ShareModal } from './ShareModal';
 
@@ -189,11 +189,11 @@ export function RecipeDetailPage() {
               rel="noopener noreferrer"
               className="inline-flex items-center gap-1 text-sm text-white/70 mt-0.5 hover:text-white transition-colors"
             >
-              {recipe.source}
+              {recipeSourceLabel(recipe)}
               <ExternalLink size={12} />
             </a>
           ) : (
-            <p className="text-sm text-white/70 mt-0.5">{recipe.source}</p>
+            <p className="text-sm text-white/70 mt-0.5">{recipeSourceLabel(recipe)}</p>
           )}
         </div>
       </div>

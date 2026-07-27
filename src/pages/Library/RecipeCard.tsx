@@ -3,7 +3,7 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import type { Recipe } from '../../types';
 import { useStore } from '../../store';
-import { isoDate, getWeekDays } from '../../lib/utils';
+import { isoDate, getWeekDays, recipeSourceLabel } from '../../lib/utils';
 import { PlanDateModal } from '../RecipeDetail/PlanDateModal';
 import { useLongPress } from '../../hooks/useLongPress';
 
@@ -104,7 +104,7 @@ export function RecipeCard({ recipe, isSelectMode, isSelected, onLongPress, onSe
         <h3 className="text-sm font-semibold text-slate-800 leading-tight line-clamp-2">
           {recipe.title}
         </h3>
-        <p className="text-xs text-slate-400 mt-0.5">{recipe.source}</p>
+        <p className="text-xs text-slate-400 mt-0.5">{recipeSourceLabel(recipe)}</p>
         <div className="flex items-center gap-3 mt-2">
           <span className="flex items-center gap-1 text-xs text-slate-500">
             <Users size={12} />
