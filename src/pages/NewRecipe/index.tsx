@@ -5,7 +5,7 @@ import { useStore } from '../../store';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
 import { generateId } from '../../lib/utils';
-import { extractRecipeFromImage, extractRecipeFromUrl, resizeImage, RecipeExtractionError } from '../../lib/recipeExtraction';
+import { extractRecipeFromImage, extractRecipeFromUrl, resizeImage, ORIGINAL_IMAGE_RESIZE, RecipeExtractionError } from '../../lib/recipeExtraction';
 import type { Recipe } from '../../types';
 import { RecipeForm } from './RecipeForm';
 import { ImageCropper } from '../../components/ImageCropper';
@@ -83,11 +83,14 @@ export function NewRecipePage() {
     setIsExtracting(true);
     setExtractError('');
     try {
-      const [extracted, resizedDataUrl] = await Promise.all([
+      const [extracted, resizedDataUrl, originalDataUrl] = await Promise.all([
         extractRecipeFromImage(croppedDataUrl, hasGeminiApiKey),
         resizeImage(croppedDataUrl),
+        // Kept so the source photo stays reachable even after the cover is
+        // swapped for a nicer picture of the finished dish.
+        resizeImage(croppedDataUrl, ORIGINAL_IMAGE_RESIZE),
       ]);
-      setDraft({ ...extracted, coverImage: resizedDataUrl });
+      setDraft({ ...extracted, coverImage: resizedDataUrl, originalImage: originalDataUrl });
       setMode('manual');
     } catch (err) {
       setExtractError(

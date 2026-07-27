@@ -13,6 +13,12 @@ export class RecipeExtractionError extends Error {
 // this with a higher resolution since OCR accuracy improves with pixel density.
 const MAX_DIMENSION = 1568;
 
+// Archival copy of the photo the recipe text was read from. Kept alongside the
+// cover image, so it is deliberately smaller/leaner than the cover: two data
+// URLs have to share one Firestore doc's 1 MiB budget. Still comfortably
+// legible for a cookbook page when opened full-screen.
+export const ORIGINAL_IMAGE_RESIZE: ResizeOptions = { maxDimension: 1200, quality: 0.72 };
+
 interface ResizeOptions {
   maxDimension?: number;
   quality?: number;

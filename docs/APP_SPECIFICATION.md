@@ -115,7 +115,9 @@ tries, in order:
    with guidance to take a clearer, well-lit photo of just the ingredients and
    steps, or enter it manually.
 
-The captured photo also becomes the recipe's cover image.
+The captured photo becomes the recipe's cover image, and a second, leaner copy is
+kept as the recipe's **original photo** — so the page the text was read from stays
+viewable even after the cover is swapped for a picture of the finished dish.
 
 ### 3.3 Faithfulness rules (applies to every AI path)
 Extraction is tuned to mirror the source, not "improve" it:
@@ -174,8 +176,11 @@ Extraction runs on **each user's own Google Gemini API key**:
   remembered and offered as autocomplete when entering new recipes.
 - **Editing:** any recipe can be edited via the same structured form (sectioned
   ingredients + ordered steps), including multi-section ingredient grouping.
-- **Original preserved:** when a recipe was extracted from a photo/URL, the app can
-  retain and surface the original image/source link.
+- **Original preserved:** when a recipe was extracted from a photo, the app retains
+  the photo the text was read from; when extracted from a URL it retains the source
+  link. When an original image exists, the recipe's overflow menu offers — alongside
+  Edit — **View original image**, opening it full-screen whether it is hosted or was
+  captured in-app. Recipes with no original image simply don't show the entry.
 - **Deletion** removes the recipe from the library across all devices (with
   confirmation).
 
