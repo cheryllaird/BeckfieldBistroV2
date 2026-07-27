@@ -12,6 +12,7 @@ import {
   MoreVertical,
   ExternalLink,
   Image,
+  ScanText,
   UtensilsCrossed,
   Share2,
 } from 'lucide-react';
@@ -20,6 +21,7 @@ import { Button } from '../../components/ui/Button';
 import { scaleIngredient, formatQuantity } from '../../lib/utils';
 import { PlanDateModal } from './PlanDateModal';
 import { ShareModal } from './ShareModal';
+import { ImageViewerModal } from './ImageViewerModal';
 
 type Tab = 'ingredients' | 'method';
 
@@ -34,6 +36,7 @@ export function RecipeDetailPage() {
   const [imgError, setImgError] = useState(false);
   const [planModalOpen, setPlanModalOpen] = useState(false);
   const [shareModalOpen, setShareModalOpen] = useState(false);
+  const [viewingImage, setViewingImage] = useState<{ src: string; title: string } | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
 
@@ -140,38 +143,50 @@ export function RecipeDetailPage() {
           </button>
 
           {menuOpen && (
-            <div className="absolute right-0 top-10 bg-white rounded-xl shadow-lg border border-slate-100 py-1 min-w-[180px] z-50">
+            <div className="absolute right-0 top-10 bg-white rounded-xl shadow-lg border border-slate-100 py-1 min-w-[200px] z-50">
               <button
                 onClick={() => { navigate(`/recipes/${recipe.id}/edit`); setMenuOpen(false); }}
-                className="flex items-center gap-2.5 w-full px-4 py-2.5 text-sm text-slate-700 hover:bg-slate-50 transition-colors"
+                className="flex items-center gap-2.5 w-full px-4 py-2.5 text-sm text-slate-700 whitespace-nowrap hover:bg-slate-50 transition-colors"
               >
                 <Edit size={14} /> Edit recipe
               </button>
 
+              {recipe.originalImage && (
+                <button
+                  onClick={() => {
+                    setViewingImage({ src: recipe.originalImage!, title: 'Original photo' });
+                    setMenuOpen(false);
+                  }}
+                  className="flex items-center gap-2.5 w-full px-4 py-2.5 text-sm text-slate-700 whitespace-nowrap hover:bg-slate-50 transition-colors"
+                >
+                  <ScanText size={14} /> View original photo
+                </button>
+              )}
+
+              {recipe.coverImage && (
+                <button
+                  onClick={() => {
+                    setViewingImage({ src: recipe.coverImage!, title: 'Cover image' });
+                    setMenuOpen(false);
+                  }}
+                  className="flex items-center gap-2.5 w-full px-4 py-2.5 text-sm text-slate-700 whitespace-nowrap hover:bg-slate-50 transition-colors"
+                >
+                  <Image size={14} /> View cover image
+                </button>
+              )}
+
               <button
                 onClick={() => { setShareModalOpen(true); setMenuOpen(false); }}
-                className="flex items-center gap-2.5 w-full px-4 py-2.5 text-sm text-slate-700 hover:bg-slate-50 transition-colors"
+                className="flex items-center gap-2.5 w-full px-4 py-2.5 text-sm text-slate-700 whitespace-nowrap hover:bg-slate-50 transition-colors"
               >
                 <Share2 size={14} /> Share recipe
               </button>
-
-              {recipe.originalImage && !recipe.originalImage.startsWith('data:') && (
-                <a
-                  href={recipe.originalImage}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  onClick={() => setMenuOpen(false)}
-                  className="flex items-center gap-2.5 w-full px-4 py-2.5 text-sm text-slate-700 hover:bg-slate-50 transition-colors"
-                >
-                  <Image size={14} /> View original image
-                </a>
-              )}
 
               <div className="my-1 border-t border-slate-100" />
 
               <button
                 onClick={handleDelete}
-                className="flex items-center gap-2.5 w-full px-4 py-2.5 text-sm text-red-600 hover:bg-red-50 transition-colors"
+                className="flex items-center gap-2.5 w-full px-4 py-2.5 text-sm text-red-600 whitespace-nowrap hover:bg-red-50 transition-colors"
               >
                 <Trash2 size={14} /> Delete recipe
               </button>
@@ -339,6 +354,14 @@ export function RecipeDetailPage() {
         <ShareModal
           recipe={recipe}
           onClose={() => setShareModalOpen(false)}
+        />
+      )}
+
+      {viewingImage && (
+        <ImageViewerModal
+          src={viewingImage.src}
+          title={viewingImage.title}
+          onClose={() => setViewingImage(null)}
         />
       )}
     </div>
