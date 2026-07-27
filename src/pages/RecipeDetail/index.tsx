@@ -16,6 +16,7 @@ import {
   Share2,
 } from 'lucide-react';
 import { useStore } from '../../store';
+import { useSwipeNavigate } from '../../hooks/useSwipeNavigate';
 import { Button } from '../../components/ui/Button';
 import { scaleIngredient, formatQuantity, recipeSourceLabel } from '../../lib/utils';
 import { PlanDateModal } from './PlanDateModal';
@@ -40,44 +41,16 @@ export function RecipeDetailPage() {
   const menuRef = useRef<HTMLDivElement>(null);
 
   const tabs: Tab[] = ['ingredients', 'method'];
-  const touchStartX = useRef<number | null>(null);
-  const touchStartY = useRef<number | null>(null);
-  const isScrollGesture = useRef<boolean | null>(null);
+  const tabIndex = tabs.indexOf(tab);
+  const tabBodyRef = useRef<HTMLDivElement>(null);
 
-  const handleTouchStart = (e: React.TouchEvent) => {
-    touchStartX.current = e.touches[0].clientX;
-    touchStartY.current = e.touches[0].clientY;
-    isScrollGesture.current = null;
-  };
-
-  const handleTouchMove = (e: React.TouchEvent) => {
-    if (touchStartX.current === null || touchStartY.current === null) return;
-    const deltaX = e.touches[0].clientX - touchStartX.current;
-    const deltaY = e.touches[0].clientY - touchStartY.current;
-
-    // Determine gesture direction once we have enough movement
-    if (isScrollGesture.current === null && (Math.abs(deltaX) > 8 || Math.abs(deltaY) > 8)) {
-      isScrollGesture.current = Math.abs(deltaY) > Math.abs(deltaX);
-    }
-  };
-
-  const handleTouchEnd = (e: React.TouchEvent) => {
-    if (touchStartX.current === null) return;
-    const delta = e.changedTouches[0].clientX - touchStartX.current;
-    const wasScroll = isScrollGesture.current;
-    touchStartX.current = null;
-    touchStartY.current = null;
-    isScrollGesture.current = null;
-
-    // Ignore vertical scroll gestures and sub-threshold swipes
-    if (wasScroll || Math.abs(delta) <= 80) return;
-
-    const currentIndex = tabs.indexOf(tab);
-    const nextIndex = delta < 0 ? currentIndex + 1 : currentIndex - 1;
-    if (nextIndex >= 0 && nextIndex < tabs.length) {
-      setTab(tabs[nextIndex]);
-    }
-  };
+  const swipe = useSwipeNavigate({
+    contentRef: tabBodyRef,
+    canGoNext: tabIndex < tabs.length - 1,
+    canGoPrev: tabIndex > 0,
+    onNext: () => setTab(tabs[tabIndex + 1]),
+    onPrev: () => setTab(tabs[tabIndex - 1]),
+  });
 
   useEffect(() => {
     if (!menuOpen) return;
@@ -114,7 +87,7 @@ export function RecipeDetailPage() {
   };
 
   return (
-    <div className="flex flex-col gap-0 animate-in">
+    <div className="flex-1 flex flex-col gap-0 animate-in">
       {/* Cover image */}
       <div className="relative -mx-4 -mt-4 aspect-[16/9] max-h-[50vh] bg-slate-100 mb-4 overflow-hidden">
         {recipe.coverImage && !imgError ? (
@@ -247,14 +220,15 @@ export function RecipeDetailPage() {
         ))}
       </div>
 
-      {/* Swipeable tab content — swipe left/right to switch tabs */}
-      <div
-        onTouchStart={handleTouchStart}
-        onTouchMove={handleTouchMove}
-        onTouchEnd={handleTouchEnd}
-      >
+      {/* Swipeable tab content — swipe left/right to switch tabs. flex-1 so
+          the gesture target fills the screen on short recipes; no min-h-0, so
+          long ones still grow the page rather than being clipped. */}
+      <div className="flex-1 flex flex-col overflow-hidden" {...swipe}>
+      <div ref={tabBodyRef} className="flex-1 flex flex-col">
+      {/* No per-panel fade: the horizontal slide is the tab transition, the
+          same as every other swipeable surface. */}
       {tab === 'ingredients' && (
-        <div className="animate-in">
+        <div>
           {/* Serving adjuster */}
           <div className="flex items-center justify-between bg-amber-50 border border-amber-100 rounded-xl px-4 py-3 mb-4">
             <span className="text-sm font-medium text-slate-700">Adjust servings</span>
@@ -309,7 +283,7 @@ export function RecipeDetailPage() {
       )}
 
       {tab === 'method' && (
-        <ol className="flex flex-col gap-4 animate-in">
+        <ol className="flex flex-col gap-4">
           {recipe.steps.map((step, i) => (
             <li key={i} className="flex gap-3">
               <span className="shrink-0 w-6 h-6 rounded-full bg-amber-500 text-white text-xs font-bold flex items-center justify-center mt-0.5">
@@ -320,6 +294,7 @@ export function RecipeDetailPage() {
           ))}
         </ol>
       )}
+      </div>
       </div>
 
       {/* Back button */}

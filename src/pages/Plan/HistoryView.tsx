@@ -2,6 +2,7 @@ import { useRef } from 'react';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { useStore } from '../../store';
 import { isoDate } from '../../lib/utils';
+import { useSwipeNavigate } from '../../hooks/useSwipeNavigate';
 
 interface HistoryViewProps {
   year: number;
@@ -15,7 +16,6 @@ export function HistoryView({ year, month, setYear, setMonth }: HistoryViewProps
   const recipes = useStore((s) => s.recipes);
 
   const today = new Date();
-  const touchStartX = useRef<number | null>(null);
   const gridRef = useRef<HTMLDivElement>(null);
 
   const applyMonth = (delta: number) => {
@@ -27,45 +27,12 @@ export function HistoryView({ year, month, setYear, setMonth }: HistoryViewProps
     setYear(newYear);
   };
 
-  const handleTouchStart = (e: React.TouchEvent) => {
-    touchStartX.current = e.touches[0].clientX;
-    if (gridRef.current) gridRef.current.style.transition = 'none';
-  };
-
-  const handleTouchMove = (e: React.TouchEvent) => {
-    if (touchStartX.current === null || !gridRef.current) return;
-    const delta = e.touches[0].clientX - touchStartX.current;
-    gridRef.current.style.transform = `translateX(${delta}px)`;
-  };
-
-  const handleTouchEnd = (e: React.TouchEvent) => {
-    if (touchStartX.current === null || !gridRef.current) return;
-    const delta = e.changedTouches[0].clientX - touchStartX.current;
-    touchStartX.current = null;
-    const el = gridRef.current;
-    const width = el.offsetWidth;
-
-    if (Math.abs(delta) > 50) {
-      const goNext = delta < 0;
-      el.style.transition = 'transform 0.2s ease-out';
-      el.style.transform = `translateX(${goNext ? -width : width}px)`;
-
-      setTimeout(() => {
-        applyMonth(goNext ? 1 : -1);
-        el.style.transition = 'none';
-        el.style.transform = `translateX(${goNext ? width : -width}px)`;
-        requestAnimationFrame(() => {
-          requestAnimationFrame(() => {
-            el.style.transition = 'transform 0.2s ease-out';
-            el.style.transform = 'translateX(0)';
-          });
-        });
-      }, 200);
-    } else {
-      el.style.transition = 'transform 0.2s ease-out';
-      el.style.transform = 'translateX(0)';
-    }
-  };
+  // Months run forever in both directions, so there is no edge to resist at.
+  const swipe = useSwipeNavigate({
+    contentRef: gridRef,
+    onNext: () => applyMonth(1),
+    onPrev: () => applyMonth(-1),
+  });
 
   const firstDay = new Date(year, month, 1);
   const lastDay = new Date(year, month + 1, 0);
@@ -93,12 +60,7 @@ export function HistoryView({ year, month, setYear, setMonth }: HistoryViewProps
   while (cells.length % 7 !== 0) cells.push(null);
 
   return (
-    <div
-      className="flex-1 flex flex-col gap-4 overflow-hidden min-h-0"
-      onTouchStart={handleTouchStart}
-      onTouchMove={handleTouchMove}
-      onTouchEnd={handleTouchEnd}
-    >
+    <div className="flex-1 flex flex-col gap-4 overflow-hidden min-h-0" {...swipe}>
       {/* Month navigator */}
       <div className="flex items-center justify-between">
         <button

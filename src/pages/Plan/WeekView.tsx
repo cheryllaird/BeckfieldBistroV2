@@ -1,6 +1,7 @@
 import { useRef } from 'react';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { getWeekDays, isoDate } from '../../lib/utils';
+import { useSwipeNavigate } from '../../hooks/useSwipeNavigate';
 import { DayRow } from './DayRow';
 
 interface WeekViewProps {
@@ -10,77 +11,14 @@ interface WeekViewProps {
 
 export function WeekView({ weekOffset, setWeekOffset }: WeekViewProps) {
   const days = getWeekDays(weekOffset);
-  const touchStartX = useRef<number | null>(null);
-  const touchStartY = useRef<number | null>(null);
-  const isScrollGesture = useRef<boolean | null>(null);
   const rowsRef = useRef<HTMLDivElement>(null);
 
-  const handleTouchStart = (e: React.TouchEvent) => {
-    touchStartX.current = e.touches[0].clientX;
-    touchStartY.current = e.touches[0].clientY;
-    isScrollGesture.current = null;
-    if (rowsRef.current) {
-      rowsRef.current.style.transition = 'none';
-    }
-  };
-
-  const handleTouchMove = (e: React.TouchEvent) => {
-    if (touchStartX.current === null || touchStartY.current === null || !rowsRef.current) return;
-    const deltaX = e.touches[0].clientX - touchStartX.current;
-    const deltaY = e.touches[0].clientY - touchStartY.current;
-
-    // Determine gesture direction once we have enough movement
-    if (isScrollGesture.current === null && (Math.abs(deltaX) > 8 || Math.abs(deltaY) > 8)) {
-      isScrollGesture.current = Math.abs(deltaY) > Math.abs(deltaX);
-    }
-
-    // Don't intercept vertical scrolling
-    if (isScrollGesture.current) return;
-
-    rowsRef.current.style.transform = `translateX(${deltaX}px)`;
-  };
-
-  const handleTouchEnd = (e: React.TouchEvent) => {
-    if (touchStartX.current === null || !rowsRef.current) return;
-    const delta = e.changedTouches[0].clientX - touchStartX.current;
-    touchStartX.current = null;
-    touchStartY.current = null;
-    const el = rowsRef.current;
-    const width = el.offsetWidth;
-
-    // Snap back if it was a vertical scroll gesture
-    if (isScrollGesture.current) {
-      isScrollGesture.current = null;
-      el.style.transition = 'transform 0.2s ease-out';
-      el.style.transform = 'translateX(0)';
-      return;
-    }
-    isScrollGesture.current = null;
-
-    if (Math.abs(delta) > 80) {
-      const goNext = delta < 0;
-      // Slide current week out
-      el.style.transition = 'transform 0.2s ease-out';
-      el.style.transform = `translateX(${goNext ? -width : width}px)`;
-
-      setTimeout(() => {
-        // Change week, snap to opposite side off-screen, then slide in
-        setWeekOffset((w) => w + (goNext ? 1 : -1));
-        el.style.transition = 'none';
-        el.style.transform = `translateX(${goNext ? width : -width}px)`;
-        requestAnimationFrame(() => {
-          requestAnimationFrame(() => {
-            el.style.transition = 'transform 0.2s ease-out';
-            el.style.transform = 'translateX(0)';
-          });
-        });
-      }, 200);
-    } else {
-      // Snap back
-      el.style.transition = 'transform 0.2s ease-out';
-      el.style.transform = 'translateX(0)';
-    }
-  };
+  // Weeks run forever in both directions, so there is no edge to resist at.
+  const swipe = useSwipeNavigate({
+    contentRef: rowsRef,
+    onNext: () => setWeekOffset((w) => w + 1),
+    onPrev: () => setWeekOffset((w) => w - 1),
+  });
 
   const weekLabel = () => {
     if (weekOffset === 0) return 'This Week';
@@ -91,12 +29,9 @@ export function WeekView({ weekOffset, setWeekOffset }: WeekViewProps) {
   };
 
   return (
-    <div
-      className="flex flex-col gap-3 overflow-hidden"
-      onTouchStart={handleTouchStart}
-      onTouchMove={handleTouchMove}
-      onTouchEnd={handleTouchEnd}
-    >
+    // flex-1 so the gesture target runs to the bottom of the screen; no
+    // min-h-0, so a tall week still grows the page instead of being clipped.
+    <div className="flex-1 flex flex-col gap-3 overflow-hidden" {...swipe}>
       {/* Week navigator */}
       <div className="flex items-center justify-between">
         <button
@@ -117,7 +52,7 @@ export function WeekView({ weekOffset, setWeekOffset }: WeekViewProps) {
       </div>
 
       {/* Day rows */}
-      <div ref={rowsRef} className="flex flex-col gap-2">
+      <div ref={rowsRef} className="flex-1 flex flex-col gap-2">
         {days.map((day) => (
           <DayRow key={isoDate(day)} date={day} />
         ))}

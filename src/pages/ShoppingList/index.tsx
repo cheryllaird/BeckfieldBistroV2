@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { useTouchDrag } from '../../hooks/useTouchDrag';
+import { useSwipeNavigate } from '../../hooks/useSwipeNavigate';
 import { useNavigate } from 'react-router-dom';
 import {
   ShoppingCart,
@@ -69,11 +70,7 @@ export function ShoppingListPage() {
   const [dropTargetIndex, setDropTargetIndex] = useState<number | null>(null);
   const draggingItemIdRef = useRef<string | null>(null);
   const dropTargetIndexRef = useRef<number | null>(null);
-  // Swipe-between-lists gesture (mirrors Plan/WeekView.tsx). The inner
-  // listBodyRef element slides on a translateX transform.
-  const swipeStartX = useRef<number | null>(null);
-  const swipeStartY = useRef<number | null>(null);
-  const swipeIsScroll = useRef<boolean | null>(null);
+  // Swipe-between-lists gesture. The inner listBodyRef element slides.
   const listBodyRef = useRef<HTMLDivElement>(null);
 
   const pushHistory = () => setHistory((h) => [...h, shoppingItems]);
@@ -232,69 +229,19 @@ export function ShoppingListPage() {
 
   const activeIndex = LIST_TABS.findIndex((t) => t.id === activeList);
 
-  // Horizontal swipe over the list body switches between Immediate / Stock up,
-  // with the same slide animation as the meal-plan week view. The vertical
-  // disambiguation (locking to a scroll gesture on the first >8px of movement)
-  // keeps it from fighting page scroll or edit-mode row drag-reordering.
-  const handleSwipeStart = (e: React.TouchEvent) => {
-    swipeStartX.current = e.touches[0].clientX;
-    swipeStartY.current = e.touches[0].clientY;
-    swipeIsScroll.current = null;
-    if (listBodyRef.current) listBodyRef.current.style.transition = 'none';
-  };
-
-  const handleSwipeMove = (e: React.TouchEvent) => {
-    if (swipeStartX.current === null || swipeStartY.current === null || !listBodyRef.current) return;
-    const deltaX = e.touches[0].clientX - swipeStartX.current;
-    const deltaY = e.touches[0].clientY - swipeStartY.current;
-    if (swipeIsScroll.current === null && (Math.abs(deltaX) > 8 || Math.abs(deltaY) > 8)) {
-      swipeIsScroll.current = Math.abs(deltaY) > Math.abs(deltaX);
-    }
-    if (swipeIsScroll.current) return;
-    // Resist dragging past the first / last list.
-    const hasNeighbor = deltaX < 0 ? activeIndex < LIST_TABS.length - 1 : activeIndex > 0;
-    listBodyRef.current.style.transform = `translateX(${hasNeighbor ? deltaX : deltaX * 0.25}px)`;
-  };
-
-  const handleSwipeEnd = (e: React.TouchEvent) => {
-    if (swipeStartX.current === null || !listBodyRef.current) return;
-    const delta = e.changedTouches[0].clientX - swipeStartX.current;
-    const wasScroll = swipeIsScroll.current;
-    swipeStartX.current = null;
-    swipeStartY.current = null;
-    swipeIsScroll.current = null;
-    const el = listBodyRef.current;
-    const width = el.offsetWidth;
-
-    const goNext = delta < 0;
-    const neighborIndex = goNext ? activeIndex + 1 : activeIndex - 1;
-    const canSwipe =
-      !wasScroll && Math.abs(delta) > 80 && neighborIndex >= 0 && neighborIndex < LIST_TABS.length;
-
-    if (!canSwipe) {
-      el.style.transition = 'transform 0.2s ease-out';
-      el.style.transform = 'translateX(0)';
-      return;
-    }
-
-    // Slide the current list out, switch, then slide the new list in.
-    el.style.transition = 'transform 0.2s ease-out';
-    el.style.transform = `translateX(${goNext ? -width : width}px)`;
-    setTimeout(() => {
-      setActiveList(LIST_TABS[neighborIndex].id);
-      el.style.transition = 'none';
-      el.style.transform = `translateX(${goNext ? width : -width}px)`;
-      requestAnimationFrame(() => {
-        requestAnimationFrame(() => {
-          el.style.transition = 'transform 0.2s ease-out';
-          el.style.transform = 'translateX(0)';
-        });
-      });
-    }, 200);
-  };
+  // Horizontal swipe over the list body switches between Immediate / Stock up.
+  const swipe = useSwipeNavigate({
+    contentRef: listBodyRef,
+    canGoNext: activeIndex < LIST_TABS.length - 1,
+    canGoPrev: activeIndex > 0,
+    onNext: () => setActiveList(LIST_TABS[activeIndex + 1].id),
+    onPrev: () => setActiveList(LIST_TABS[activeIndex - 1].id),
+  });
 
   return (
-    <div className="flex flex-col gap-4">
+    // flex-1 so the page fills the layout's <main>; the swipe body below then
+    // stretches to the bottom of the screen even when the list is short.
+    <div className="flex-1 flex flex-col gap-4">
       {/* Header */}
       <div className="flex flex-col gap-1">
         <div className="flex items-center justify-between gap-2">
@@ -358,14 +305,12 @@ export function ShoppingListPage() {
         ))}
       </div>
 
-      {/* Swipeable list body — swipe left/right to switch between lists */}
-      <div
-        className="overflow-hidden"
-        onTouchStart={handleSwipeStart}
-        onTouchMove={handleSwipeMove}
-        onTouchEnd={handleSwipeEnd}
-      >
-      <div ref={listBodyRef} className="flex flex-col gap-4">
+      {/* Swipeable list body — swipe left/right to switch between lists.
+          flex-1 (with the default min-height:auto, so long lists still push the
+          page taller instead of being clipped) makes the gesture target run to
+          the bottom of the screen, so a short list is still swipeable. */}
+      <div className="flex-1 flex flex-col overflow-hidden" {...swipe}>
+      <div ref={listBodyRef} className="flex-1 flex flex-col gap-4">
       {listItems.length === 0 ? (
         <div className="flex flex-col gap-5">
           <div className="flex flex-col items-center gap-4 py-10 text-center animate-fade">
