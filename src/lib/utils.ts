@@ -21,9 +21,25 @@ function singularWord(word: string): string {
 const PREP_CLAUSE_ADVERBS =
   'very|finely|coarsely|roughly|thinly|thickly|freshly|lightly|well|neatly|evenly|preferably|ideally|optionally';
 
+// Meats sold as mince. For these, "minced" names the product on the shelf and
+// stays in the name; minced anything else (garlic, ginger, chilli) is a knife
+// instruction. This is the closed set — what can be minced as prep is not.
+const MINCE_PRODUCT_MEATS = new Set([
+  'beef', 'bison', 'buffalo', 'chicken', 'duck', 'goat', 'lamb', 'meat', 'mutton',
+  'ostrich', 'pork', 'quorn', 'rabbit', 'soya', 'steak', 'turkey', 'veal', 'venison',
+]);
+
+/** Whether a name refers to something sold as mince ("beef", "chicken thigh"). */
+function isMinceProduct(name: string): boolean {
+  return name
+    .toLowerCase()
+    .split(/[\s-]+/)
+    .some((word) => MINCE_PRODUCT_MEATS.has(singularWord(word.replace(/[^a-z]/g, ''))));
+}
+
 // Verbs that mark the text after a comma as an instruction rather than part of
-// the ingredient's name. "minced" and "ground" are deliberately absent: mince
-// is a different thing to buy than a joint, so "beef, minced" keeps its clause.
+// the ingredient's name. "minced" and "ground" are deliberately absent — they
+// get their own rules below, since they often name the product instead.
 const PREP_CLAUSE_VERBS =
   'beaten|blanched|boiled|broken|bruised|chilled|chopped|cleaned|cooked|cored|crumbled|crushed|' +
   'cubed|defrosted|de-?seeded|deveined|diced|divided|drained|dried|flaked|grated|halved|' +
@@ -34,9 +50,12 @@ const PREP_CLAUSE_VERBS =
 const PREP_CLAUSE_PATTERNS: RegExp[] = [
   // "chopped", "finely diced", "peeled and grated"
   new RegExp(`^(?:(?:${PREP_CLAUSE_ADVERBS})\\s+)*(?:${PREP_CLAUSE_VERBS})\\b`),
-  // "freshly ground", "finely minced" — the modifier marks it as a prep step,
-  // where a bare "minced"/"ground" names the product you buy
-  new RegExp(`^(?:${PREP_CLAUSE_ADVERBS})\\s+(?:minced|ground)\\b`),
+  // "freshly ground" — modified, so it's a prep step; a bare "ground" names the
+  // product ("almonds, ground")
+  new RegExp(`^(?:${PREP_CLAUSE_ADVERBS})\\s+ground\\b`),
+  // "minced" is prep unless the ingredient is one that's sold as mince, which
+  // isPrepClause checks before reaching here
+  /^(?:[a-z]+ly\s+)?minced\b/,
   // "cut into florets", "torn in half"
   /^(?:cut|sliced|chopped|broken|torn|snapped)\s+(?:in|into)\b/,
   // "plus extra for dusting"
@@ -57,9 +76,11 @@ const PREP_CLAUSE_PATTERNS: RegExp[] = [
 /**
  * Whether a comma-separated clause is a preparation or serving instruction
  * ("cut into florets", "to taste") rather than part of the ingredient's name
- * ("self-raising" in "flour, self-raising").
+ * ("self-raising" in "flour, self-raising"). Needs the name the clause hangs
+ * off, because "minced" reads as prep for garlic but names the product for beef.
  */
-function isPrepClause(clause: string): boolean {
+function isPrepClause(clause: string, head: string): boolean {
+  if (/\bminced\b/.test(clause) && isMinceProduct(head)) return false;
   return PREP_CLAUSE_PATTERNS.some((pattern) => pattern.test(clause));
 }
 
@@ -70,7 +91,7 @@ function isPrepClause(clause: string): boolean {
  */
 function stripPrepClauses(name: string): string {
   const [head, ...rest] = name.split(',').map((part) => part.trim());
-  const kept = rest.filter((clause) => clause && !isPrepClause(clause));
+  const kept = rest.filter((clause) => clause && !isPrepClause(clause, head));
   return [head, ...kept].filter(Boolean).join(', ');
 }
 
@@ -119,9 +140,15 @@ export function canonicalizeIngredientName(name: string): string {
     ''
   );
 
-  // "minced"/"ground" only count as prep when modified ("freshly ground black
-  // pepper" → "black pepper"); bare, they name the product ("minced beef")
-  s = s.replace(/^(?:very|finely|coarsely|roughly|freshly|lightly|well)\s+(?:minced|ground)\s+/, '');
+  // "minced" is prep for everything except the meats sold as mince, and "ground"
+  // names the product ("ground almonds") unless a modifier marks it as a step
+  s = s.replace(
+    /^(?:(very|finely|coarsely|roughly|freshly|lightly|well)\s+)?(minced|ground)\s+(.+)$/,
+    (whole, modifier: string | undefined, word: string, rest: string) => {
+      if (word === 'minced') return isMinceProduct(rest) ? whole : rest;
+      return modifier ? rest : whole;
+    }
+  );
 
   // Strip leading quality/preparation modifiers
   s = s.replace(/^extra[- ]virgin\s+/, '');
