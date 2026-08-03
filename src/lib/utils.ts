@@ -17,6 +17,59 @@ function singularWord(word: string): string {
   return word;
 }
 
+// Adverbs that can lead a prep clause ("finely chopped", "freshly grated").
+const PREP_CLAUSE_ADVERBS =
+  'very|finely|coarsely|roughly|thinly|thickly|freshly|lightly|well|neatly|evenly|preferably|ideally|optionally';
+
+// Verbs that mark the text after a comma as an instruction rather than part of
+// the ingredient's name.
+const PREP_CLAUSE_VERBS =
+  'beaten|blanched|boiled|broken|bruised|chilled|chopped|cleaned|cooked|cored|crumbled|crushed|' +
+  'cubed|defrosted|de-?seeded|deveined|diced|divided|drained|dried|flaked|grated|ground|halved|' +
+  'julienned|mashed|melted|minced|peeled|pitted|pounded|pureed|quartered|reserved|rinsed|roasted|' +
+  'scrubbed|seeded|separated|shaved|shelled|shredded|sifted|skinned|sliced|smashed|soaked|softened|' +
+  'squeezed|stemmed|stoned|strained|thawed|toasted|torn|trimmed|warmed|washed|whipped|whisked|zested';
+
+const PREP_CLAUSE_PATTERNS: RegExp[] = [
+  // "chopped", "finely diced", "peeled and grated"
+  new RegExp(`^(?:(?:${PREP_CLAUSE_ADVERBS})\\s+)*(?:${PREP_CLAUSE_VERBS})\\b`),
+  // "cut into florets", "torn in half"
+  /^(?:cut|sliced|chopped|broken|torn|snapped)\s+(?:in|into)\b/,
+  // "plus extra for dusting"
+  /^(?:plus|and)\s+(?:extra|more|a little)\b/,
+  // "to taste", "to serve", "or to garnish"
+  /^(?:or\s+)?to\s+(?:taste|serve|garnish|finish|decorate|drizzle)\b/,
+  // "for frying", "for the garnish"
+  /^for\s+(?:the\s+)?(?:garnish|serving|topping|dusting|frying|drizzling|greasing|brushing|dredging|coating|sprinkling)\b/,
+  /^(?:at\s+)?room\s+temperature$/,
+  /^optional$/,
+  /^if\s+(?:needed|desired|using|preferred|liked|available)$/,
+  // "seeds removed", "stalks discarded", "juice reserved"
+  /\b(?:removed|discarded|reserved|left\s+whole|to\s+taste)$/,
+  // Portioning-only clauses ("basil, leaves")
+  /^(?:leaves|leaf|stalks?|sprigs?|cloves?|wedges?)$/,
+];
+
+/**
+ * Whether a comma-separated clause is a preparation or serving instruction
+ * ("cut into florets", "to taste") rather than part of the ingredient's name
+ * ("self-raising" in "flour, self-raising").
+ */
+function isPrepClause(clause: string): boolean {
+  return PREP_CLAUSE_PATTERNS.some((pattern) => pattern.test(clause));
+}
+
+/**
+ * Drops prep instructions written after a comma while keeping clauses that name
+ * the ingredient, so "broccoli, cut into florets" becomes "broccoli" but
+ * "chicken thighs, bone-in" survives intact.
+ */
+function stripPrepClauses(name: string): string {
+  const [head, ...rest] = name.split(',').map((part) => part.trim());
+  const kept = rest.filter((clause) => clause && !isPrepClause(clause));
+  return [head, ...kept].filter(Boolean).join(', ');
+}
+
 const UNIT_NORMALIZE_MAP: Record<string, string> = {
   gram: 'g', grams: 'g',
   kilogram: 'kg', kilograms: 'kg',
@@ -42,8 +95,9 @@ export function normalizeUnit(unit: string): string {
 export function canonicalizeIngredientName(name: string): string {
   let s = name.toLowerCase().trim();
 
-  // Strip prep instructions after a comma (e.g. "broccoli, cut into florets" → "broccoli")
-  s = s.replace(/\s*,.*$/, '');
+  // Strip prep instructions after a comma (e.g. "broccoli, cut into florets" → "broccoli"),
+  // keeping clauses that are part of the name (e.g. "flour, self-raising")
+  s = stripPrepClauses(s);
 
   // Rewrite "juice of [N] ingredient" → "[ingredient]" so it consolidates with the whole fruit/veg
   s = s.replace(/^juice of (?:\d+(?:[./]\d+)?\s+)?(.+)$/, (_, ingredient) => {
@@ -65,12 +119,13 @@ export function canonicalizeIngredientName(name: string): string {
   s = s.replace(/^extra[- ]virgin\s+/, '');
   s = s.replace(/^flat[- ]leaf(?:ed)?\s+/, '');
 
-  // Strip trailing preparation/portioning descriptors
-  s = s.replace(/\s+leaves?$/, '');
-  s = s.replace(/\s+stalks?$/, '');
-  s = s.replace(/\s+sprigs?$/, '');
-  s = s.replace(/\s+cloves?$/, '');   // "garlic cloves" → "garlic"
-  s = s.replace(/\s+wedges?$/, '');   // "lemon wedges" → "lemon"
+  // Strip trailing preparation/portioning descriptors. The leading capture stops
+  // these from reaching across a comma and leaving a dangling one behind.
+  s = s.replace(/([^,\s])\s+leaves?$/, '$1');
+  s = s.replace(/([^,\s])\s+stalks?$/, '$1');
+  s = s.replace(/([^,\s])\s+sprigs?$/, '$1');
+  s = s.replace(/([^,\s])\s+cloves?$/, '$1');   // "garlic cloves" → "garlic"
+  s = s.replace(/([^,\s])\s+wedges?$/, '$1');   // "lemon wedges" → "lemon"
 
   // Apply regional/American-English synonyms
   for (const [pattern, replacement] of WORD_SYNONYMS) {
