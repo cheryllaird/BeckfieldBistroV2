@@ -34,6 +34,9 @@ const PREP_CLAUSE_VERBS =
 const PREP_CLAUSE_PATTERNS: RegExp[] = [
   // "chopped", "finely diced", "peeled and grated"
   new RegExp(`^(?:(?:${PREP_CLAUSE_ADVERBS})\\s+)*(?:${PREP_CLAUSE_VERBS})\\b`),
+  // "freshly ground", "finely minced" — the modifier marks it as a prep step,
+  // where a bare "minced"/"ground" names the product you buy
+  new RegExp(`^(?:${PREP_CLAUSE_ADVERBS})\\s+(?:minced|ground)\\b`),
   // "cut into florets", "torn in half"
   /^(?:cut|sliced|chopped|broken|torn|snapped)\s+(?:in|into)\b/,
   // "plus extra for dusting"
@@ -110,12 +113,15 @@ export function canonicalizeIngredientName(name: string): string {
   // Strip " juice" from lemons and limes so "lemon juice" / "1 lemon juice" consolidates with "lemon"
   s = s.replace(/^(lemon|lime)s?\s+juice$/, '$1');
 
-  // Strip leading prep-method descriptors (e.g. "diced onion" → "onion", "finely chopped parsley" → "parsley").
-  // "minced"/"ground" are left alone here too, so "minced beef" stays mince.
+  // Strip leading prep-method descriptors (e.g. "diced onion" → "onion", "finely chopped parsley" → "parsley")
   s = s.replace(
     /^(?:(?:very|finely|coarsely|roughly|thinly|freshly|lightly|well)\s+)?(?:diced|chopped|cubed|julienned|blanched|trimmed|quartered|halved|pitted|seeded|de-?seeded|peeled|cored|crumbled|torn)\s+/,
     ''
   );
+
+  // "minced"/"ground" only count as prep when modified ("freshly ground black
+  // pepper" → "black pepper"); bare, they name the product ("minced beef")
+  s = s.replace(/^(?:very|finely|coarsely|roughly|freshly|lightly|well)\s+(?:minced|ground)\s+/, '');
 
   // Strip leading quality/preparation modifiers
   s = s.replace(/^extra[- ]virgin\s+/, '');
