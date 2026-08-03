@@ -22,11 +22,12 @@ const PREP_CLAUSE_ADVERBS =
   'very|finely|coarsely|roughly|thinly|thickly|freshly|lightly|well|neatly|evenly|preferably|ideally|optionally';
 
 // Verbs that mark the text after a comma as an instruction rather than part of
-// the ingredient's name.
+// the ingredient's name. "minced" and "ground" are deliberately absent: mince
+// is a different thing to buy than a joint, so "beef, minced" keeps its clause.
 const PREP_CLAUSE_VERBS =
   'beaten|blanched|boiled|broken|bruised|chilled|chopped|cleaned|cooked|cored|crumbled|crushed|' +
-  'cubed|defrosted|de-?seeded|deveined|diced|divided|drained|dried|flaked|grated|ground|halved|' +
-  'julienned|mashed|melted|minced|peeled|pitted|pounded|pureed|quartered|reserved|rinsed|roasted|' +
+  'cubed|defrosted|de-?seeded|deveined|diced|divided|drained|dried|flaked|grated|halved|' +
+  'julienned|mashed|melted|peeled|pitted|pounded|pureed|quartered|reserved|rinsed|roasted|' +
   'scrubbed|seeded|separated|shaved|shelled|shredded|sifted|skinned|sliced|smashed|soaked|softened|' +
   'squeezed|stemmed|stoned|strained|thawed|toasted|torn|trimmed|warmed|washed|whipped|whisked|zested';
 
@@ -109,9 +110,10 @@ export function canonicalizeIngredientName(name: string): string {
   // Strip " juice" from lemons and limes so "lemon juice" / "1 lemon juice" consolidates with "lemon"
   s = s.replace(/^(lemon|lime)s?\s+juice$/, '$1');
 
-  // Strip leading prep-method descriptors (e.g. "diced onion" → "onion", "finely chopped parsley" → "parsley")
+  // Strip leading prep-method descriptors (e.g. "diced onion" → "onion", "finely chopped parsley" → "parsley").
+  // "minced"/"ground" are left alone here too, so "minced beef" stays mince.
   s = s.replace(
-    /^(?:(?:very|finely|coarsely|roughly|thinly|freshly|lightly|well)\s+)?(?:diced|chopped|minced|cubed|julienned|blanched|trimmed|quartered|halved|pitted|seeded|de-?seeded|peeled|cored|crumbled|torn)\s+/,
+    /^(?:(?:very|finely|coarsely|roughly|thinly|freshly|lightly|well)\s+)?(?:diced|chopped|cubed|julienned|blanched|trimmed|quartered|halved|pitted|seeded|de-?seeded|peeled|cored|crumbled|torn)\s+/,
     ''
   );
 
