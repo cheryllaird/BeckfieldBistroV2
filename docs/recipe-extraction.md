@@ -212,7 +212,13 @@ JSON‑LD path.
 - `parseIngredientLine(line)` — splits quantity / unit / name; handles fractions and
   unicode (½, ⅓…). Preserves the full line as `originalText`.
 - `buildIngredientSections(lines)` / `looksLikeSectionHeader(line)` — group ingredients
-  under sub‑headers ("For the curry").
+  under sub‑headers ("For the curry"). A heading must show **positive** evidence:
+  trailing `:` or `/`, a `For the …` / `To serve` prefix, or a bare component word
+  ("Dressing"). The **absence of a quantity is deliberately not a signal** —
+  unquantified ingredients ("Thai chillies, to taste", "Salt") are ordinary, and
+  treating them as headings shattered flat ingredient lists into bogus sections.
+  Both callers (the JSON‑LD path and `parseRecipeText`'s sub‑header filter) share
+  this one predicate so they cannot drift.
 - `flattenInstructions(value)` — normalizes a `schema.org` `recipeInstructions`
   value into an ordered step list. Handles every shape real sites use: a single
   `Text` string (split on block separators — a bare string is **not** walked
@@ -308,6 +314,9 @@ trace through Tesseract's dynamic `require`. **Removing that glob breaks OCR at 
   structuring if `GEMINI_API_KEY` is set. Fixtures in `fixtures/`:
   `recipe-print.jpg` (clean single column), `recipe-twocol.jpg` and `recipe-real.jpg`
   (two‑column, exercise the reflow), `recipe-hard.jpg` (should fail the gate).
+- **`test-parsers.ts`** (`npx tsx test-parsers.ts`) — offline unit checks for the
+  deterministic parsers, concentrated on ingredient‑section splitting (heading vs.
+  unquantified ingredient). No network, key, or fixtures; exits non‑zero on failure.
 - **`forceOcr: true`** in the request body skips vision — use it to exercise/verify the
   OCR path directly.
 - **Server logs** carry `extractionMethod=…`, `ocr confidence=… chars=…
