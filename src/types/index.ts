@@ -62,7 +62,7 @@ export interface ShoppingItem {
   order?: number;
   manual?: boolean;
   mealSources?: MealSource[];
-  ingredientKey?: string; // normalizeIngredientName(name)__normalizeUnit(unit) for dedup
+  ingredientKey?: string; // normalizeIngredientName(name) for dedup; older items may carry a "name__unit" key
   // Per-field-group sync clocks (epoch-ms hybrid logical clock — see
   // lib/shoppingSync.ts). Each group of fields carries its own clock and syncs
   // independently, so concurrent edits to different aspects of the same item
