@@ -12,7 +12,10 @@ const WORD_SYNONYMS: Array<[RegExp, string]> = [
 
 function singularWord(word: string): string {
   if (word.endsWith('ies') && word.length > 4) return word.slice(0, -3) + 'y';
-  if (word.endsWith('es') && word.length > 4) return word.slice(0, -2);
+  // Only the hissing and -o stems take a full "es" plural ("tomatoes", "dishes",
+  // "boxes"). Everything else just gained an "s", so stripping "es" would eat a
+  // letter of the word itself — that's what turned "oranges" into "orang".
+  if (/(?:s|x|z|ch|sh|o)es$/.test(word) && word.length > 4) return word.slice(0, -2);
   if (word.endsWith('s') && !word.endsWith('ss') && !word.endsWith('us') && !word.endsWith('is') && word.length > 3) return word.slice(0, -1);
   return word;
 }
@@ -47,6 +50,12 @@ const PREP_CLAUSE_VERBS =
   'scrubbed|seeded|separated|shaved|shelled|shredded|sifted|skinned|sliced|smashed|soaked|softened|' +
   'squeezed|stemmed|stoned|strained|thawed|toasted|torn|trimmed|warmed|washed|whipped|whisked|zested';
 
+// Parts of an ingredient that a recipe may call for by name ("zest of a lemon",
+// "coriander leaves"). Naming a part doesn't change what goes in the basket.
+const INGREDIENT_PART_WORDS =
+  'zest|zested|juice|juiced|rind|peel|skin|pith|flesh|seeds?|stalks?|stems?|' +
+  'leaves|leaf|sprigs?|cloves?|wedges?|florets?|tops?|fronds?';
+
 const PREP_CLAUSE_PATTERNS: RegExp[] = [
   // "chopped", "finely diced", "peeled and grated"
   new RegExp(`^(?:(?:${PREP_CLAUSE_ADVERBS})\\s+)*(?:${PREP_CLAUSE_VERBS})\\b`),
@@ -69,8 +78,10 @@ const PREP_CLAUSE_PATTERNS: RegExp[] = [
   /^if\s+(?:needed|desired|using|preferred|liked|available)$/,
   // "seeds removed", "stalks discarded", "juice reserved"
   /\b(?:removed|discarded|reserved|left\s+whole|to\s+taste)$/,
-  // Portioning-only clauses ("basil, leaves")
-  /^(?:leaves|leaf|stalks?|sprigs?|cloves?|wedges?)$/,
+  // Clauses that name which part of the ingredient is used ("orange, zest and
+  // juice", "basil, leaves"). The part is a note about the same shopping item,
+  // so it drops out and the whole ingredient stays.
+  new RegExp(`^(?:the\\s+)?(?:${INGREDIENT_PART_WORDS})(?:\\s*(?:,|and|&|\\+|/|or)\\s*(?:${INGREDIENT_PART_WORDS}))*(?:\\s+only)?$`),
 ];
 
 /**
@@ -90,9 +101,92 @@ function isPrepClause(clause: string, head: string): boolean {
  * "chicken thighs, bone-in" survives intact.
  */
 function stripPrepClauses(name: string): string {
-  const [head, ...rest] = name.split(',').map((part) => part.trim());
+  const [head, ...rest] = splitClauses(name);
   const kept = rest.filter((clause) => clause && !isPrepClause(clause, head));
   return [head, ...kept].filter(Boolean).join(', ');
+}
+
+/** Splits on commas that separate clauses, ignoring commas inside brackets. */
+function splitClauses(text: string): string[] {
+  const parts: string[] = [];
+  let depth = 0;
+  let current = '';
+  for (const char of text) {
+    if (char === '(') depth += 1;
+    if (char === ')') depth = Math.max(0, depth - 1);
+    if (char === ',' && depth === 0) {
+      parts.push(current.trim());
+      current = '';
+    } else {
+      current += char;
+    }
+  }
+  parts.push(current.trim());
+  return parts;
+}
+
+// A bracketed size hint ("(400g tin)", "(about 4)") measures the same shopping
+// item rather than naming a different one.
+const AMOUNT_NOTE = new RegExp(
+  `^(?:about|approx\\.?|around|roughly)?\\s*[\\d./¼½¾⅓⅔⅛\\s-]*\\s*(?:${[
+    'g', 'kg', 'mg', 'ml', 'l', 'oz', 'lb', 'lbs', 'tsp', 'tbsp', 'cup', 'cups',
+    'grams?', 'kilograms?', 'ounces?', 'pounds?', 'millilitres?', 'milliliters?',
+    'litres?', 'liters?', 'teaspoons?', 'tablespoons?', 'cans?', 'tins?', 'jars?',
+    'packs?', 'packets?', 'bunch(?:es)?', 'bags?', 'slices?', 'pieces?',
+  ].join('|')})\\b|^(?:about|approx\\.?|around|roughly)?\\s*[\\d./¼½¾⅓⅔⅛\\s-]+$`
+);
+
+// Bracketed grades that describe which one to pick rather than what to buy.
+const GRADE_NOTE =
+  /^(?:extra\s+)?(?:large|small|medium|big|jumbo|ripe|unwaxed|organic|free[- ]range|any\s+colour|any\s+color)$/;
+
+/**
+ * Drops bracketed notes that describe the same ingredient — how it's prepared
+ * ("(finely chopped)"), which part is used ("(zest and juice)"), what size to
+ * buy ("(400g tin)") — while keeping brackets that name a different thing.
+ */
+function stripNoteParentheses(name: string): string {
+  return name
+    .replace(/\(([^()]*)\)/g, (_, note: string, offset: number) => {
+      const head = name.slice(0, offset).trim();
+      // A note can hold several clauses ("(large, beaten)"); each stands or falls
+      // on its own, and the brackets go only once nothing is left inside.
+      const kept = note
+        .split(',')
+        .map((clause) => clause.trim())
+        .filter(
+          (clause) =>
+            clause &&
+            !isPrepClause(clause, head) &&
+            !AMOUNT_NOTE.test(clause) &&
+            !GRADE_NOTE.test(clause)
+        );
+      return kept.length > 0 ? `(${kept.join(', ')})` : '';
+    })
+    .replace(/\s{2,}/g, ' ')
+    .trim();
+}
+
+// Measures too loose to add up ("a handful", "a pinch"). They lead an
+// ingredient's text as often as a real unit does.
+const VAGUE_MEASURE_WORDS =
+  'handful|pinch|dash|splash|knob|drizzle|glug|sprig|bunch|squeeze|few|grating';
+
+const LEADING_VAGUE_MEASURE = new RegExp(
+  `^(?:a|an|\\d+(?:[./]\\d+)?)?\\s*(${VAGUE_MEASURE_WORDS})s?\\s+of\\s+`
+);
+
+/**
+ * The loose measure an ingredient's name leads with, for lines that carry the
+ * amount in the name instead of the unit field ("a handful of coriander").
+ */
+function leadingVagueUnit(name: string): string {
+  return name.toLowerCase().trim().match(LEADING_VAGUE_MEASURE)?.[1] ?? '';
+}
+
+/** The unit an ingredient is measured in, falling back to one named in its text. */
+function ingredientUnit(ingredient: Pick<Ingredient, 'name' | 'unit'>): string {
+  return ingredient.unit.trim() || leadingVagueUnit(ingredient.name);
 }
 
 const UNIT_NORMALIZE_MAP: Record<string, string> = {
@@ -111,32 +205,145 @@ const UNIT_NORMALIZE_MAP: Record<string, string> = {
 
 export function normalizeUnit(unit: string): string {
   const lower = unit.toLowerCase().trim();
-  return Object.prototype.hasOwnProperty.call(UNIT_NORMALIZE_MAP, lower)
-    ? UNIT_NORMALIZE_MAP[lower]
-    : lower;
+  if (Object.prototype.hasOwnProperty.call(UNIT_NORMALIZE_MAP, lower)) {
+    return UNIT_NORMALIZE_MAP[lower];
+  }
+  // Units the map doesn't list are still plural half the time ("handfuls",
+  // "cans"); singularising keeps them from splitting into two entries.
+  return singularWord(lower);
+}
+
+// Units that convert within a family, sized in the family's base unit (g for
+// mass, ml for volume). Anything outside this table only adds up against
+// itself — two "cans" combine, a can and 400 g do not.
+const CONVERTIBLE_UNITS: Record<string, { family: string; inBase: number }> = {
+  mg: { family: 'mass', inBase: 0.001 },
+  g: { family: 'mass', inBase: 1 },
+  kg: { family: 'mass', inBase: 1000 },
+  oz: { family: 'mass', inBase: 28.35 },
+  lb: { family: 'mass', inBase: 453.59 },
+  ml: { family: 'volume', inBase: 1 },
+  l: { family: 'volume', inBase: 1000 },
+  tsp: { family: 'volume', inBase: 5 },
+  tbsp: { family: 'volume', inBase: 15 },
+  cup: { family: 'volume', inBase: 240 },
+};
+
+const VAGUE_UNITS = new Set(VAGUE_MEASURE_WORDS.split('|'));
+
+/**
+ * How prominently an amount should read on the shopping list. Whole items come
+ * first — they're what you pick off the shelf — then measured amounts, with
+ * loose ones like "a handful" last.
+ */
+function unitRank(unit: string): number {
+  if (!unit) return 0;
+  if (CONVERTIBLE_UNITS[unit]) return 1;
+  if (VAGUE_UNITS.has(unit)) return 3;
+  return 2;
+}
+
+const round2 = (n: number): number => Math.round(n * 100) / 100;
+
+// Symbols that read the same at any amount — "2 g", never "2 gs".
+const UNIT_ABBREVIATIONS = new Set(['g', 'kg', 'mg', 'ml', 'l', 'oz', 'lb', 'tsp', 'tbsp']);
+
+/** Puts a unit back in the plural when the amount calls for it ("2 handfuls"). */
+function displayUnit(unit: string, quantity: number): string {
+  if (!unit || quantity <= 1 || unit.endsWith('s') || UNIT_ABBREVIATIONS.has(unit)) return unit;
+  return /(?:s|x|z|ch|sh|o)$/.test(unit) ? `${unit}es` : `${unit}s`;
+}
+
+/** A quantity and unit as written on one recipe line ("2 tbsp", "1 handful"). */
+export interface IngredientAmount {
+  quantity: number;
+  unit: string;
+}
+
+/**
+ * Totals amounts of a single ingredient, one string per unit family. Amounts
+ * that convert are summed into the finest unit present ("1 kg" + "500 g" →
+ * "1500 g"); ones that don't stay side by side, ordered by unitRank.
+ */
+function summariseAmounts(amounts: readonly IngredientAmount[]): string[] {
+  const groups = new Map<string, { rank: number; order: number; byUnit: Map<string, number> }>();
+
+  for (const { quantity, unit } of amounts) {
+    const normUnit = normalizeUnit(unit);
+    const key = CONVERTIBLE_UNITS[normUnit]?.family ?? normUnit;
+    let group = groups.get(key);
+    if (!group) {
+      group = { rank: unitRank(normUnit), order: groups.size, byUnit: new Map() };
+      groups.set(key, group);
+    }
+    group.byUnit.set(normUnit, round2((group.byUnit.get(normUnit) ?? 0) + quantity));
+  }
+
+  return Array.from(groups.values())
+    .sort((a, b) => a.rank - b.rank || a.order - b.order)
+    .map(({ byUnit }) => {
+      const entries = Array.from(byUnit.entries());
+      if (entries.length > 1) {
+        // Same family, different units: total in the smallest one so the sum stays exact.
+        const [finestUnit] = entries.reduce((finest, entry) =>
+          CONVERTIBLE_UNITS[entry[0]].inBase < CONVERTIBLE_UNITS[finest[0]].inBase ? entry : finest
+        );
+        const base = entries.reduce((sum, [u, q]) => sum + q * CONVERTIBLE_UNITS[u].inBase, 0);
+        const total = round2(base / CONVERTIBLE_UNITS[finestUnit].inBase);
+        return `${formatQuantity(total)} ${displayUnit(finestUnit, total)}`;
+      }
+      const [unit, quantity] = entries[0];
+      // "salt, to taste" arrives as a bare name with no quantity — leave it bare.
+      if (quantity <= 0) return '';
+      return [formatQuantity(quantity), displayUnit(unit, quantity)].filter(Boolean).join(' ');
+    })
+    .filter(Boolean);
+}
+
+/**
+ * The shopping list label for an ingredient and everything the plan needs of
+ * it. Amounts that can't be added together trail the name in brackets, so a
+ * lemon wanted whole by one recipe and juiced by another reads
+ * "1 lemon (+ 2 tbsp)" instead of splitting into two things to buy.
+ */
+export function formatItemName(amounts: readonly IngredientAmount[], name: string): string {
+  const [lead, ...extra] = summariseAmounts(amounts);
+  const head = [lead ?? '', name].filter(Boolean).join(' ');
+  return extra.length > 0 ? `${head} (+ ${extra.join(', ')})` : head;
 }
 
 /** Returns the canonical display name for an ingredient (normalises synonyms, strips redundant modifiers). */
 export function canonicalizeIngredientName(name: string): string {
   let s = name.toLowerCase().trim();
 
+  // Drop bracketed notes about the same ingredient (e.g. "orange (zest and juice)" → "orange")
+  s = stripNoteParentheses(s);
+
   // Strip prep instructions after a comma (e.g. "broccoli, cut into florets" → "broccoli"),
   // keeping clauses that are part of the name (e.g. "flour, self-raising")
   s = stripPrepClauses(s);
 
-  // Rewrite "juice of [N] ingredient" → "[ingredient]" so it consolidates with the whole fruit/veg
-  s = s.replace(/^juice of (?:\d+(?:[./]\d+)?\s+)?(.+)$/, (_, ingredient) => {
-    const words = ingredient.trim().split(/\s+/);
-    words[words.length - 1] = singularWord(words[words.length - 1]);
-    return words.join(' ');
-  });
+  // Rewrite "[zest/juice] of [N] ingredient" → "[ingredient]" so it consolidates with the whole fruit/veg
+  s = s.replace(
+    new RegExp(
+      `^(?:the\\s+)?(?:(?:finely|coarsely|freshly)\\s+)?(?:grated\\s+)?(?:zest|juice|rind|peel)` +
+        `(?:\\s*(?:,|and|&|\\+|/|or)\\s*(?:zest|juice|rind|peel))*\\s+of\\s+(?:\\d+(?:[./]\\d+)?\\s+)?(.+)$`
+    ),
+    (_, ingredient: string) => {
+      const words = ingredient.trim().split(/\s+/);
+      words[words.length - 1] = singularWord(words[words.length - 1]);
+      return words.join(' ');
+    }
+  );
 
-  // Strip " juice" from lemons and limes so "lemon juice" / "1 lemon juice" consolidates with "lemon"
-  s = s.replace(/^(lemon|lime)s?\s+juice$/, '$1');
+  // Strip a loose leading measure ("a handful of coriander" → "coriander"); the
+  // amount belongs on the ingredient's quantity/unit, not in its name.
+  s = s.replace(LEADING_VAGUE_MEASURE, '');
+  s = s.replace(/^of\s+/, '');
 
   // Strip leading prep-method descriptors (e.g. "diced onion" → "onion", "finely chopped parsley" → "parsley")
   s = s.replace(
-    /^(?:(?:very|finely|coarsely|roughly|thinly|freshly|lightly|well)\s+)?(?:diced|chopped|cubed|julienned|blanched|trimmed|quartered|halved|pitted|seeded|de-?seeded|peeled|cored|crumbled|torn)\s+/,
+    /^(?:(?:very|finely|coarsely|roughly|thinly|freshly|lightly|well)\s+)?(?:diced|chopped|cubed|julienned|blanched|trimmed|quartered|halved|pitted|seeded|de-?seeded|peeled|cored|crumbled|torn|squeezed)\s+/,
     ''
   );
 
@@ -153,6 +360,18 @@ export function canonicalizeIngredientName(name: string): string {
   // Strip leading quality/preparation modifiers
   s = s.replace(/^extra[- ]virgin\s+/, '');
   s = s.replace(/^flat[- ]leaf(?:ed)?\s+/, '');
+  // "fresh coriander" is the same bunch as "coriander"; "dried" is deliberately
+  // absent, since dried herbs are a different product on a different shelf.
+  s = s.replace(/^(?:fresh|freshly)\s+(?=\S)/, '');
+  // Sizes describe the pick, not the product ("2 large oranges" → oranges)
+  s = s.replace(/^(?:large|small|medium|big|ripe|unwaxed)\s+(?=\S)/, '');
+
+  // Strip the part-of-the-fruit suffix from citrus, so "lemon juice" / "orange
+  // zest" consolidate with the whole fruit they're squeezed or grated from.
+  // Only lemons and limes lose " juice" — orange and grapefruit juice are things
+  // you buy by the carton.
+  s = s.replace(/^(lemon|lime)s?\s+juice$/, '$1');
+  s = s.replace(/^(lemon|lime|orange|grapefruit|clementine|satsuma|mandarin)s?\s+(?:zest|rind|peel)$/, '$1');
 
   // Strip trailing preparation/portioning descriptors. The leading capture stops
   // these from reaching across a comma and leaving a dangling one behind.
@@ -172,17 +391,9 @@ export function canonicalizeIngredientName(name: string): string {
 
 export function normalizeIngredientName(name: string): string {
   const s = canonicalizeIngredientName(name);
-  // Singularise for deduplication key generation
-  if (s.endsWith('ies') && s.length > 4) return s.slice(0, -3) + 'y';
-  if (s.endsWith('es') && s.length > 4) return s.slice(0, -2);
-  if (
-    s.endsWith('s') &&
-    !s.endsWith('ss') &&
-    !s.endsWith('us') &&
-    !s.endsWith('is') &&
-    s.length > 3
-  ) return s.slice(0, -1);
-  return s;
+  // Singularise the head noun for deduplication key generation
+  const cut = Math.max(s.lastIndexOf(' '), s.lastIndexOf('-')) + 1;
+  return s.slice(0, cut) + singularWord(s.slice(cut));
 }
 
 // Words that describe a *variant* of a staple rather than a different
@@ -409,9 +620,10 @@ export function consolidateIngredients(
     recipeTitle?: string;
   }[]
 ): ShoppingItem[] {
+  // Keyed on the ingredient alone, not the unit, so the same thing measured two
+  // ways ("1 lemon", "2 tbsp lemon juice") lands on one line of the list.
   const map = new Map<string, {
-    quantity: number;
-    unit: string;
+    amounts: IngredientAmount[];
     name: string;
     category: ShoppingCategory;
     sources: MealSource[];
@@ -420,22 +632,19 @@ export function consolidateIngredients(
   for (const { ingredients, servings, originalServings, mealEntryId, recipeTitle } of ingredientGroups) {
     for (const ing of ingredients) {
       const scaled = scaleIngredient(ing, originalServings, servings);
-      const key = `${normalizeIngredientName(scaled.name)}__${normalizeUnit(scaled.unit)}`;
-      const existing = map.get(key);
+      const key = normalizeIngredientName(scaled.name);
+      const unit = ingredientUnit(scaled);
       const newSource: MealSource | undefined =
         mealEntryId && recipeTitle
-          ? { mealEntryId, recipeTitle, scaledQuantity: scaled.quantity, unit: scaled.unit, ingredientName: scaled.name }
+          ? { mealEntryId, recipeTitle, scaledQuantity: scaled.quantity, unit, ingredientName: scaled.name }
           : undefined;
+      const existing = map.get(key);
       if (existing) {
-        map.set(key, {
-          ...existing,
-          quantity: Math.round((existing.quantity + scaled.quantity) * 100) / 100,
-          sources: newSource ? [...existing.sources, newSource] : existing.sources,
-        });
+        existing.amounts.push({ quantity: scaled.quantity, unit });
+        if (newSource) existing.sources.push(newSource);
       } else {
         map.set(key, {
-          quantity: scaled.quantity,
-          unit: normalizeUnit(scaled.unit),
+          amounts: [{ quantity: scaled.quantity, unit }],
           name: canonicalizeIngredientName(scaled.name),
           category: categorize(scaled.name),
           sources: newSource ? [newSource] : [],
@@ -445,9 +654,9 @@ export function consolidateIngredients(
   }
 
   return Array.from(map.entries())
-    .map(([key, { quantity, unit, name, category, sources }]) => ({
+    .map(([key, { amounts, name, category, sources }]) => ({
       id: generateId(),
-      name: [quantity > 0 ? formatQuantity(quantity) : '', unit, name].filter(Boolean).join(' '),
+      name: formatItemName(amounts, name),
       category,
       checked: false,
       mealSources: sources.length > 0 ? sources : undefined,
@@ -470,12 +679,16 @@ export function mergeIntoShoppingList(
     // Never add what the user already keeps in their store cupboard.
     if (findPantryMatch(ing.name, pantryItems)) continue;
 
-    const scaledQty = Math.round(ing.quantity * scale * 100) / 100;
-    const normUnit = normalizeUnit(ing.unit);
-    const key = `${normalizeIngredientName(ing.name)}__${normUnit}`;
+    const scaledQty = round2(ing.quantity * scale);
+    const normUnit = normalizeUnit(ingredientUnit(ing));
+    const key = normalizeIngredientName(ing.name);
     const canonicalName = canonicalizeIngredientName(ing.name);
 
-    const existingIndex = result.findIndex((item) => item.ingredientKey === key);
+    // Lists generated before consolidation went unit-agnostic carry keys of the
+    // form "name__unit"; those items are still the same ingredient.
+    const existingIndex = result.findIndex(
+      (item) => item.ingredientKey === key || item.ingredientKey?.startsWith(`${key}__`)
+    );
 
     if (existingIndex >= 0) {
       const existingItem = result[existingIndex];
@@ -487,24 +700,27 @@ export function mergeIntoShoppingList(
         mealEntryId: mealEntryId ?? '',
         recipeTitle: recipeTitle ?? '',
         scaledQuantity: scaledQty,
-        unit: ing.unit,
+        unit: normUnit,
         ingredientName: ing.name,
       };
       const newSources = [...(existingItem.mealSources ?? []), newSource];
-      const totalQty = Math.round(newSources.reduce((sum, s) => sum + s.scaledQuantity, 0) * 100) / 100;
       result[existingIndex] = {
         ...existingItem,
-        name: [totalQty > 0 ? formatQuantity(totalQty) : '', normUnit, canonicalName].filter(Boolean).join(' '),
+        name: formatItemName(
+          newSources.map((s) => ({ quantity: s.scaledQuantity, unit: s.unit })),
+          canonicalName
+        ),
         mealSources: newSources,
+        ingredientKey: key,
       };
     } else {
       // Fall back to text match for manually-added items without an ingredientKey
-      const text = [scaledQty > 0 ? formatQuantity(scaledQty) : '', normUnit, canonicalName].filter(Boolean).join(' ');
+      const text = formatItemName([{ quantity: scaledQty, unit: normUnit }], canonicalName);
       if (result.some((item) => item.name.toLowerCase() === text.toLowerCase() && !item.ingredientKey)) {
         continue;
       }
       const newSource: MealSource | undefined = mealEntryId
-        ? { mealEntryId, recipeTitle: recipeTitle ?? '', scaledQuantity: scaledQty, unit: ing.unit, ingredientName: ing.name }
+        ? { mealEntryId, recipeTitle: recipeTitle ?? '', scaledQuantity: scaledQty, unit: normUnit, ingredientName: ing.name }
         : undefined;
       result.push({
         id: generateId(),

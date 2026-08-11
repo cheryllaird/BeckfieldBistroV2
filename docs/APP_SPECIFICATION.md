@@ -219,28 +219,51 @@ existing list.
 ### 6.1 Unit normalisation
 Units are canonicalised so equivalent measures match and combine: grams→g,
 kilograms→kg, ounces→oz, pounds→lb, millilitres→ml, litres→l, teaspoons→tsp,
-tablespoons→tbsp, cups (plural→singular), etc. **Count-style "units" that carry no
-real measure** — clove, piece, each, whole — are treated as *no unit*, so "2 cloves
-garlic" and "2 garlic" reconcile.
+tablespoons→tbsp, cups and other unlisted units singularised (cans→can,
+handfuls→handful), etc. **Count-style "units" that carry no real measure** —
+clove, piece, each, whole — are treated as *no unit*, so "2 cloves garlic" and
+"2 garlic" reconcile.
 
 ### 6.2 Name normalisation
 Ingredient names are reduced to a canonical form for matching:
 
-- **Singular/plural unified** (tomatoes ↔ tomato).
+- **Singular/plural unified** (tomatoes ↔ tomato), keeping the whole word — only
+  the hissing and -o stems take a full "es" plural, so oranges → orange but
+  tomatoes → tomato.
 - **Prep descriptors stripped** — leading ("finely chopped parsley" → parsley,
   "diced onion" → onion) and trailing ("garlic cloves" → garlic, "basil leaves" →
   basil, "lemon wedges" → lemon).
 - **Comma clauses dropped** ("broccoli, cut into florets" → broccoli).
-- **Juice phrasing folded** ("juice of 1 lemon" and "lemon juice" → lemon) so it
-  consolidates with the whole fruit.
+- **Bracketed notes dropped** when they describe the same ingredient — prep
+  ("(finely chopped)"), the part used ("orange (zest and juice)" → orange), the
+  size to buy ("(400g tin)"), or the grade ("egg (large, beaten)" → egg).
+  Brackets naming a different thing are kept.
+- **Part-of-the-ingredient phrasing folded** ("juice of 1 lemon", "lemon juice",
+  "zest of an orange" → the whole fruit). Orange and grapefruit keep their
+  " juice", since that one is bought by the carton.
+- **Loose measures pulled out of the name** ("a handful of coriander" →
+  coriander, measured as 1 handful).
+- **Freshness and size qualifiers stripped** ("fresh coriander" → coriander,
+  "2 large oranges" → orange). "Dried" is deliberately kept — dried herbs are a
+  different product on a different shelf.
 - **Regional synonyms unified** — cilantro↔coriander, zucchini↔courgette,
   eggplant↔aubergine, scallion / green onion↔spring onion, arugula↔rocket.
 
 ### 6.3 Consolidation
-Items sharing the same *(normalised name + normalised unit)* key are merged and
-their **quantities summed** (each scaled to its meal's servings first). The merged
-line is rendered as "quantity unit name" with the quantity as a friendly fraction
-(e.g. "1 ½ cup flour").
+Items sharing the same *normalised name* are merged — the unit is **not** part of
+the key, so an ingredient a plan wants two ways still lands on one line of the
+list. Quantities (scaled to each meal's servings first) are then summed per unit
+family:
+
+- **Convertible units add up**, totalled in the finest unit present: 1 kg + 500 g
+  → "1500 g", 2 tbsp + 1 tsp → "7 tsp". Mass (mg/g/kg/oz/lb) and volume
+  (ml/l/tsp/tbsp/cup) are the two families.
+- **Amounts that can't be added** sit side by side, with the one worth shopping by
+  first — whole items, then measured amounts, then loose ones like a handful:
+  "1 lemon (+ 2 tbsp)", "100 g coriander (+ 1 handful)".
+
+Quantities render as friendly fractions (e.g. "1 ½ cup flour"), and units are
+put back in the plural where it reads better ("2 handfuls").
 
 ### 6.4 Category auto-detection
 Every item is auto-assigned to one of ten grocery categories — **Vegetables,
