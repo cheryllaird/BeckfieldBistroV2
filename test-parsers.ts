@@ -55,6 +55,20 @@ for (const line of [
   '2 cloves garlic',
   '1/2 cup roasted peanuts',
   '½ tsp sugar',
+  // Informal amounts, the other family of quantity-less ingredients. These
+  // measure by comparison ("thumb-sized") or by container ("small bunch of"),
+  // so no leading number and no unit at the start of the line. Note that "piece"
+  // and "bunch" ARE unit words, but unitRe is anchored — it never reaches them.
+  'thumb-sized piece of ginger, shredded',
+  'thumb-sized piece of ginger, finely grated',
+  'a thumb-sized piece of ginger',
+  'small bunch of coriander, chopped',
+  'handful of roasted cashews',
+  'pinch of sugar',
+  // A trailing "to serve"/"for frying" is an ingredient's note, not a heading —
+  // only the same words at the START of a line title a group.
+  'sesame oil, to serve',
+  'vegetable oil, for frying',
 ]) {
   check(`ingredient: "${line}"`, looksLikeSectionHeader(line), false);
 }
