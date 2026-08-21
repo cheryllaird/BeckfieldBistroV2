@@ -235,7 +235,11 @@ export function RecipeForm({ initial, knownSources, onSave, onCancel, isSaving }
               )}
               <button
                 type="button"
-                onClick={() => setCoverImage('')}
+                onClick={() => {
+                  setCoverImage('');
+                  setShowCoverActions(false);
+                  setShowUrlEntry(true);
+                }}
                 className="absolute top-2 right-2 bg-black/40 hover:bg-black/60 text-white rounded-full p-1.5 transition-colors"
                 aria-label="Remove cover image"
               >
