@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Plus, Trash2, Loader, Camera, X, Link, UtensilsCrossed } from 'lucide-react';
 import type { Recipe, Ingredient, IngredientSection } from '../../types';
 import { Button } from '../../components/ui/Button';
@@ -53,6 +53,7 @@ export function RecipeForm({ initial, knownSources, onSave, onCancel, isSaving }
   const [showCoverActions, setShowCoverActions] = useState(false);
   const [showCoverCamera, setShowCoverCamera] = useState(false);
   const [showUrlEntry, setShowUrlEntry] = useState(false);
+  const urlInputRef = useRef<HTMLInputElement>(null);
   const [imgError, setImgError] = useState(false);
   useEffect(() => { setImgError(false); }, [coverImage]);
 
@@ -312,18 +313,33 @@ export function RecipeForm({ initial, knownSources, onSave, onCancel, isSaving }
                   placeholder="Paste an image URL…"
                   value={coverImage.startsWith('data:') ? '' : coverImage}
                   onChange={(e) => setCoverImage(e.target.value)}
+                  inputRef={urlInputRef}
                   // eslint-disable-next-line jsx-a11y/no-autofocus
                   autoFocus
                 />
               </div>
-              <button
-                type="button"
-                onClick={() => setShowUrlEntry(false)}
-                className="mt-2.5 text-slate-400 hover:text-slate-600 transition-colors"
-                aria-label="Done"
-              >
-                <X size={15} />
-              </button>
+              {coverImage && !coverImage.startsWith('data:') ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setCoverImage('');
+                    urlInputRef.current?.focus();
+                  }}
+                  className="mt-2.5 text-slate-400 hover:text-slate-600 transition-colors"
+                  aria-label="Clear URL"
+                >
+                  <X size={15} />
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => setShowUrlEntry(false)}
+                  className="mt-2.5 text-xs font-medium text-slate-400 hover:text-slate-600 transition-colors whitespace-nowrap"
+                  aria-label="Done entering URL"
+                >
+                  Done
+                </button>
+              )}
             </div>
           )}
         </div>

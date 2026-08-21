@@ -1,13 +1,14 @@
-import type { InputHTMLAttributes, ReactNode } from 'react';
+import type { InputHTMLAttributes, ReactNode, Ref } from 'react';
 
 interface Props extends InputHTMLAttributes<HTMLInputElement> {
   label?: string;
   error?: string;
   icon?: ReactNode;
   hint?: string;
+  inputRef?: Ref<HTMLInputElement>;
 }
 
-export function Input({ label, error, icon, hint, className = '', ...props }: Props) {
+export function Input({ label, error, icon, hint, className = '', inputRef, ...props }: Props) {
   return (
     <div className="flex flex-col gap-1">
       {label && (
@@ -22,6 +23,7 @@ export function Input({ label, error, icon, hint, className = '', ...props }: Pr
           </span>
         )}
         <input
+          ref={inputRef}
           {...props}
           className={[
             'w-full rounded-xl border bg-white px-4 py-2.5 text-sm text-slate-800 placeholder-slate-400',
