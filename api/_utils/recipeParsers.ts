@@ -125,18 +125,34 @@ export function flattenInstructions(instructions: unknown): string[] {
   return steps.filter(Boolean);
 }
 
+// "For the dressing", "To serve", "To make the paste" — a heading announces the
+// group that follows. The prefix must be followed by a word so a bare "For" or
+// an ingredient opening with "Fortified…" cannot match.
+const HEADER_PREFIX_RE = /^(?:for\s+(?:the\s+|a\s+)?\S|to\s+(?:make|serve|assemble|finish|garnish)\b)/i;
+// A bare component name on its own line ("Dressing", "GARNISH"). Anchored at both
+// ends: "Dressing" is a heading, "Dressing of choice" is an ingredient.
+const HEADER_WORD_RE =
+  /^(?:sauce|dressing|marinade|topping|toppings|garnish|glaze|filling|crust|batter|coating|salad|dip|base|paste|seasoning|assembly)$/i;
+
+// Whether a line titles a group of ingredients rather than being one.
+//
+// A heading must show POSITIVE evidence of being one. The absence of a quantity
+// is not evidence: unquantified ingredients are ordinary ("Thai chillies, to
+// taste", "Salt", "Fresh cilantro for garnish"). An earlier rule here treated
+// any line the quantity parser couldn't read as a heading, which turned every
+// such ingredient into a section title and split the list at that point —
+// hot-thai-kitchen.com's papaya salad broke at "Thai chillies, to taste".
 export function looksLikeSectionHeader(line: string): boolean {
   const trimmed = line.trim();
   if (trimmed.length === 0 || trimmed.length > 60) return false;
   // If it starts with a digit or fraction character it's an ingredient amount
   if (/^[\d¼½¾⅓⅔⅛]/.test(trimmed)) return false;
-  // Explicit colon at end is a strong signal
-  if (trimmed.endsWith(':')) return true;
-  // Common section-heading prefixes
-  if (/^(for |to make |sauce|dressing|marinade|topping|garnish|glaze|filling|crust|batter|coating)/i.test(trimmed)) return true;
-  // If the ingredient parser finds nothing useful, treat as header
-  const parsed = parseIngredientLine(trimmed);
-  if (parsed.quantity === 0 && parsed.unit === '' && parsed.name === trimmed) return true;
+  // Explicit trailing punctuation is the strongest signal — a colon, or the
+  // slash some cookbook layouts use ("For the curry /")
+  if (/[:/]\s*$/.test(trimmed)) return true;
+  if (HEADER_PREFIX_RE.test(trimmed)) return true;
+  // Case-insensitive, so all-caps headings ("DRESSING") are covered too
+  if (HEADER_WORD_RE.test(trimmed)) return true;
   return false;
 }
 
@@ -305,9 +321,10 @@ export function parseRecipeText(ocrText: string): ParsedRecipeText {
     if (amountIdx.length > 0) {
       const first = amountIdx[0];
       const last = amountIdx[amountIdx.length - 1];
-      // A sub-header ends with "/" or ":" or opens with "For the…" — distinct
-      // enough not to swallow wrapped ingredient continuations ("cut into …")
-      const isSubHeader = (l: string) => /[/:]\s*$/.test(l) || /^(for |to make )/i.test(l.trim());
+      // Sub-headers use the same test as the section splitter below, so the two
+      // cannot drift: a line admitted here as a header is one there too. It is
+      // narrow enough not to swallow wrapped ingredient continuations ("cut into …").
+      const isSubHeader = looksLikeSectionHeader;
       ingredientLines = lines.slice(first, last + 1).filter((l) => isAmount(l) || isSubHeader(l));
       if (first > 0 && isSubHeader(lines[first - 1])) ingredientLines.unshift(lines[first - 1]);
       stepLines = lines
