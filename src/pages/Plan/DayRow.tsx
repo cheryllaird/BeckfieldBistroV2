@@ -16,7 +16,8 @@ const MEAL_TIME_ORDER: Record<MealTime, number> = {
   breakfast: 0,
   lunch: 1,
   dinner: 2,
-  snack: 3,
+  side: 3,
+  snack: 4,
 };
 
 
@@ -38,8 +39,8 @@ export function DayRow({ date }: Props) {
 
   const dayEntries = mealEntries.filter((e) => e.date === iso);
   const sortedEntries = [...dayEntries].sort((a, b) => {
-    const aOrder = a.mealTime !== undefined ? MEAL_TIME_ORDER[a.mealTime] : 4;
-    const bOrder = b.mealTime !== undefined ? MEAL_TIME_ORDER[b.mealTime] : 4;
+    const aOrder = a.mealTime !== undefined ? MEAL_TIME_ORDER[a.mealTime] : 5;
+    const bOrder = b.mealTime !== undefined ? MEAL_TIME_ORDER[b.mealTime] : 5;
     return aOrder - bOrder;
   });
 
@@ -226,6 +227,7 @@ function MealChip({ entry, title, coverImage, onClick, onDelete, onServingsChang
               <option value="breakfast">Breakfast</option>
               <option value="lunch">Lunch</option>
               <option value="dinner">Dinner</option>
+              <option value="side">Side</option>
               <option value="snack">Snack</option>
             </select>
           </div>

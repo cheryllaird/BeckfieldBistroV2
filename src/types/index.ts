@@ -29,7 +29,7 @@ export interface Recipe {
 }
 
 export type MealEntryType = 'recipe' | 'custom' | 'dining-out';
-export type MealTime = 'breakfast' | 'lunch' | 'dinner' | 'snack';
+export type MealTime = 'breakfast' | 'lunch' | 'dinner' | 'side' | 'snack';
 
 export interface MealEntry {
   id: string;
