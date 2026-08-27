@@ -2,8 +2,8 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Plus, UtensilsCrossed, MapPin, FileText, Minus, Trash2, ShoppingCart, CalendarDays, CalendarPlus, ChevronDown, Check, Users } from 'lucide-react';
 import { useStore } from '../../store';
-import { formatDayLabel, isoDate, mergeIntoShoppingList, getRecipeIngredients } from '../../lib/utils';
-import type { MealEntry, MealTime } from '../../types';
+import { formatDayLabel, isoDate, mergeIntoShoppingList, getRecipeIngredients, categorize, generateId } from '../../lib/utils';
+import type { MealEntry, MealTime, ShoppingItem } from '../../types';
 import { PlanMealModal } from './PlanMealModal';
 import { ChangeDayModal } from './ChangeDayModal';
 import { ModalPortal } from '../../components/ui/ModalPortal';
@@ -16,7 +16,8 @@ const MEAL_TIME_ORDER: Record<MealTime, number> = {
   breakfast: 0,
   lunch: 1,
   dinner: 2,
-  snack: 3,
+  side: 3,
+  snack: 4,
 };
 
 
@@ -38,8 +39,8 @@ export function DayRow({ date }: Props) {
 
   const dayEntries = mealEntries.filter((e) => e.date === iso);
   const sortedEntries = [...dayEntries].sort((a, b) => {
-    const aOrder = a.mealTime !== undefined ? MEAL_TIME_ORDER[a.mealTime] : 4;
-    const bOrder = b.mealTime !== undefined ? MEAL_TIME_ORDER[b.mealTime] : 4;
+    const aOrder = a.mealTime !== undefined ? MEAL_TIME_ORDER[a.mealTime] : 5;
+    const bOrder = b.mealTime !== undefined ? MEAL_TIME_ORDER[b.mealTime] : 5;
     return aOrder - bOrder;
   });
 
@@ -66,13 +67,29 @@ export function DayRow({ date }: Props) {
   };
 
   const handleAddToShoppingList = (entry: MealEntry) => {
-    if (entry.type !== 'recipe' || !entry.recipeId) return;
-    const recipe = recipes.find((r) => r.id === entry.recipeId);
-    if (!recipe) return;
-    const scale = recipe.servings > 0 ? entry.servings / recipe.servings : 1;
-    setShoppingItems(
-      mergeIntoShoppingList(shoppingItems, getRecipeIngredients(recipe), scale, entry.id, recipe.title, pantryItems)
-    );
+    if (entry.type === 'recipe' && entry.recipeId) {
+      const recipe = recipes.find((r) => r.id === entry.recipeId);
+      if (!recipe) return;
+      const scale = recipe.servings > 0 ? entry.servings / recipe.servings : 1;
+      setShoppingItems(
+        mergeIntoShoppingList(shoppingItems, getRecipeIngredients(recipe), scale, entry.id, recipe.title, pantryItems)
+      );
+      return;
+    }
+    if (entry.type === 'custom') {
+      const title = (entry.customTitle ?? '').trim();
+      if (!title || isInShoppingList(entry.id)) return;
+      const newItem: ShoppingItem = {
+        id: generateId(),
+        name: title,
+        category: categorize(title),
+        checked: false,
+        mealSources: [
+          { mealEntryId: entry.id, recipeTitle: title, scaledQuantity: 0, unit: '', ingredientName: title },
+        ],
+      };
+      setShoppingItems([...shoppingItems, newItem]);
+    }
   };
 
   const isInShoppingList = (entryId: string) =>
@@ -226,6 +243,7 @@ function MealChip({ entry, title, coverImage, onClick, onDelete, onServingsChang
               <option value="breakfast">Breakfast</option>
               <option value="lunch">Lunch</option>
               <option value="dinner">Dinner</option>
+              <option value="side">Side</option>
               <option value="snack">Snack</option>
             </select>
           </div>
@@ -242,21 +260,25 @@ function MealChip({ entry, title, coverImage, onClick, onDelete, onServingsChang
 
           <div className="flex-1" />
 
-          {/* Add to shopping list (recipe only) */}
-          {entry.type === 'recipe' && (
-            <button
-              onClick={onAddToShoppingList}
-              className={`shrink-0 w-7 h-7 flex items-center justify-center rounded-full transition-colors ${
-                isAddedToList
-                  ? 'text-green-500 bg-green-50'
-                  : 'text-slate-300 hover:text-blue-400 hover:bg-blue-50'
-              }`}
-              title={isAddedToList ? 'Added to shopping list' : 'Add ingredients to shopping list'}
-              aria-label={isAddedToList ? 'Added to shopping list' : 'Add ingredients to shopping list'}
-            >
-              {isAddedToList ? <Check size={14} /> : <ShoppingCart size={14} />}
-            </button>
-          )}
+          {/* Add to shopping list (recipe and custom entries) */}
+          {(entry.type === 'recipe' || entry.type === 'custom') && (() => {
+            const addLabel =
+              entry.type === 'custom' ? 'Add to shopping list' : 'Add ingredients to shopping list';
+            return (
+              <button
+                onClick={onAddToShoppingList}
+                className={`shrink-0 w-7 h-7 flex items-center justify-center rounded-full transition-colors ${
+                  isAddedToList
+                    ? 'text-green-500 bg-green-50'
+                    : 'text-slate-300 hover:text-blue-400 hover:bg-blue-50'
+                }`}
+                title={isAddedToList ? 'Added to shopping list' : addLabel}
+                aria-label={isAddedToList ? 'Added to shopping list' : addLabel}
+              >
+                {isAddedToList ? <Check size={14} /> : <ShoppingCart size={14} />}
+              </button>
+            );
+          })()}
 
           {/* Change day */}
           <button
