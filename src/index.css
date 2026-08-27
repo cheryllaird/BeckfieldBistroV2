@@ -41,6 +41,15 @@
     margin: 0;
     padding: 0;
   }
+
+  /* Make taps register crisply on iOS Safari: drop the legacy tap delay and the
+     grey tap-highlight flash on interactive elements. */
+  button,
+  a,
+  [role='button'] {
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
+  }
 }
 
 body {
