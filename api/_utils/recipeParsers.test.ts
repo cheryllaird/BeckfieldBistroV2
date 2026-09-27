@@ -45,13 +45,20 @@ describe('parseIngredientLine', () => {
     expect(parseIngredientLine(line).quantity).toBeCloseTo(quantity);
   });
 
-  // Known bugs, pinned so they are visible. Remove `.fails` once fixed.
-  it.fails('KNOWN BUG: reads a mixed number with a unicode fraction ("1½" currently parses as 10.5)', () => {
-    expect(parseIngredientLine('1½ cups milk').quantity).toBeCloseTo(1.5);
+  it.each([
+    ['½ tsp salt', 0.5],
+    ['1½ cups milk', 1.5],
+    ['1 ½ cups milk', 1.5],
+    ['2¾ cups', 2.75],
+    ['⅛ tsp nutmeg', 0.125],
+    ['1⁄2 tsp salt', 0.5],
+  ])('adds a unicode fraction to any whole number in %j (→ %d)', (line, quantity) => {
+    expect(parseIngredientLine(line).quantity).toBeCloseTo(quantity);
   });
 
-  it.fails('KNOWN BUG: reads a quantity that is only a unicode fraction ("½ tsp salt")', () => {
+  it('parses the unit and name after a bare unicode fraction', () => {
     expect(parseIngredientLine('½ tsp salt')).toMatchObject({ quantity: 0.5, unit: 'tsp', name: 'salt' });
+    expect(parseIngredientLine('1 ½ cups milk')).toMatchObject({ unit: 'cups', name: 'milk' });
   });
 
   it('lowercases the unit', () => {
