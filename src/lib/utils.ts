@@ -1,12 +1,14 @@
 import type { Ingredient, IngredientSection, MealSource, PantryItem, Recipe, ShoppingItem, ShoppingCategory } from '../types';
 
-// American English → canonical English synonyms applied at word level
+// American English → canonical English synonyms applied at word level. A
+// plural "s" is carried over ("scallions" → "spring onions"), so plurals map
+// to the same dedup key as their singular.
 const WORD_SYNONYMS: Array<[RegExp, string]> = [
   [/\bcilantro\b/g, 'coriander'],
-  [/\bzucchini\b/g, 'courgette'],
-  [/\beggplant\b/g, 'aubergine'],
-  [/\bscallion\b/g, 'spring onion'],
-  [/\bgreen onion\b/g, 'spring onion'],
+  [/\bzucchini(s?)\b/g, 'courgette$1'],
+  [/\beggplant(s?)\b/g, 'aubergine$1'],
+  [/\bscallion(s?)\b/g, 'spring onion$1'],
+  [/\bgreen onion(s?)\b/g, 'spring onion$1'],
   [/\barugula\b/g, 'rocket'],
 ];
 

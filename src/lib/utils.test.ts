@@ -91,21 +91,29 @@ describe('canonicalizeIngredientName', () => {
     ['zucchini', 'courgette'],
     ['eggplant', 'aubergine'],
     ['scallion', 'spring onion'],
+    ['scallions', 'spring onions'],
     ['green onion', 'spring onion'],
+    ['green onions', 'spring onions'],
+    ['zucchinis', 'courgettes'],
+    ['eggplants', 'aubergines'],
+    ['2 large eggplants', '2 large aubergines'],
     ['arugula', 'rocket'],
   ])('%j → %j', (input, expected) => {
     expect(canonicalizeIngredientName(input)).toBe(expected);
   });
 });
 
-// Known gap, pinned so it is visible: the US → UK synonyms only match the
-// singular, so "scallions" never consolidates with "spring onions". Remove
-// `.fails` once fixed.
-it.fails('KNOWN BUG: normalizes plural US names to the same key as their UK synonym', () => {
-  expect(normalizeIngredientName('scallions')).toBe(normalizeIngredientName('spring onions'));
-});
 
 describe('normalizeIngredientName', () => {
+  it.each([
+    ['scallions', 'spring onions'],
+    ['green onions', 'spring onion'],
+    ['zucchinis', 'courgette'],
+    ['eggplants', 'aubergine'],
+  ])('gives %j the same key as %j', (us, uk) => {
+    expect(normalizeIngredientName(us)).toBe(normalizeIngredientName(uk));
+  });
+
   it.each([
     ['tomatoes', 'tomato'],
     ['cherries', 'cherry'],
@@ -355,6 +363,14 @@ describe('consolidateIngredients', () => {
     expect(items).toHaveLength(1);
     expect(items[0].name).toBe('3 onion');
     expect(items[0].mealSources?.map((s) => s.recipeTitle)).toEqual(['Soup', 'Stew']);
+  });
+
+  it('merges US and UK names for the same ingredient, plural or not', () => {
+    const items = consolidateIngredients([
+      { ingredients: [makeIngredient({ name: 'scallions', quantity: 2, unit: '' })], servings: 1, originalServings: 1 },
+      { ingredients: [makeIngredient({ name: 'spring onion', quantity: 1, unit: '' })], servings: 1, originalServings: 1 },
+    ]);
+    expect(items.map((i) => i.name)).toEqual(['3 spring onions']);
   });
 
   it('omits a zero quantity from the display name', () => {
