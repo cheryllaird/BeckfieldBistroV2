@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useLayoutEffect } from 'react';
 import { useTouchDrag } from '../../hooks/useTouchDrag';
 import { useSwipeNavigate } from '../../hooks/useSwipeNavigate';
 import { useNavigate } from 'react-router-dom';
@@ -74,6 +74,19 @@ export function ShoppingListPage() {
   const listBodyRef = useRef<HTMLDivElement>(null);
 
   const pushHistory = () => setHistory((h) => [...h, shoppingItems]);
+
+  const listItems = shoppingItems.filter((i) => listTypeOf(i) === activeList);
+  const unchecked = listItems.filter((i) => !i.checked);
+  const checked = listItems.filter((i) => i.checked);
+
+  // Rebuild the full shoppingItems array from a reordered/sorted copy of the
+  // active list, leaving the inactive list's items in their existing slots so
+  // they aren't dragged into spurious order-conflict patches. `nextActive` must
+  // be a permutation of the active-list items (same set, new order).
+  const withActiveList = (nextActive: ShoppingItem[]): ShoppingItem[] => {
+    const queue = [...nextActive];
+    return shoppingItems.map((i) => (listTypeOf(i) === activeList ? queue.shift()! : i));
+  };
 
   const handleToggle = (id: string) => {
     pushHistory();
@@ -187,7 +200,9 @@ export function ShoppingListPage() {
   };
 
   const handleDragEndRef = useRef(handleDragEnd);
-  handleDragEndRef.current = handleDragEnd;
+  useLayoutEffect(() => {
+    handleDragEndRef.current = handleDragEnd;
+  });
 
   // Guaranteed fallback: clear drag state on any window-level touch end,
   // in case mobile browsers consume touchend before it reaches the hook's listeners.
@@ -202,20 +217,6 @@ export function ShoppingListPage() {
       window.removeEventListener('touchcancel', onGlobalTouchEnd);
     };
   }, []);
-
-
-  const listItems = shoppingItems.filter((i) => listTypeOf(i) === activeList);
-  const unchecked = listItems.filter((i) => !i.checked);
-  const checked = listItems.filter((i) => i.checked);
-
-  // Rebuild the full shoppingItems array from a reordered/sorted copy of the
-  // active list, leaving the inactive list's items in their existing slots so
-  // they aren't dragged into spurious order-conflict patches. `nextActive` must
-  // be a permutation of the active-list items (same set, new order).
-  const withActiveList = (nextActive: ShoppingItem[]): ShoppingItem[] => {
-    const queue = [...nextActive];
-    return shoppingItems.map((i) => (listTypeOf(i) === activeList ? queue.shift()! : i));
-  };
 
   const previewUnchecked = (() => {
     if (!draggingItemId || dropTargetIndex === null) return unchecked;

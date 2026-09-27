@@ -3,6 +3,12 @@ import { signInWithPopup, signInWithRedirect } from 'firebase/auth';
 import { auth, googleProvider } from '../lib/firebase';
 import { authErrorMessage } from '../lib/authErrors';
 
+/** The Firebase error code carried by a thrown sign-in error, if any. */
+function authErrorCode(err: unknown): string {
+  const code = (err as { code?: unknown } | null)?.code;
+  return typeof code === 'string' ? code : '';
+}
+
 export function AuthPage({ initialError }: { initialError?: string | null }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(initialError ?? null);
@@ -13,8 +19,8 @@ export function AuthPage({ initialError }: { initialError?: string | null }) {
     try {
       await signInWithPopup(auth!, googleProvider);
       // App.tsx onAuthStateChanged handles loading user data and updating the store
-    } catch (e: any) {
-      const code = e?.code ?? '';
+    } catch (e) {
+      const code = authErrorCode(e);
       if (code === 'auth/popup-closed-by-user' || code === 'auth/cancelled-popup-request') {
         // User dismissed — not an error
         setLoading(false);
@@ -25,8 +31,8 @@ export function AuthPage({ initialError }: { initialError?: string | null }) {
         try {
           await signInWithRedirect(auth!, googleProvider);
           return; // page will navigate away
-        } catch (redirectErr: any) {
-          const redirectCode = redirectErr?.code ?? '';
+        } catch (redirectErr) {
+          const redirectCode = authErrorCode(redirectErr);
           console.error('Redirect sign-in error:', redirectErr);
           setError(authErrorMessage(redirectCode));
           setLoading(false);

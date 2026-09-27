@@ -20,11 +20,8 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      # Non-blocking until the existing react-hooks lint errors on main are
-      # fixed; remove continue-on-error then so lint gates PRs too.
       - name: Lint
         run: npm run lint
-        continue-on-error: true
 
       - name: Typecheck
         run: npm run typecheck

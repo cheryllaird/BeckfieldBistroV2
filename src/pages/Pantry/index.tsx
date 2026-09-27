@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useLayoutEffect } from 'react';
 import { useTouchDrag } from '../../hooks/useTouchDrag';
 import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, Plus, Trash2, ChevronDown, Archive, GripVertical, ArrowUpDown } from 'lucide-react';
@@ -89,7 +89,9 @@ export function PantryPage() {
   };
 
   const handleDragEndRef = useRef(handleDragEnd);
-  handleDragEndRef.current = handleDragEnd;
+  useLayoutEffect(() => {
+    handleDragEndRef.current = handleDragEnd;
+  });
 
   // Guaranteed fallback: clear drag state on any window-level touch end,
   // in case mobile browsers consume touchend before it reaches the hook's listeners.

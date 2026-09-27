@@ -11,13 +11,12 @@ export function CameraCapture({ onCapture, onCancel }: Props) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const [ready, setReady] = useState(false);
-  const [error, setError] = useState('');
+  const [error, setError] = useState(() =>
+    !navigator.mediaDevices?.getUserMedia ? 'Camera not supported in this browser.' : '',
+  );
 
   useEffect(() => {
-    if (!navigator.mediaDevices?.getUserMedia) {
-      setError('Camera not supported in this browser.');
-      return;
-    }
+    if (!navigator.mediaDevices?.getUserMedia) return;
 
     navigator.mediaDevices
       .getUserMedia({
