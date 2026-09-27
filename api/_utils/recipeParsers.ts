@@ -25,10 +25,16 @@ export function parseIsoDuration(iso: string | undefined): string {
   return '';
 }
 
+const UNICODE_FRACTIONS: Record<string, number> = {
+  '¼': 0.25, '½': 0.5, '¾': 0.75, '⅓': 0.333, '⅔': 0.667, '⅛': 0.125,
+};
+
 export function parseIngredientLine(line: string): Ingredient {
   const trimmed = line.trim();
 
-  const qtyRe = /^([\d]+(?:[.,]\d+)?(?:\s*[/⁄]\s*[\d]+)?(?:\s*[¼½¾⅓⅔⅛])?)/;
+  // An amount: a number, decimal or fraction with an optional trailing unicode
+  // fraction ("1½", "1 ½"), or a unicode fraction on its own ("½")
+  const qtyRe = /^(\d+(?:[.,]\d+)?(?:\s*[/⁄]\s*\d+)?(?:\s*[¼½¾⅓⅔⅛])?|[¼½¾⅓⅔⅛])/;
   const qtyMatch = trimmed.match(qtyRe);
   const quantityStr = qtyMatch?.[1]?.trim() ?? '';
   const remainder = trimmed.slice(quantityStr.length).trim();
@@ -48,19 +54,21 @@ export function parseIngredientLine(line: string): Ingredient {
   // because a character class like [\s,of] would eat the o of "olive oil"
   const name = remainder.slice(unit.length).replace(/^[\s,]+/, '').replace(/^of\s+/i, '').trim();
 
+  // The unicode fraction is added to the whole-number part, not spliced into
+  // its text — replacing "½" with "0.5" in "1½" gave "10.5"
   let quantity = 0;
   if (quantityStr) {
-    const normalized = quantityStr
-      .replace('¼', '0.25').replace('½', '0.5').replace('¾', '0.75')
-      .replace('⅓', '0.333').replace('⅔', '0.667').replace('⅛', '0.125');
-    if (normalized.includes('/')) {
-      const parts = normalized.split('/');
-      const num = parseFloat(parts[0].trim());
-      const den = parseFloat(parts[1].trim());
-      quantity = den ? num / den : 0;
-    } else {
-      quantity = parseFloat(normalized.replace(',', '.')) || 0;
+    const fractionChar = quantityStr.match(/[¼½¾⅓⅔⅛]/)?.[0];
+    const fraction = fractionChar ? UNICODE_FRACTIONS[fractionChar] : 0;
+    const whole = quantityStr.replace(/[¼½¾⅓⅔⅛]/, '').trim();
+    let wholeValue = 0;
+    if (/[/⁄]/.test(whole)) {
+      const [num, den] = whole.split(/[/⁄]/).map((part) => parseFloat(part.trim()));
+      wholeValue = den ? num / den : 0;
+    } else if (whole) {
+      wholeValue = parseFloat(whole.replace(',', '.')) || 0;
     }
+    quantity = wholeValue + fraction;
   }
 
   return { name: name || trimmed, quantity, unit, originalText: trimmed };

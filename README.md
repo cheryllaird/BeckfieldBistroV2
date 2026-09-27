@@ -46,6 +46,26 @@ npm install
 npm run dev
 ```
 
+## Testing
+
+```bash
+npm test               # run the suite once
+npm run test:watch     # re-run on change
+npm run test:coverage  # with a coverage report
+npm run typecheck      # app + test types
+```
+
+Tests use [Vitest](https://vitest.dev) and sit next to the code they cover (`*.test.ts` / `*.test.tsx`).
+There are two projects, configured in `vitest.config.ts`:
+
+- **unit** (`*.test.ts`, Node): pure logic in `src/lib` and `api/_utils`.
+- **dom** (`*.test.tsx`, jsdom + React Testing Library): components, hooks and the Zustand store.
+
+Firestore and IndexedDB are replaced by `src/lib/__mocks__` via `vi.mock(...)`, and shared test data builders
+live in `src/test/factories.ts`. CI (`.github/workflows/ci.yml`) runs lint, typecheck, tests and build on every PR.
+
+The root `test-*.ts` scripts are separate manual smoke checks against live APIs, run with `npx tsx`.
+
 ## Tech stack
 
 - **Frontend**: React 19, TypeScript, Vite, Tailwind CSS

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type RefObject } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState, type RefObject } from 'react';
 
 /**
  * Immediate-response touch drag for a grip handle element.
@@ -34,9 +34,13 @@ export function useTouchDrag({
   const onStartRef = useRef(onStart);
   const onMoveOverRef = useRef(onMoveOver);
   const onEndRef = useRef(onEnd);
-  onStartRef.current = onStart;
-  onMoveOverRef.current = onMoveOver;
-  onEndRef.current = onEnd;
+  // Keep the refs pointing at the latest callbacks. Synced after commit (not
+  // during render); layout effects run before any touch event can arrive.
+  useLayoutEffect(() => {
+    onStartRef.current = onStart;
+    onMoveOverRef.current = onMoveOver;
+    onEndRef.current = onEnd;
+  });
 
   const [isTouchDragging, setIsTouchDragging] = useState(false);
 

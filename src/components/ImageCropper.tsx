@@ -1,4 +1,4 @@
-import { useRef, useState, useCallback } from 'react';
+import { useRef, useState, useCallback, useLayoutEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { Check, X } from 'lucide-react';
 import { Button } from './ui/Button';
@@ -41,7 +41,9 @@ export function ImageCropper({ src, onConfirm, onCancel }: Props) {
   const dragRef = useRef<DragState | null>(null);
   const cropRef = useRef<CropRect>({ x: 5, y: 5, w: 90, h: 90 });
   const [crop, setCrop] = useState<CropRect>({ x: 5, y: 5, w: 90, h: 90 });
-  cropRef.current = crop;
+  useLayoutEffect(() => {
+    cropRef.current = crop;
+  });
 
   const onHandleDown = useCallback((e: React.PointerEvent, mode: HandleMode) => {
     e.preventDefault();

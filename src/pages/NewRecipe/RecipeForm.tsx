@@ -314,7 +314,6 @@ export function RecipeForm({ initial, knownSources, onSave, onCancel, isSaving }
                   value={coverImage.startsWith('data:') ? '' : coverImage}
                   onChange={(e) => setCoverImage(e.target.value)}
                   inputRef={urlInputRef}
-                  // eslint-disable-next-line jsx-a11y/no-autofocus
                   autoFocus
                 />
               </div>
