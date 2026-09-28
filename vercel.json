@@ -1,11 +1,17 @@
 {
   "rewrites": [
-    { "source": "/((?!api/).*)", "destination": "/index.html" }
+    {
+      "source": "/((?!api/).*)",
+      "destination": "/index.html"
+    }
   ],
   "functions": {
     "api/extract-recipe.ts": {
       "maxDuration": 60,
       "includeFiles": "{api/_tessdata/**,node_modules/tesseract.js-core/**,node_modules/tesseract.js/src/worker-script/**}"
+    },
+    "api/migrate-bistro.ts": {
+      "maxDuration": 60
     }
   }
 }

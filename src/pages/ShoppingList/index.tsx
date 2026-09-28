@@ -21,7 +21,6 @@ import {
 import { useStore } from '../../store';
 import { Button } from '../../components/ui/Button';
 import { categorize, formatQuantity, generateId } from '../../lib/utils';
-import { logCategoryOverride } from '../../lib/firestore';
 import type { MealSource, ShoppingCategory, ShoppingItem, ShoppingListType } from '../../types';
 import { GenerateListModal } from './GenerateListModal';
 import { ModalPortal } from '../../components/ui/ModalPortal';
@@ -56,7 +55,7 @@ export function ShoppingListPage() {
     removeShoppingItem,
     setShoppingItems,
     reorderShoppingItems,
-    user,
+    logCategoryOverride,
   } = useStore();
 
   const [mode, setMode] = useState<Mode>('shop');
@@ -159,14 +158,12 @@ export function ShoppingListPage() {
     if (!item || item.category === category) return;
     pushHistory();
     setShoppingItems(shoppingItems.map((i) => i.id === id ? { ...i, category } : i));
-    if (user) {
-      logCategoryOverride(user.uid, {
-        itemName: item.name,
-        fromCategory: item.category,
-        toCategory: category,
-        timestamp: new Date().toISOString(),
-      });
-    }
+    logCategoryOverride({
+      itemName: item.name,
+      fromCategory: item.category,
+      toCategory: category,
+      timestamp: new Date().toISOString(),
+    });
   };
 
   const handleDragStart = (itemId: string) => {

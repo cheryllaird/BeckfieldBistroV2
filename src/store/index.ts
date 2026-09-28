@@ -21,20 +21,73 @@ import {
   subscribeToIncomingShares,
   acceptShare as firestoreAcceptShare,
   dismissShare as firestoreDismissShare,
+  logCategoryOverride as firestoreLogCategoryOverride,
+  flushPendingWrites,
+  setDataRoot,
+  subscribeToBistroAccess,
+  subscribeToBistro,
+  type BistroAccess,
 } from '../lib/firestore';
+import {
+  fetchIncomingInvites,
+  acceptInvite as apiAcceptInvite,
+  declineInvite as apiDeclineInvite,
+  renameBistro as apiRenameBistro,
+  inviteMember as apiInviteMember,
+  revokeInvite as apiRevokeInvite,
+  removeMember as apiRemoveMember,
+  leaveBistro as apiLeaveBistro,
+  migrateBistroStep,
+  placeholderBistro,
+} from '../lib/bistro';
+import {
+  EMPTY_SCOPE,
+  clearScopeCache,
+  loadScopeCache,
+  pickScopeData,
+  saveScopeCache,
+} from '../lib/scopeCache';
 import {
   diffShoppingLists,
   nextClock,
   reconcileShoppingSnapshot,
 } from '../lib/shoppingSync';
-import type { Recipe, MealEntry, ShoppingItem, PantryItem, AppState, SharedRecipe } from '../types';
+import type {
+  Recipe,
+  MealEntry,
+  ShoppingItem,
+  PantryItem,
+  AppState,
+  SharedRecipe,
+  BistroInvite,
+  CategoryOverrideLog,
+  MigrationState,
+} from '../types';
 
-// Module-level ref so it's never serialized into Zustand state or localStorage
+// Module-level refs so they're never serialized into Zustand state or storage.
+// Data listeners follow the bistro being viewed; session listeners (shares,
+// bistro access, bistro docs) follow the signed-in account.
 let _unsubscribeUserData: (() => void) | null = null;
 let _unsubscribeShares: (() => void) | null = null;
+let _unsubscribeAccess: (() => void) | null = null;
+const _bistroUnsubs = new Map<string, () => void>();
+// Bistros the user is leaving right now, so the access listener dropping them
+// isn't reported as "you were removed".
+const _leaving = new Set<string>();
+let _migrationRunning = false;
+// Bumped by every switchBistro so a slower, superseded switch can't land last.
+let _switchToken = 0;
+
+/** The bistro whose data is loaded: the active one, else the user's own. */
+export const scopeOf = (s: Pick<AppState, 'activeBistroId' | 'user'>) =>
+  s.activeBistroId ?? s.user?.uid;
 
 interface Store extends AppState {
   incomingShares: SharedRecipe[];
+  pendingInvites: BistroInvite[];
+  migration: MigrationState | null;
+  // Name of a bistro the user was just removed from while viewing it.
+  removedFromBistro: string | null;
 
   // Recipe actions
   addRecipe: (recipe: Omit<Recipe, 'userId'>) => Promise<void>;
@@ -78,6 +131,25 @@ interface Store extends AppState {
   dismissShare: (shareId: string) => Promise<void>;
   acceptAllShares: () => Promise<void>;
   dismissAllShares: () => Promise<void>;
+
+  // Shopping list telemetry
+  logCategoryOverride: (entry: Omit<CategoryOverrideLog, 'id'>) => void;
+
+  // Bistro actions
+  switchBistro: (bistroId: string) => Promise<void>;
+  refreshInvites: () => Promise<void>;
+  acceptInvite: (invite: BistroInvite) => Promise<string>;
+  declineInvite: (inviteId: string) => Promise<void>;
+  renameBistro: (bistroId: string, name: string) => Promise<void>;
+  inviteMember: (bistroId: string, email: string) => Promise<void>;
+  revokeInvite: (inviteId: string) => Promise<void>;
+  removeMember: (bistroId: string, uid: string) => Promise<void>;
+  leaveBistro: (bistroId: string) => Promise<void>;
+  dismissRemovedNotice: () => void;
+  retryMigration: () => void;
+  // Leave the setup screen after a failed migration and keep using the legacy
+  // paths (safe: nothing has cut over). The next launch tries again.
+  skipMigration: () => void;
 }
 
 // Per-collection timers that debounce empty snapshots (see
@@ -190,8 +262,8 @@ function applyShoppingListUpdate(
     s.shoppingTombstones,
   );
   set({ shoppingItems: items, shoppingTombstones: tombstones });
-  const uid = s.user?.uid;
-  if (uid && patches.length) patchShoppingItems(uid, patches);
+  const scope = scopeOf(s);
+  if (scope && patches.length) patchShoppingItems(scope, patches);
 }
 
 // Applies an incoming Firestore snapshot to the store, debouncing empty
@@ -238,27 +310,24 @@ function applyCollectionSnapshot<T>(
   );
 }
 
-// Attaches realtime Firestore listeners for a given user, keeping the store
-// live-synced with edits made on every device signed into the same account.
-function attachListeners(
-  uid: string,
-  email: string | null,
-  set: (partial: Partial<Store>) => void,
-  get: () => Store,
-) {
-  _unsubscribeUserData = subscribeToUserData(uid, {
+type SetState = (partial: Partial<Store>) => void;
+
+// Attaches realtime Firestore listeners for one bistro's data, keeping the
+// store live-synced with edits made on every device and by every member.
+function attachDataListeners(bistroId: string, ownUid: string, set: SetState, get: () => Store) {
+  _unsubscribeUserData = subscribeToUserData(bistroId, ownUid, {
     onRecipes: (recipes) => {
       applyCollectionSnapshot('recipes', recipes, get().recipes.length, () => {
         const { merged, toResend } = reconcileByRecency(recipes, get().recipes, byUpdatedAtISO);
         set({ recipes: merged });
-        if (toResend.length) toResend.forEach((r) => saveRecipe(uid, r).catch(() => {}));
+        if (toResend.length) toResend.forEach((r) => saveRecipe(bistroId, r).catch(() => {}));
       });
     },
     onMealEntries: (mealEntries) => {
       applyCollectionSnapshot('mealEntries', mealEntries, get().mealEntries.length, () => {
         const { merged, toResend } = reconcileByRecency(mealEntries, get().mealEntries, byUpdatedAt);
         set({ mealEntries: merged });
-        if (toResend.length) toResend.forEach((e) => saveMealEntry(uid, e));
+        if (toResend.length) toResend.forEach((e) => saveMealEntry(bistroId, e));
       });
     },
     onShoppingItems: (incoming) => {
@@ -277,12 +346,12 @@ function attachListeners(
         // up. Resent patches carry the same clocks, so when they echo back
         // they tie and the incoming copy is taken — convergence terminates,
         // no write loop.
-        if (resend.length) patchShoppingItems(uid, resend);
+        if (resend.length) patchShoppingItems(bistroId, resend);
         // Garbage-collect tombstones past retention (once per session each).
         for (const id of purgeIds) {
           if (_purgedTombstoneIds.has(id)) continue;
           _purgedTombstoneIds.add(id);
-          deleteShoppingItemDoc(uid, id);
+          deleteShoppingItemDoc(bistroId, id);
         }
       });
     },
@@ -290,7 +359,7 @@ function attachListeners(
       applyCollectionSnapshot('pantryItems', pantryItems, get().pantryItems.length, () => {
         const { merged, toResend } = reconcileByRecency(pantryItems, get().pantryItems, byUpdatedAt);
         set({ pantryItems: merged });
-        if (toResend.length) toResend.forEach((item) => savePantryItem(uid, item));
+        if (toResend.length) toResend.forEach((item) => savePantryItem(bistroId, item));
       });
     },
     onKnownSources: (knownSources) => {
@@ -299,14 +368,174 @@ function attachListeners(
       );
     },
     onHasGeminiApiKey: (hasGeminiApiKey) => set({ hasGeminiApiKey }),
+    onError: (err) => {
+      // Lost access to someone else's bistro (removed by another member).
+      if (bistroId !== ownUid && (err as { code?: string }).code === 'permission-denied') {
+        loseBistro(bistroId, set, get);
+      }
+    },
   });
+}
 
-  if (email) {
-    _unsubscribeShares = subscribeToIncomingShares(email, (incomingShares) =>
+function detachDataListeners() {
+  _unsubscribeUserData?.();
+  _unsubscribeUserData = null;
+  // Cancel pending empty-snapshot timers so they can't fire against the next
+  // scope's freshly loaded data.
+  clearPendingEmptyTimers();
+  _purgedTombstoneIds.clear();
+}
+
+// Account-wide listeners: incoming recipe shares, the bistros this account can
+// open, and each of those bistros' docs (names, members).
+function attachSessionListeners(
+  user: NonNullable<AppState['user']>,
+  set: SetState,
+  get: () => Store,
+) {
+  if (user.email) {
+    _unsubscribeShares = subscribeToIncomingShares(user.email, (incomingShares) =>
       set({ incomingShares }),
     );
   }
+  _unsubscribeAccess = subscribeToBistroAccess(user.uid, (access) => {
+    if (access) onAccess(access, set, get);
+  });
+  get().refreshInvites().catch(() => {});
 }
+
+function detachSessionListeners() {
+  _unsubscribeShares?.();
+  _unsubscribeShares = null;
+  _unsubscribeAccess?.();
+  _unsubscribeAccess = null;
+  _bistroUnsubs.forEach((unsub) => unsub());
+  _bistroUnsubs.clear();
+}
+
+function onAccess(access: BistroAccess, set: SetState, get: () => Store) {
+  const user = get().user;
+  if (!user) return;
+
+  if (access.migrated) {
+    if (!get().bistroMigrated) setBistroMigrated(set, get);
+  } else if (!get().bistroMigrated) {
+    runMigration(set, get);
+  }
+
+  // Keep one doc listener per accessible bistro; the own bistro is implicit.
+  const ids = new Set([user.uid, ...access.bistroIds]);
+  for (const id of ids) {
+    if (_bistroUnsubs.has(id)) continue;
+    _bistroUnsubs.set(
+      id,
+      subscribeToBistro(
+        id,
+        (bistro) => {
+          if (bistro) {
+            set({ bistros: { ...get().bistros, [id]: bistro } });
+          } else if (id === user.uid) {
+            // Own bistro before it's been named or shared: its doc doesn't exist yet.
+            set({ bistros: { ...get().bistros, [id]: placeholderBistro(user) } });
+          } else {
+            loseBistro(id, set, get);
+          }
+        },
+        () => loseBistro(id, set, get),
+      ),
+    );
+  }
+  // Known bistros we've lost, plus a persisted active one we no longer have
+  // access to — deduped, so each is handled once.
+  const lost = new Set(Object.keys(get().bistros));
+  const active = get().activeBistroId;
+  if (active) lost.add(active);
+  for (const id of lost) if (!ids.has(id)) loseBistro(id, set, get);
+}
+
+// Drops a bistro the user can no longer open: removed by another member, or
+// left. If it was being viewed, fall back to the user's own bistro.
+function loseBistro(id: string, set: SetState, get: () => Store) {
+  const user = get().user;
+  if (!user || id === user.uid) return;
+  _bistroUnsubs.get(id)?.();
+  _bistroUnsubs.delete(id);
+  const { [id]: lost, ...rest } = get().bistros;
+  set({ bistros: rest });
+  clearScopeCache(user.uid, id).catch(() => {});
+  if (get().activeBistroId === id) {
+    // The same loss can be reported twice (access list and doc listener);
+    // don't let the second, which no longer knows the name, overwrite it.
+    if (!_leaving.has(id)) {
+      set({ removedFromBistro: lost?.name ?? get().removedFromBistro ?? 'a bistro' });
+    }
+    // Don't park its data: we just cleared that cache and have lost access.
+    switchScope(user.uid, false, set, get).catch(() => {});
+  }
+}
+
+// Points the data listeners at another bistro, loading its parked copy (if
+// any) so the switch is instant and works offline. `park` saves the bistro
+// being left for next time.
+async function switchScope(bistroId: string, park: boolean, set: SetState, get: () => Store) {
+  const s = get();
+  const user = s.user;
+  const current = scopeOf(s);
+  if (!user || !s.bistroMigrated || bistroId === current) return;
+  const token = ++_switchToken;
+
+  detachDataListeners();
+  if (park && current) saveScopeCache(user.uid, current, pickScopeData(s)).catch(() => {});
+  const data = await loadScopeCache(user.uid, bistroId);
+  if (token !== _switchToken) return; // superseded by a later switch
+
+  set({ ...data, activeBistroId: bistroId === user.uid ? null : bistroId });
+  attachDataListeners(bistroId, user.uid, set, get);
+}
+
+// The account's library now lives at bistros/{uid}/…: flip the data root and
+// re-point the live listeners. The loaded data is unchanged (it's a copy).
+function setBistroMigrated(set: SetState, get: () => Store) {
+  setDataRoot(true);
+  set({ bistroMigrated: true, migration: null });
+  const s = get();
+  const scope = scopeOf(s);
+  if (_unsubscribeUserData && s.user && scope) {
+    detachDataListeners();
+    attachDataListeners(scope, s.user.uid, set, get);
+  }
+}
+
+// Drives the one-time copy (api/migrate-bistro.ts) round by round. The app is
+// held on MigrationScreen meanwhile so nothing is written to the legacy paths
+// after they've been copied.
+async function runMigration(set: SetState, get: () => Store) {
+  if (_migrationRunning || get().bistroMigrated) return;
+  _migrationRunning = true;
+  set({ migration: { status: 'running', copied: 0 } });
+  try {
+    // Push any queued offline writes to the legacy paths first, so the copy
+    // includes them. Bounded: waitForPendingWrites never settles offline.
+    await Promise.race([flushPendingWrites(), new Promise((r) => setTimeout(r, 10_000))]);
+    for (let round = 0; ; round++) {
+      const { done, copied } = await migrateBistroStep(round === 0);
+      if (done) break;
+      set({ migration: { status: 'running', copied } });
+    }
+    setBistroMigrated(set, get);
+  } catch (err) {
+    set({
+      migration: {
+        status: 'error',
+        copied: get().migration?.copied ?? 0,
+        error: err instanceof Error ? err.message : 'Could not set up your bistro.',
+      },
+    });
+  } finally {
+    _migrationRunning = false;
+  }
+}
+
 
 export const useStore = create<Store>()(
   persist(
@@ -322,9 +551,17 @@ export const useStore = create<Store>()(
       user: null,
       splashDone: false,
       incomingShares: [],
+      activeBistroId: null,
+      bistroMigrated: false,
+      bistros: {},
+      pendingInvites: [],
+      migration: null,
+      removedFromBistro: null,
 
       addRecipe: async (recipe) => {
+        // userId records who added it; the bistro it lives in is the scope.
         const uid = get().user?.uid ?? '';
+        const scope = scopeOf(get());
         const recipeWithUser: Recipe = { ...recipe, userId: uid };
         set((s) => ({
           recipes: [recipeWithUser, ...s.recipes],
@@ -332,29 +569,29 @@ export const useStore = create<Store>()(
             ? s.knownSources
             : [...s.knownSources, recipeWithUser.source],
         }));
-        if (uid) {
-          await saveRecipe(uid, recipeWithUser);
-          saveKnownSources(uid, get().knownSources);
+        if (scope) {
+          await saveRecipe(scope, recipeWithUser);
+          saveKnownSources(scope, get().knownSources);
         }
       },
 
       updateRecipe: async (recipe) => {
         set((s) => ({ recipes: s.recipes.map((r) => (r.id === recipe.id ? recipe : r)) }));
-        const uid = get().user?.uid;
-        if (uid) await saveRecipe(uid, recipe);
+        const scope = scopeOf(get());
+        if (scope) await saveRecipe(scope, recipe);
       },
 
       deleteRecipe: (id) => {
         set((s) => ({ recipes: s.recipes.filter((r) => r.id !== id) }));
-        const uid = get().user?.uid;
-        if (uid) deleteRecipeDoc(uid, id);
+        const scope = scopeOf(get());
+        if (scope) deleteRecipeDoc(scope, id);
       },
 
       addMealEntry: (entry) => {
         const stamped: MealEntry = { ...entry, updatedAt: Date.now() };
         set((s) => ({ mealEntries: [...s.mealEntries, stamped] }));
-        const uid = get().user?.uid;
-        if (uid) saveMealEntry(uid, stamped);
+        const scope = scopeOf(get());
+        if (scope) saveMealEntry(scope, stamped);
       },
 
       updateMealEntry: (entry) => {
@@ -362,14 +599,14 @@ export const useStore = create<Store>()(
         set((s) => ({
           mealEntries: s.mealEntries.map((e) => (e.id === entry.id ? stamped : e)),
         }));
-        const uid = get().user?.uid;
-        if (uid) saveMealEntry(uid, stamped);
+        const scope = scopeOf(get());
+        if (scope) saveMealEntry(scope, stamped);
       },
 
       deleteMealEntry: (id) => {
         set((s) => ({ mealEntries: s.mealEntries.filter((e) => e.id !== id) }));
-        const uid = get().user?.uid;
-        if (uid) deleteMealEntryDoc(uid, id);
+        const scope = scopeOf(get());
+        if (scope) deleteMealEntryDoc(scope, id);
       },
 
       setShoppingItems: (items) => applyShoppingListUpdate(items, set, get),
@@ -385,8 +622,8 @@ export const useStore = create<Store>()(
         set({
           shoppingItems: s.shoppingItems.map((i) => (i.id === id ? updated : i)),
         });
-        const uid = s.user?.uid;
-        if (uid) patchShoppingItems(uid, [{ id, checked: updated.checked, checkedAt: clock }]);
+        const scope = scopeOf(s);
+        if (scope) patchShoppingItems(scope, [{ id, checked: updated.checked, checkedAt: clock }]);
       },
 
       addShoppingItem: (item) =>
@@ -411,21 +648,21 @@ export const useStore = create<Store>()(
       addPantryItem: (item) => {
         const stamped: PantryItem = { ...item, updatedAt: Date.now() };
         set((s) => ({ pantryItems: [...s.pantryItems, stamped] }));
-        const uid = get().user?.uid;
-        if (uid) savePantryItem(uid, stamped);
+        const scope = scopeOf(get());
+        if (scope) savePantryItem(scope, stamped);
       },
 
       updatePantryItem: (item) => {
         const stamped: PantryItem = { ...item, updatedAt: Date.now() };
         set((s) => ({ pantryItems: s.pantryItems.map((p) => (p.id === item.id ? stamped : p)) }));
-        const uid = get().user?.uid;
-        if (uid) savePantryItem(uid, stamped);
+        const scope = scopeOf(get());
+        if (scope) savePantryItem(scope, stamped);
       },
 
       removePantryItem: (id) => {
         set((s) => ({ pantryItems: s.pantryItems.filter((i) => i.id !== id) }));
-        const uid = get().user?.uid;
-        if (uid) deletePantryItemDoc(uid, id);
+        const scope = scopeOf(get());
+        if (scope) deletePantryItemDoc(scope, id);
       },
 
       reorderPantryItems: (items) => {
@@ -433,8 +670,8 @@ export const useStore = create<Store>()(
         // content, so no updatedAt bump — see stampChanged.
         const stamped = stampChanged(get().pantryItems, items, Date.now(), pantryContentEqual);
         set({ pantryItems: stamped });
-        const uid = get().user?.uid;
-        if (uid) savePantryItems(uid, stamped);
+        const scope = scopeOf(get());
+        if (scope) savePantryItems(scope, stamped);
       },
 
       signIn: (firebaseUser) => {
@@ -443,7 +680,7 @@ export const useStore = create<Store>()(
         // If listeners are already live for this same account — the normal
         // launch path, where resubscribe() attached them from the persisted
         // session and Firebase then confirmed the same user — keep them.
-        // Tearing down and re-adding the same five listeners back-to-back
+        // Tearing down and re-adding the same listeners back-to-back
         // churns watch-target adds/removes on the Listen stream, the race
         // behind Firestore's fatal "INTERNAL ASSERTION FAILED (ID: ca9)"
         // (firebase-js-sdk#9267), and buys nothing.
@@ -452,14 +689,8 @@ export const useStore = create<Store>()(
 
         if (!keepListeners) {
           // Tear down any previous listeners (e.g. switching accounts)
-          _unsubscribeUserData?.();
-          _unsubscribeShares?.();
-          _unsubscribeUserData = null;
-          _unsubscribeShares = null;
-          // Cancel pending empty-snapshot timers from the previous session so
-          // they can't fire against this account's freshly loaded data.
-          clearPendingEmptyTimers();
-          _purgedTombstoneIds.clear();
+          detachDataListeners();
+          detachSessionListeners();
         }
 
         set({
@@ -474,19 +705,27 @@ export const useStore = create<Store>()(
           // to be defined so an unhydrated store (existingUid === undefined)
           // doesn't satisfy `undefined !== uid` and incorrectly wipe data.
           ...(existingUid && existingUid !== firebaseUser.uid && {
-            recipes: [],
-            mealEntries: [],
-            shoppingItems: [],
-            shoppingTombstones: {},
-            pantryItems: [],
-            knownSources: [],
+            ...EMPTY_SCOPE,
             hasGeminiApiKey: false,
             incomingShares: [],
+            activeBistroId: null,
+            bistroMigrated: false,
+            bistros: {},
+            pendingInvites: [],
+            migration: null,
+            removedFromBistro: null,
           }),
         });
 
         if (!keepListeners) {
-          attachListeners(firebaseUser.uid, firebaseUser.email, set, get);
+          const s = get();
+          setDataRoot(s.bistroMigrated);
+          attachDataListeners(scopeOf(s)!, firebaseUser.uid, set, get);
+          attachSessionListeners(s.user!, set, get);
+        } else {
+          // resubscribe() ran before Firebase had restored the session, so its
+          // invite fetch (which needs an ID token) couldn't go out. Retry now.
+          get().refreshInvites().catch(() => {});
         }
       },
 
@@ -494,31 +733,34 @@ export const useStore = create<Store>()(
       // auth state. Called on page load when persisted auth exists so that
       // IndexedDB data is available immediately, before Firebase validates.
       resubscribe: () => {
-        const { user } = get();
-        if (!user || _unsubscribeUserData) return;
-        attachListeners(user.uid, user.email, set, get);
+        const s = get();
+        if (!s.user || _unsubscribeUserData) return;
+        setDataRoot(s.bistroMigrated);
+        attachDataListeners(scopeOf(s)!, s.user.uid, set, get);
+        attachSessionListeners(s.user, set, get);
       },
 
       signOut: async () => {
         // Tear down listeners before clearing state so no orphaned callbacks fire
-        _unsubscribeUserData?.();
-        _unsubscribeUserData = null;
-        _unsubscribeShares?.();
-        _unsubscribeShares = null;
-        clearPendingEmptyTimers();
-        _purgedTombstoneIds.clear();
+        detachDataListeners();
+        detachSessionListeners();
+        const { user, bistros } = get();
+        if (user) {
+          for (const id of Object.keys(bistros)) clearScopeCache(user.uid, id).catch(() => {});
+        }
         if (auth) await firebaseSignOut(auth);
         set({
           isAuthenticated: false,
           user: null,
-          recipes: [],
-          mealEntries: [],
-          shoppingItems: [],
-          shoppingTombstones: {},
-          pantryItems: [],
-          knownSources: [],
+          ...EMPTY_SCOPE,
           hasGeminiApiKey: false,
           incomingShares: [],
+          activeBistroId: null,
+          bistroMigrated: false,
+          bistros: {},
+          pendingInvites: [],
+          migration: null,
+          removedFromBistro: null,
         });
       },
 
@@ -530,8 +772,8 @@ export const useStore = create<Store>()(
             ? s.knownSources
             : [...s.knownSources, source],
         }));
-        const uid = get().user?.uid;
-        if (uid) saveKnownSources(uid, get().knownSources);
+        const scope = scopeOf(get());
+        if (scope) saveKnownSources(scope, get().knownSources);
       },
 
       setGeminiApiKey: async (key) => {
@@ -570,8 +812,9 @@ export const useStore = create<Store>()(
 
       acceptShare: async (share) => {
         const uid = get().user?.uid;
-        if (!uid) return '';
-        const newId = await firestoreAcceptShare(share.id, uid, share.recipe);
+        const scope = scopeOf(get());
+        if (!uid || !scope) return '';
+        const newId = await firestoreAcceptShare(share.id, scope, uid, share.recipe);
         set((s) => ({ incomingShares: s.incomingShares.filter((sh) => sh.id !== share.id) }));
         return newId;
       },
@@ -583,9 +826,12 @@ export const useStore = create<Store>()(
 
       acceptAllShares: async () => {
         const uid = get().user?.uid;
-        if (!uid) return;
+        const scope = scopeOf(get());
+        if (!uid || !scope) return;
         const shares = get().incomingShares;
-        await Promise.all(shares.map((share) => firestoreAcceptShare(share.id, uid, share.recipe)));
+        await Promise.all(
+          shares.map((share) => firestoreAcceptShare(share.id, scope, uid, share.recipe)),
+        );
         set({ incomingShares: [] });
       },
 
@@ -593,6 +839,73 @@ export const useStore = create<Store>()(
         const shares = get().incomingShares;
         await Promise.all(shares.map((share) => firestoreDismissShare(share.id)));
         set({ incomingShares: [] });
+      },
+
+      logCategoryOverride: (entry) => {
+        const scope = scopeOf(get());
+        if (scope) firestoreLogCategoryOverride(scope, entry);
+      },
+
+      // ── bistros ───────────────────────────────────────────────────────────
+
+      switchBistro: (bistroId) => switchScope(bistroId, true, set, get),
+
+      refreshInvites: async () => {
+        if (!get().user) return;
+        const pendingInvites = await fetchIncomingInvites();
+        set({ pendingInvites });
+      },
+
+      acceptInvite: async (invite) => {
+        const bistroId = await apiAcceptInvite(invite.id);
+        set({ pendingInvites: get().pendingInvites.filter((i) => i.id !== invite.id) });
+        return bistroId;
+      },
+
+      declineInvite: async (inviteId) => {
+        await apiDeclineInvite(inviteId);
+        set({ pendingInvites: get().pendingInvites.filter((i) => i.id !== inviteId) });
+      },
+
+      renameBistro: async (bistroId, name) => {
+        await apiRenameBistro(bistroId, name.trim());
+        const bistro = get().bistros[bistroId];
+        if (bistro) set({ bistros: { ...get().bistros, [bistroId]: { ...bistro, name: name.trim() } } });
+      },
+
+      inviteMember: async (bistroId, email) => {
+        await apiInviteMember(bistroId, email.trim().toLowerCase());
+      },
+
+      revokeInvite: async (inviteId) => {
+        await apiRevokeInvite(inviteId);
+      },
+
+      removeMember: async (bistroId, uid) => {
+        await apiRemoveMember(bistroId, uid);
+      },
+
+      leaveBistro: async (bistroId) => {
+        const user = get().user;
+        if (!user) return;
+        _leaving.add(bistroId);
+        try {
+          await apiLeaveBistro(bistroId);
+          if (get().activeBistroId === bistroId) await switchScope(user.uid, false, set, get);
+          clearScopeCache(user.uid, bistroId).catch(() => {});
+        } finally {
+          _leaving.delete(bistroId);
+        }
+      },
+
+      dismissRemovedNotice: () => set({ removedFromBistro: null }),
+
+      retryMigration: () => {
+        runMigration(set, get);
+      },
+
+      skipMigration: () => {
+        if (get().migration?.status === 'error') set({ migration: null });
       },
     }),
     {
@@ -623,6 +936,12 @@ export const useStore = create<Store>()(
         pantryItems: s.pantryItems,
         knownSources: s.knownSources,
         hasGeminiApiKey: s.hasGeminiApiKey,
+        // Which bistro this device is viewing, and whether the account's data
+        // has moved to bistros/{uid}/…, so the offline-first boot attaches to
+        // the right paths before the network has answered.
+        activeBistroId: s.activeBistroId,
+        bistroMigrated: s.bistroMigrated,
+        bistros: s.bistros,
       }),
     },
   ),

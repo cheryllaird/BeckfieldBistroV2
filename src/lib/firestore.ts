@@ -11,7 +11,7 @@ import {
   waitForPendingWrites,
 } from 'firebase/firestore';
 import { db, auth } from './firebase';
-import type { Recipe, MealEntry, ShoppingItem, PantryItem, SharedRecipe, CategoryOverrideLog } from '../types';
+import type { Recipe, MealEntry, ShoppingItem, PantryItem, SharedRecipe, CategoryOverrideLog, Bistro } from '../types';
 import type { ShoppingItemPatch } from './shoppingSync';
 
 // ── helpers ──────────────────────────────────────────────────────────────────
@@ -132,11 +132,29 @@ export function flushPendingWrites(): Promise<void> {
   return waitForPendingWrites(db).catch(() => {});
 }
 
-const recipesCol = (uid: string) => collection(db!, 'users', uid, 'recipes');
-const mealEntriesCol = (uid: string) => collection(db!, 'users', uid, 'mealEntries');
-const shoppingItemsCol = (uid: string) => collection(db!, 'users', uid, 'shoppingItems');
-const pantryItemsCol = (uid: string) => collection(db!, 'users', uid, 'pantryItems');
-const profileDoc = (uid: string) => doc(db!, 'users', uid, 'meta', 'profile');
+// ── data root ─────────────────────────────────────────────────────────────────
+// A library lives at bistros/{bistroId}/…, and a user's own bistro id is their
+// uid. Accounts created before bistros existed kept their library at
+// users/{uid}/… until api/migrate-bistro.ts copies it across; because the ids
+// match, the only difference between the two layouts is this root segment.
+// The store flips it once the account's migration has completed (see
+// setBistroMigrated in store/index.ts), and it is never flipped back.
+
+let _root: 'users' | 'bistros' = 'users';
+
+export function setDataRoot(migrated: boolean): void {
+  _root = migrated ? 'bistros' : 'users';
+}
+
+const recipesCol = (bistroId: string) => collection(db!, _root, bistroId, 'recipes');
+const mealEntriesCol = (bistroId: string) => collection(db!, _root, bistroId, 'mealEntries');
+const shoppingItemsCol = (bistroId: string) => collection(db!, _root, bistroId, 'shoppingItems');
+const pantryItemsCol = (bistroId: string) => collection(db!, _root, bistroId, 'pantryItems');
+/** Shared bistro settings (knownSources). */
+const bistroProfileDoc = (bistroId: string) => doc(db!, _root, bistroId, 'meta', 'profile');
+/** Personal, never shared: holds the encrypted Gemini key. */
+const userProfileDoc = (uid: string) => doc(db!, 'users', uid, 'meta', 'profile');
+const bistroAccessDoc = (uid: string) => doc(db!, 'users', uid, 'meta', 'bistroAccess');
 
 // ── real-time subscription ────────────────────────────────────────────────────
 
@@ -151,12 +169,18 @@ export interface UserDataCallbacks {
 }
 
 /**
- * Subscribes to all user data collections in real-time.
+ * Subscribes to one bistro's data collections in real-time, plus the signed-in
+ * user's own profile (for hasGeminiApiKey, which is personal even when viewing
+ * someone else's bistro).
  * The first emission populates the store; subsequent emissions keep it live
- * across tabs and devices.
- * Returns an unsubscribe function that tears down all four listeners.
+ * across tabs, devices and bistro members.
+ * Returns an unsubscribe function that tears down every listener.
  */
-export function subscribeToUserData(uid: string, callbacks: UserDataCallbacks): () => void {
+export function subscribeToUserData(
+  bistroId: string,
+  ownUid: string,
+  callbacks: UserDataCallbacks,
+): () => void {
   const handleError = (err: Error) => {
     console.error('Firestore subscription error:', err);
     recoverIfSdkCrashed(err);
@@ -171,7 +195,7 @@ export function subscribeToUserData(uid: string, callbacks: UserDataCallbacks): 
     snap.metadata.fromCache && snap.empty;
 
   const unsubRecipes = onSnapshot(
-    recipesCol(uid),
+    recipesCol(bistroId),
     (snap) => {
       if (skipIfCacheMiss(snap)) return;
       callbacks.onRecipes(snap.docs.map((d) => d.data() as Recipe));
@@ -180,7 +204,7 @@ export function subscribeToUserData(uid: string, callbacks: UserDataCallbacks): 
   );
 
   const unsubMealEntries = onSnapshot(
-    mealEntriesCol(uid),
+    mealEntriesCol(bistroId),
     (snap) => {
       if (skipIfCacheMiss(snap)) return;
       callbacks.onMealEntries(snap.docs.map((d) => d.data() as MealEntry));
@@ -189,7 +213,7 @@ export function subscribeToUserData(uid: string, callbacks: UserDataCallbacks): 
   );
 
   const unsubShoppingItems = onSnapshot(
-    shoppingItemsCol(uid),
+    shoppingItemsCol(bistroId),
     (snap) => {
       if (skipIfCacheMiss(snap)) return;
       // Raw docs, tombstoned (soft-deleted) ones included — the store's
@@ -210,7 +234,7 @@ export function subscribeToUserData(uid: string, callbacks: UserDataCallbacks): 
   );
 
   const unsubPantryItems = onSnapshot(
-    pantryItemsCol(uid),
+    pantryItemsCol(bistroId),
     (snap) => {
       if (skipIfCacheMiss(snap)) return;
       const items = snap.docs.map((d) => d.data() as PantryItem);
@@ -221,10 +245,18 @@ export function subscribeToUserData(uid: string, callbacks: UserDataCallbacks): 
   );
 
   const unsubProfile = onSnapshot(
-    profileDoc(uid),
+    bistroProfileDoc(bistroId),
     (snap) => {
       if (snap.metadata.fromCache && !snap.exists()) return;
       callbacks.onKnownSources((snap.data()?.knownSources as string[]) ?? []);
+    },
+    handleError
+  );
+
+  const unsubUserProfile = onSnapshot(
+    userProfileDoc(ownUid),
+    (snap) => {
+      if (snap.metadata.fromCache && !snap.exists()) return;
       callbacks.onHasGeminiApiKey(!!snap.data()?.geminiApiKeyEncrypted);
     },
     handleError
@@ -236,16 +268,17 @@ export function subscribeToUserData(uid: string, callbacks: UserDataCallbacks): 
     unsubShoppingItems();
     unsubPantryItems();
     unsubProfile();
+    unsubUserProfile();
   };
 }
 
 // ── recipes ───────────────────────────────────────────────────────────────────
 
-export function saveRecipe(uid: string, recipe: Recipe): Promise<void> {
+export function saveRecipe(bistroId: string, recipe: Recipe): Promise<void> {
   // Re-enable network in case the SDK got stuck in offline mode.
   ensureFirestoreOnline();
 
-  const writePromise = setDoc(doc(recipesCol(uid), recipe.id), stripUndefined(recipe));
+  const writePromise = setDoc(doc(recipesCol(bistroId), recipe.id), stripUndefined(recipe));
   // 5-second timeout: if the server hasn't acknowledged by then, the write is
   // safely queued in IndexedDB (persistentSingleTabManager) and will sync when
   // connectivity is restored. The caller should navigate away on this error.
@@ -255,21 +288,21 @@ export function saveRecipe(uid: string, recipe: Recipe): Promise<void> {
   return Promise.race([writePromise, timeout]);
 }
 
-export function deleteRecipeDoc(uid: string, id: string): void {
+export function deleteRecipeDoc(bistroId: string, id: string): void {
   ensureFirestoreOnline();
-  deleteDoc(doc(recipesCol(uid), id)).catch(logFirestoreError);
+  deleteDoc(doc(recipesCol(bistroId), id)).catch(logFirestoreError);
 }
 
 // ── meal entries ──────────────────────────────────────────────────────────────
 
-export function saveMealEntry(uid: string, entry: MealEntry): void {
+export function saveMealEntry(bistroId: string, entry: MealEntry): void {
   ensureFirestoreOnline();
-  setDoc(doc(mealEntriesCol(uid), entry.id), stripUndefined(entry)).catch(logFirestoreError);
+  setDoc(doc(mealEntriesCol(bistroId), entry.id), stripUndefined(entry)).catch(logFirestoreError);
 }
 
-export function deleteMealEntryDoc(uid: string, id: string): void {
+export function deleteMealEntryDoc(bistroId: string, id: string): void {
   ensureFirestoreOnline();
-  deleteDoc(doc(mealEntriesCol(uid), id)).catch(logFirestoreError);
+  deleteDoc(doc(mealEntriesCol(bistroId), id)).catch(logFirestoreError);
 }
 
 // ── shopping items ────────────────────────────────────────────────────────────
@@ -283,10 +316,10 @@ export function deleteMealEntryDoc(uid: string, id: string): void {
  * the server (the winning copy doesn't carry it); `undefined` fields are
  * omitted from the write entirely.
  */
-export function patchShoppingItems(uid: string, patches: ShoppingItemPatch[]): void {
+export function patchShoppingItems(bistroId: string, patches: ShoppingItemPatch[]): void {
   if (patches.length === 0) return;
   ensureFirestoreOnline();
-  const col = shoppingItemsCol(uid);
+  const col = shoppingItemsCol(bistroId);
   // Firestore batches cap at 500 operations; chunk to stay under it.
   for (let i = 0; i < patches.length; i += 450) {
     const batch = writeBatch(db!);
@@ -309,26 +342,26 @@ export function patchShoppingItems(uid: string, patches: ShoppingItemPatch[]): v
 }
 
 /** Hard delete — only used to purge tombstones past their retention window. */
-export function deleteShoppingItemDoc(uid: string, id: string): void {
+export function deleteShoppingItemDoc(bistroId: string, id: string): void {
   ensureFirestoreOnline();
-  deleteDoc(doc(shoppingItemsCol(uid), id)).catch(logFirestoreError);
+  deleteDoc(doc(shoppingItemsCol(bistroId), id)).catch(logFirestoreError);
 }
 
 // ── pantry items ──────────────────────────────────────────────────────────────
 
-export function savePantryItem(uid: string, item: PantryItem): void {
+export function savePantryItem(bistroId: string, item: PantryItem): void {
   ensureFirestoreOnline();
-  setDoc(doc(pantryItemsCol(uid), item.id), stripUndefined(item)).catch(logFirestoreError);
+  setDoc(doc(pantryItemsCol(bistroId), item.id), stripUndefined(item)).catch(logFirestoreError);
 }
 
-export function deletePantryItemDoc(uid: string, id: string): void {
+export function deletePantryItemDoc(bistroId: string, id: string): void {
   ensureFirestoreOnline();
-  deleteDoc(doc(pantryItemsCol(uid), id)).catch(logFirestoreError);
+  deleteDoc(doc(pantryItemsCol(bistroId), id)).catch(logFirestoreError);
 }
 
-export function savePantryItems(uid: string, items: PantryItem[]): void {
+export function savePantryItems(bistroId: string, items: PantryItem[]): void {
   ensureFirestoreOnline();
-  const col = pantryItemsCol(uid);
+  const col = pantryItemsCol(bistroId);
   const batch = writeBatch(db!);
   items.forEach((item, index) =>
     batch.set(doc(col, item.id), stripUndefined({ ...item, order: index })),
@@ -338,19 +371,19 @@ export function savePantryItems(uid: string, items: PantryItem[]): void {
 
 // ── category override log ─────────────────────────────────────────────────────
 
-const categoryOverrideLogsCol = (uid: string) =>
-  collection(db!, 'users', uid, 'categoryOverrideLogs');
+const categoryOverrideLogsCol = (bistroId: string) =>
+  collection(db!, _root, bistroId, 'categoryOverrideLogs');
 
-export function logCategoryOverride(uid: string, entry: Omit<CategoryOverrideLog, 'id'>): void {
+export function logCategoryOverride(bistroId: string, entry: Omit<CategoryOverrideLog, 'id'>): void {
   ensureFirestoreOnline();
-  addDoc(categoryOverrideLogsCol(uid), stripUndefined(entry)).catch(logFirestoreError);
+  addDoc(categoryOverrideLogsCol(bistroId), stripUndefined(entry)).catch(logFirestoreError);
 }
 
 // ── sources ───────────────────────────────────────────────────────────────────
 
-export function saveKnownSources(uid: string, sources: string[]): void {
+export function saveKnownSources(bistroId: string, sources: string[]): void {
   ensureFirestoreOnline();
-  setDoc(profileDoc(uid), { knownSources: sources }, { merge: true }).catch(logFirestoreError);
+  setDoc(bistroProfileDoc(bistroId), { knownSources: sources }, { merge: true }).catch(logFirestoreError);
 }
 
 // ── AI API key ────────────────────────────────────────────────────────────────
@@ -421,9 +454,11 @@ async function deleteShare(shareId: string): Promise<void> {
   });
 }
 
+/** Saves a shared recipe into `bistroId` (the bistro being viewed), stamped as added by `uid`. */
 export async function acceptShare(
   shareId: string,
-  toUid: string,
+  bistroId: string,
+  uid: string,
   recipe: SharedRecipe['recipe']
 ): Promise<string> {
   const { generateId } = await import('./utils');
@@ -432,15 +467,74 @@ export async function acceptShare(
   const newRecipe: Recipe = {
     ...recipe,
     id: newId,
-    userId: toUid,
+    userId: uid,
     createdAt: now,
     updatedAt: now,
   };
-  await setDoc(doc(recipesCol(toUid), newId), stripUndefined(newRecipe));
+  await setDoc(doc(recipesCol(bistroId), newId), stripUndefined(newRecipe));
   await deleteShare(shareId);
   return newId;
 }
 
 export async function dismissShare(shareId: string): Promise<void> {
   await deleteShare(shareId);
+}
+
+// ── bistros ───────────────────────────────────────────────────────────────────
+// Membership is written only by /api/bistro (see src/lib/bistro.ts); the
+// client just listens.
+
+export interface BistroAccess {
+  /** Bistros this user has been let into (their own is implicit). */
+  bistroIds: string[];
+  /** Their own library has been copied to bistros/{uid}/…. */
+  migrated: boolean;
+}
+
+/**
+ * Watches users/{uid}/meta/bistroAccess. `null` means the snapshot came from
+ * an empty cache — nothing is known yet, so callers should keep what they have.
+ */
+export function subscribeToBistroAccess(
+  uid: string,
+  callback: (access: BistroAccess | null) => void,
+): () => void {
+  return onSnapshot(
+    bistroAccessDoc(uid),
+    (snap) => {
+      if (snap.metadata.fromCache && !snap.exists()) return callback(null);
+      const data = snap.data();
+      callback({
+        bistroIds: (data?.bistroIds as string[] | undefined) ?? [],
+        migrated: !!data?.migratedAt,
+      });
+    },
+    (err) => {
+      console.error('Bistro access subscription error:', err);
+      recoverIfSdkCrashed(err);
+    },
+  );
+}
+
+/**
+ * Watches one bistro's doc. Emits null when it doesn't exist (a user's own
+ * bistro before it has been named or shared). `onError` fires with
+ * permission-denied once the user is no longer a member.
+ */
+export function subscribeToBistro(
+  bistroId: string,
+  callback: (bistro: Bistro | null) => void,
+  onError: (err: Error) => void,
+): () => void {
+  return onSnapshot(
+    doc(db!, 'bistros', bistroId),
+    (snap) => {
+      if (snap.metadata.fromCache && !snap.exists()) return;
+      callback(snap.exists() ? ({ ...(snap.data() as Omit<Bistro, 'id'>), id: snap.id }) : null);
+    },
+    (err) => {
+      recoverIfSdkCrashed(err);
+      onError(err);
+    },
+  );
 }

@@ -43,8 +43,9 @@ The rest of this document details each of these.
 
 ## 2. Core domain concepts
 
-The app manages five kinds of user-owned data. All of it is private to the signed-in
-account and syncs across that account's devices.
+The app manages five kinds of data. The first four (recipes, meal plan, shopping
+list, store cupboard) belong to a **bistro** — a shared library that one or more
+people can open — and live-sync across every member's devices (see §12).
 
 - **Recipe** — title, source (site/cookbook name), optional source URL, optional
   cover image, optional retained original photo, servings, prep time and total
@@ -63,9 +64,11 @@ account and syncs across that account's devices.
 - **Recipe share** — a full copy of a recipe addressed to a recipient's email, so
   it appears in their library.
 
-Two derived/config values also belong to the account: the list of **known
-recipe sources** (used for source autocomplete) and whether a **Gemini API key**
-is on file.
+- **Bistro** — a named, shared library with a list of members. Every user owns
+  exactly one (their own), and can be invited into other people's.
+
+The list of **known recipe sources** (used for source autocomplete) belongs to the
+bistro. Whether a **Gemini API key** is on file is personal and never shared.
 
 ---
 
@@ -155,7 +158,8 @@ Extraction runs on **each user's own Google Gemini API key**:
 - The key is entered once in Settings and stored **encrypted server-side**; it is
   never shown back and never crosses the wire on subsequent extraction requests
   (it's looked up and decrypted server-side per request).
-- Usage and quota are billed to the user, not shared across all users.
+- Usage and quota are billed to the user, not shared across all users — including
+  other members of a shared bistro, who each need their own key.
 - Without a key, the AI capture modes are unavailable and prompt the user to add
   one (with a link to get a free key); manual entry still works.
 - The app tracks, per user's key, that free-tier rate limits exist and surfaces
@@ -166,7 +170,7 @@ Extraction runs on **each user's own Google Gemini API key**:
 ## 4. Recipe library & management
 
 - **Storage:** every recipe the user creates, extracts, or accepts from a share
-  lives in their personal library and syncs across devices.
+  lives in the bistro they're viewing and syncs across all its members' devices.
 - **Search:** the library is filterable live by **title, source, or any ingredient
   name** — so "what can I make with aubergine?" is answerable.
 - **Serving-aware viewing:** on a recipe, a servings control rescales **every
@@ -360,8 +364,10 @@ explicit list) belong to **Immediate**, so existing lists carry over unchanged.
 - **Guardrails:** the recipient email must be well-formed, and a user can't share
   with themselves.
 - **Receiving:** shares addressed to the signed-in user's email appear in a
-  "Shared with You" inbox. Each can be **saved** (copied into the recipient's own
-  library as their own recipe) or **dismissed**, individually or all at once.
+  "Shared with You" inbox. Each can be **saved** (copied into the bistro the
+  recipient is currently viewing) or **dismissed**, individually or all at once.
+- Sharing is for people outside your bistros; members of a bistro already see all
+  its recipes.
 - Delivery is account-to-account and shows up whenever the recipient next signs in;
   it doesn't require the two users to be online simultaneously.
 
@@ -369,7 +375,7 @@ explicit list) belong to **Immediate**, so existing lists carry over unchanged.
 
 ## 10. Sync & conflict resolution
 
-All user data live-syncs across the account's devices; an edit on one device
+All bistro data live-syncs across every member's devices; an edit on one device
 appears on another without manual refresh. The functional guarantees:
 
 - **Recency-based merge for most data** (recipes, meal entries, pantry): incoming
@@ -377,16 +383,19 @@ appears on another without manual refresh. The functional guarantees:
   device (or while offline) is never blindly overwritten by a stale copy from the
   server.
 - **Field-level, conflict-free merge for the shopping list** — the collection two
-  devices most plausibly edit at once. Different aspects of the same item sync
+  devices (or two members) most plausibly edit at once. Different aspects of the same item sync
   independently, so **checking an item off on one device and renaming/reordering it
   on another both survive** instead of clobbering each other.
 - **Deletion is durable across devices:** a removed item does not resurrect from a
   stale copy (soft-delete tombstones outlive the session), yet an edit made *after*
   a deletion can intentionally bring the item back.
+- **Last writer wins per recipe, meal entry and pantry item:** if two members edit
+  the *same* recipe at the same moment, the later edit replaces the earlier one.
 - **No accidental wipes:** a transient "looks empty" read never clears existing
   data — the app waits to confirm a genuine clear before emptying a collection.
 - **Account isolation:** switching Google accounts fully clears the previous
-  account's data; signing out clears local data for that account.
+  account's data; signing out clears local data for that account, including the
+  parked copies of other bistros.
 
 ---
 
@@ -397,8 +406,11 @@ appears on another without manual refresh. The functional guarantees:
   too, so the library is complete offline.
 - Changes made offline are queued locally and reconciled when connectivity returns
   (per §10); the app signals offline and "back online — syncing" states.
-- **Only** AI extraction (URL/photo) and sharing require a connection; those are
-  clearly gated when offline, while manual recipe entry stays available.
+- **Only** AI extraction (URL/photo), sharing, and managing bistro membership
+  (inviting, joining, removing, leaving) require a connection; those are clearly
+  gated when offline, while manual recipe entry stays available.
+- **Switching bistros works offline:** each bistro the user has opened keeps a
+  local copy on the device, so switching back is instant.
 - On relaunch the app renders immediately from local data while it re-validates the
   session in the background, and returns to sign-in only if the session is truly
   invalid.
@@ -412,9 +424,29 @@ appears on another without manual refresh. The functional guarantees:
 - **Sign-in is Google-only** (with an automatic popup→redirect fallback for
   standalone/PWA contexts). There is no password to manage.
 - The Google **name, email, and avatar** identify the user and are the addressing
-  mechanism for sharing.
-- All data operations are authorised to the signed-in account; a user can only ever
-  read and write their own data (and shares addressed to their email).
+  mechanism for sharing and bistro invites.
+
+### 12.1 Bistros
+
+- **Every user owns one bistro** — their own library — and can be a member of any
+  number of other people's. The bistro being viewed is chosen from the **profile
+  menu**; the choice is per device.
+- **Inviting:** any member can invite someone by the email of their Google account.
+  No email is sent: the invitee sees a Join / Decline banner the next time they
+  open the app. Pending invites can be revoked.
+- **Joining** adds access; nothing is moved or hidden. The member's own bistro is
+  untouched and always one tap away.
+- **Everyone is equal:** any member can rename the bistro, invite, and remove other
+  members — except the **owner**, who can never be removed from (or leave) their
+  own bistro. Anyone else can leave at any time.
+- **Being removed** while viewing a bistro returns the user to their own, with a
+  notice; their local copy of the lost bistro is deleted.
+- Membership changes are made server-side only, and every data read/write is
+  authorised against the bistro's member list.
+- **Accounts created before bistros existed** have their library copied into their
+  own bistro once, on first launch of a version with bistros (a short "Setting up
+  your bistro" screen). The copy is resumable and the original data is kept until
+  a later clean-up release.
 
 ---
 
@@ -426,7 +458,7 @@ appears on another without manual refresh. The functional guarantees:
 | AI photo extraction | Vision → OCR+AI → local-parse ladder from a camera/gallery photo |
 | Faithful extraction | Preserves step granularity, ingredient wording, and section grouping |
 | BYO Gemini key | Per-user, encrypted, self-billed AI usage |
-| Recipe library | Private, synced, searchable by title/source/ingredient |
+| Recipe library | Per-bistro, synced, searchable by title/source/ingredient |
 | Serving scaling | Live ingredient rescaling with fraction formatting |
 | Meal planner | Recipe / custom / dining-out entries by date and meal time, with per-meal servings |
 | Ingredient engine | Unit + name normalisation, synonym folding, quantity consolidation |
@@ -436,6 +468,7 @@ appears on another without manual refresh. The functional guarantees:
 | Pantry exclusion | Omits staples the user already owns |
 | Meal-source tracking | Shows which meals drove each shopping item; idempotent adds |
 | Recipe sharing | Single/bulk copy-share to another user by email, with an inbox |
+| Shared bistros | Multi-member libraries; invite by email, switch from the menu, own bistro always kept |
 | Conflict-free sync | Field-level shopping-list merge; recency merge elsewhere; durable deletes |
 | Offline-first | Full read/write of library, plan, list, pantry with no connection |
 </content>
