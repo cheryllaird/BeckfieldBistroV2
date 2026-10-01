@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Check, Pencil, UserPlus, X } from 'lucide-react';
 import { useStore, scopeOf } from '../../store';
-import { fetchBistroInvites } from '../../lib/bistro';
+import { fetchBistroInvites, placeholderBistro } from '../../lib/bistro';
 import { useOnlineStatus } from '../../hooks/useOnlineStatus';
 import type { BistroInvite } from '../../types';
 import { Card } from '../../components/ui/Card';
@@ -23,8 +23,12 @@ export function BistroCard() {
   const refreshInvites = useStore((s) => s.refreshInvites);
   const { isOnline } = useOnlineStatus();
 
-  const bistro = activeId ? bistros[activeId] : undefined;
   const isOwnBistro = activeId === user?.uid;
+  // Your own bistro always exists, even before its doc has loaded (or when it
+  // can't be read), so fall back to the placeholder rather than hiding the card.
+  const bistro = activeId
+    ? (bistros[activeId] ?? (isOwnBistro && user ? placeholderBistro(user) : undefined))
+    : undefined;
   const canManage = isOnline && bistroMigrated;
 
   const [nameInput, setNameInput] = useState<string | null>(null); // null = not editing
