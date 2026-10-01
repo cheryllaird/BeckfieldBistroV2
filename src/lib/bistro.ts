@@ -57,6 +57,16 @@ export const migrateBistroStep = (restart: boolean) =>
     body: { restart },
   });
 
+/**
+ * One pass of bringing across edits an older app version made to the legacy
+ * library since the copy (see api/_utils/legacySync.ts). Call until `done`.
+ */
+export const syncLegacyStep = () =>
+  call<{ done: boolean; copied: number; removed: number; skipped?: string }>(
+    '/api/migrate-bistro',
+    { method: 'POST', body: { sync: true } },
+  );
+
 /** Mirrors defaultBistroName in api/_utils/bistroRules.ts. */
 export function defaultBistroName(displayName: string): string {
   const first = displayName.trim().split(/\s+/)[0];

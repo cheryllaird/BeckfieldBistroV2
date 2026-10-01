@@ -447,6 +447,11 @@ appears on another without manual refresh. The functional guarantees:
   own bistro once, on first launch of a version with bistros (a short "Setting up
   your bistro" screen). The copy is resumable and the original data is kept until
   a later clean-up release.
+- **Catching up with older app versions:** a device still running a version
+  without bistros keeps writing to the old location. On each launch (at most every
+  10 minutes) the app brings those changes across in the background: edits and
+  additions made in the old version are copied in, and deletions made there are
+  applied — but never over anything created or edited in the new version since.
 
 ---
 

@@ -15,6 +15,7 @@ vi.mock('../lib/bistro', () => ({
   removeMember: vi.fn(async () => ({ ok: true })),
   leaveBistro: vi.fn(async () => ({ ok: true })),
   migrateBistroStep: vi.fn(async () => ({ done: true, copied: 0 })),
+  syncLegacyStep: vi.fn(async () => ({ done: true, copied: 0, removed: 0 })),
   placeholderBistro: (u: { uid: string; name: string }) => ({
     id: u.uid,
     name: `${u.name}'s Bistro`,
@@ -261,6 +262,44 @@ describe('migration', () => {
     expect(api.migrateBistroStep).not.toHaveBeenCalled();
     expect(useStore.getState().bistroMigrated).toBe(true);
     expect(firestore.setDataRoot).toHaveBeenLastCalledWith(true);
+  });
+});
+
+describe('legacy catch-up sync', () => {
+  it('runs once per session for a migrated account, in the background', async () => {
+    launch();
+    emitAccess({ bistroIds: ['me'], migrated: true });
+    emitAccess({ bistroIds: ['me', 'ann'], migrated: true });
+    await flush();
+
+    expect(api.syncLegacyStep).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps going while the server reports more to do', async () => {
+    vi.mocked(api.syncLegacyStep)
+      .mockResolvedValueOnce({ done: false, copied: 5, removed: 0 })
+      .mockResolvedValueOnce({ done: true, copied: 2, removed: 1 });
+    launch();
+    emitAccess({ bistroIds: ['me'], migrated: true });
+
+    await vi.waitFor(() => expect(api.syncLegacyStep).toHaveBeenCalledTimes(2));
+  });
+
+  it('does not run before the account has migrated', async () => {
+    launch({ bistroMigrated: false });
+    emitAccess({ bistroIds: [], migrated: false });
+    await flush();
+
+    expect(api.syncLegacyStep).not.toHaveBeenCalled();
+  });
+
+  it('swallows failures, leaving them for the next launch', async () => {
+    vi.mocked(api.syncLegacyStep).mockRejectedValueOnce(new Error('offline'));
+    launch();
+    emitAccess({ bistroIds: ['me'], migrated: true });
+    await flush();
+
+    expect(useStore.getState().activeBistroId).toBeNull();
   });
 });
 

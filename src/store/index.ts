@@ -38,6 +38,7 @@ import {
   removeMember as apiRemoveMember,
   leaveBistro as apiLeaveBistro,
   migrateBistroStep,
+  syncLegacyStep,
   placeholderBistro,
 } from '../lib/bistro';
 import {
@@ -75,6 +76,8 @@ const _bistroUnsubs = new Map<string, () => void>();
 // isn't reported as "you were removed".
 const _leaving = new Set<string>();
 let _migrationRunning = false;
+// The legacy catch-up sync runs at most once per app session.
+let _legacySyncStarted = false;
 // Bumped by every switchBistro so a slower, superseded switch can't land last.
 let _switchToken = 0;
 
@@ -411,6 +414,7 @@ function detachSessionListeners() {
   _unsubscribeAccess = null;
   _bistroUnsubs.forEach((unsub) => unsub());
   _bistroUnsubs.clear();
+  _legacySyncStarted = false;
 }
 
 function onAccess(access: BistroAccess, set: SetState, get: () => Store) {
@@ -419,6 +423,7 @@ function onAccess(access: BistroAccess, set: SetState, get: () => Store) {
 
   if (access.migrated) {
     if (!get().bistroMigrated) setBistroMigrated(set, get);
+    syncLegacyLibrary();
   } else if (!get().bistroMigrated) {
     runMigration(set, get);
   }
@@ -503,6 +508,22 @@ function setBistroMigrated(set: SetState, get: () => Store) {
   if (_unsubscribeUserData && s.user && scope) {
     detachDataListeners();
     attachDataListeners(scope, s.user.uid, set, get);
+  }
+}
+
+// Brings across anything an older app version (still writing to the legacy
+// users/{uid}/… paths) changed since this account's library was copied. Runs
+// in the background; the changes arrive through the normal data listeners.
+// Failures are left for the next launch.
+async function syncLegacyLibrary() {
+  if (_legacySyncStarted) return;
+  _legacySyncStarted = true;
+  try {
+    for (let round = 0; round < 5; round++) {
+      if ((await syncLegacyStep()).done) return;
+    }
+  } catch {
+    // Offline or server error: try again next launch.
   }
 }
 
