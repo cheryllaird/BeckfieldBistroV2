@@ -11,7 +11,12 @@ export function initFirebaseAdmin() {
 
 export interface AuthedUser {
   uid: string;
-  /** Lowercased; '' when the token carries no email. */
+  /**
+   * Lowercased; '' when the token carries no email or an unverified one.
+   * Invites and shares are addressed by email, so an unverified address must
+   * never count: with a provider like Email/Password enabled, anyone could
+   * sign up as an invitee's address and claim what was sent to them.
+   */
   email: string;
   name: string;
   avatar?: string;
@@ -28,7 +33,7 @@ export async function getUser(req: VercelRequest): Promise<AuthedUser | null> {
     const decoded = await getAuth().verifyIdToken(token);
     return {
       uid: decoded.uid,
-      email: (decoded.email ?? '').toLowerCase(),
+      email: decoded.email_verified ? (decoded.email ?? '').toLowerCase() : '',
       name: (decoded.name as string | undefined) ?? decoded.email ?? 'Someone',
       avatar: decoded.picture,
     };

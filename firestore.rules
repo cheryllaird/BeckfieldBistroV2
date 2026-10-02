@@ -32,16 +32,9 @@ service cloud.firestore {
       allow read, write: if request.auth != null && isBistroMember(bid);
     }
 
-    // bistroInvites has no rule: it is reachable only through /api/bistro.
-
-    match /sharedRecipes/{shareId} {
-      allow create: if request.auth != null
-        && request.resource.data.fromUid == request.auth.uid;
-      allow read, delete: if request.auth != null && (
-        resource.data.fromUid == request.auth.uid
-        || resource.data.toEmail == request.auth.token.email
-      );
-      allow update: if false;
-    }
+    // bistroInvites and sharedRecipes have no rules: clients can't touch them
+    // directly. They're reachable only through /api/bistro and
+    // /api/share-recipe, which check the caller's verified email and validate
+    // what gets stored.
   }
 }

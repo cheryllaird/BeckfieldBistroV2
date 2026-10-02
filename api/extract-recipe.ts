@@ -11,6 +11,7 @@ import {
   flattenInstructions,
   parseIsoDuration,
 } from './_utils/recipeParsers.js';
+import { safeFetchText } from './_utils/safeFetch.js';
 
 export const config = {
   api: {
@@ -532,17 +533,18 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   let html = '';
   let pageText: string;
   try {
-    const resp = await fetch(url, {
+    // safeFetchText refuses private/internal addresses (on every redirect hop)
+    // and caps the body, so a user-supplied URL can't probe internal services.
+    const resp = await safeFetchText(url, {
       headers: { 'User-Agent': 'Mozilla/5.0 (compatible; BistroBot/1.0)' },
-      signal: AbortSignal.timeout(5000),
+      timeoutMs: 5000,
     });
-    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-    const contentType = resp.headers.get('content-type') ?? '';
-    if (!contentType.includes('text/html')) {
+    if (resp.status < 200 || resp.status >= 300) throw new Error(`HTTP ${resp.status}`);
+    if (!resp.contentType.includes('text/html')) {
       return res.status(400).json({ error: 'URL does not point to an HTML page' });
     }
-    html = await resp.text();
-    coverImage = extractPageImage(html, url);
+    html = resp.text;
+    coverImage = extractPageImage(html, resp.url);
     pageText = stripHtml(html);
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
