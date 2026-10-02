@@ -5,6 +5,7 @@ import { initFirebaseAdmin } from './_utils/auth.js';
 import { getFirestore, FieldValue } from 'firebase-admin/firestore';
 import { decryptSecret, type EncryptedValue } from './_utils/crypto.js';
 import { getOcrEngine, preprocessForOcr, assessOcrQuality, type OcrResult } from './_utils/ocr.js';
+import { readTextCapped, safeFetch, UnsafeUrlError } from './_utils/safeFetch.js';
 import {
   parseRecipeText,
   buildIngredientSections,
@@ -532,7 +533,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   let html = '';
   let pageText: string;
   try {
-    const resp = await fetch(url, {
+    const resp = await safeFetch(url, {
       headers: { 'User-Agent': 'Mozilla/5.0 (compatible; BistroBot/1.0)' },
       signal: AbortSignal.timeout(5000),
     });
@@ -541,14 +542,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (!contentType.includes('text/html')) {
       return res.status(400).json({ error: 'URL does not point to an HTML page' });
     }
-    html = await resp.text();
+    html = await readTextCapped(resp);
     coverImage = extractPageImage(html, url);
     pageText = stripHtml(html);
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     console.error(`URL fetch error: ${msg}`);
     return res.status(400).json({
-      error: 'Could not fetch the recipe page. Check the URL and try again.',
+      error: err instanceof UnsafeUrlError
+        ? 'That URL can’t be fetched. Use the address of a public recipe page.'
+        : 'Could not fetch the recipe page. Check the URL and try again.',
     });
   }
 
