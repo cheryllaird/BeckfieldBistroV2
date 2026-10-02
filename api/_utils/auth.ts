@@ -12,9 +12,10 @@ export function initFirebaseAdmin() {
 export interface AuthedUser {
   uid: string;
   /**
-   * Lowercased; '' when the token carries no email or an unverified one, so an
-   * account can never claim invites or shares addressed to an address it
-   * hasn't proven it owns.
+   * Lowercased; '' when the token carries no email or an unverified one.
+   * Invites and shares are addressed by email, so an unverified address must
+   * never count: with a provider like Email/Password enabled, anyone could
+   * sign up as an invitee's address and claim what was sent to them.
    */
   email: string;
   name: string;

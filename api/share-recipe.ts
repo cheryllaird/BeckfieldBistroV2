@@ -1,6 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { getFirestore } from 'firebase-admin/firestore';
 import { getUser } from './_utils/auth.js';
+import { buildShare, checkShareQuota } from './_utils/shareRules.js';
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   const user = await getUser(req);
@@ -8,14 +9,19 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   const db = getFirestore();
 
-  // POST /api/share-recipe — create a new share
+  // POST /api/share-recipe — create a new share. The stored doc is rebuilt
+  // from an allow-list (see buildShare); the body is never stored as sent.
   if (req.method === 'POST') {
-    const share = req.body as Record<string, unknown>;
-    if (!share || share.fromUid !== user.uid) {
-      return res.status(403).json({ error: 'Forbidden' });
+    const now = new Date();
+    const built = buildShare(req.body, user, now);
+    if ('rejection' in built) {
+      return res.status(built.rejection.status).json({ error: built.rejection.error });
     }
     try {
-      const ref = await db.collection('sharedRecipes').add(share);
+      const sent = await db.collection('sharedRecipes').where('fromUid', '==', user.uid).select('createdAt').get();
+      const overQuota = checkShareQuota(sent.docs.map((d) => String(d.data().createdAt ?? '')), now);
+      if (overQuota) return res.status(overQuota.status).json({ error: overQuota.error });
+      const ref = await db.collection('sharedRecipes').add(built.share);
       return res.status(200).json({ id: ref.id });
     } catch (err) {
       console.error('share-recipe POST error:', err);
@@ -47,7 +53,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const snap = await ref.get();
       if (!snap.exists) return res.status(404).json({ error: 'Not found' });
       const data = snap.data()!;
-      if (data.fromUid !== user.uid && data.toEmail !== user.email) {
+      if (data.fromUid !== user.uid && (!user.email || data.toEmail !== user.email)) {
         return res.status(403).json({ error: 'Forbidden' });
       }
       await ref.delete();

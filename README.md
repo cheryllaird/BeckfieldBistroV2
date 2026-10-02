@@ -27,9 +27,8 @@ Add all of the following:
 | `localhost` | Local dev (added by default) |
 | `beckfield-bistro.vercel.app` | Production |
 | `beckfield-bistro-cheryllairds-projects.vercel.app` | Vercel team alias |
-| `vercel.app` | All PR preview deployments (`beckfield-bistro-git-*-cheryllairds-projects.vercel.app`) |
 
-> **Why `vercel.app`?** Vercel preview URLs are dynamic (e.g. `beckfield-bistro-git-my-branch-cheryllairds-projects.vercel.app`), so you can't add each one individually. Adding `vercel.app` covers all of them at once. Firebase still enforces your Firestore security rules, so this doesn't weaken data security.
+> **Do not add `vercel.app` itself.** Anyone can deploy a site under `*.vercel.app`, so authorizing the whole domain lets an attacker's site run Google Sign-in against this Firebase project and capture users' sessions. To sign in on a preview deployment, add that preview's exact hostname temporarily (or put previews on a custom domain you own) and remove it afterwards.
 
 ### 3. Google OAuth authorized origins
 
@@ -37,9 +36,16 @@ In **Google Cloud Console → APIs & Services → Credentials → your OAuth 2.0
 
 - `https://beckfield-bistro.vercel.app`
 - `https://beckfield-bistro-cheryllairds-projects.vercel.app`
-- `https://vercel.app` (covers previews)
 
-### 4. Install and run
+### 4. Deploy the Firestore security rules
+
+`firestore.rules` is the only thing standing between the public web API key and the database, and nothing deploys it automatically. Deploy it whenever it changes, and check that **Firebase Console → Firestore → Rules** matches the file:
+
+```bash
+npx firebase-tools deploy --only firestore:rules --project <your-project-id>
+```
+
+### 5. Install and run
 
 ```bash
 npm install
