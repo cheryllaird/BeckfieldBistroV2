@@ -121,6 +121,47 @@ export interface PantryItem {
   updatedAt?: number; // epoch ms of last change; reconciles snapshots by recency
 }
 
+// ── bistros ──────────────────────────────────────────────────────────────────
+// A bistro is a shared library (recipes, meal plan, shopping list, pantry,
+// known sources). Every user owns exactly one, keyed by their uid and stored at
+// bistros/{uid}/…, and can be invited into other people's. See
+// docs/APP_SPECIFICATION.md §12.1.
+
+export interface BistroMember {
+  name: string;
+  email: string;
+  avatar?: string;
+  joinedAt: string; // ISO datetime
+}
+
+export interface Bistro {
+  id: string; // === ownerUid
+  name: string;
+  ownerUid: string;
+  createdAt: string;
+  memberUids: string[]; // includes the owner
+  members: Record<string, BistroMember>;
+}
+
+export interface BistroInvite {
+  id: string;
+  bistroId: string;
+  bistroName: string;
+  fromUid: string;
+  fromName: string;
+  fromAvatar?: string;
+  toEmail: string; // lowercased
+  createdAt: string;
+}
+
+// Progress of the one-time copy of a pre-bistro account's data from
+// users/{uid}/… to bistros/{uid}/… (api/migrate-bistro.ts).
+export interface MigrationState {
+  status: 'running' | 'error';
+  copied: number;
+  error?: string;
+}
+
 export interface AppState {
   recipes: Recipe[];
   mealEntries: MealEntry[];
@@ -135,4 +176,13 @@ export interface AppState {
   isAuthenticated: boolean;
   user: { uid: string; name: string; email: string; avatar?: string } | null;
   splashDone: boolean;
+  // The bistro whose data is loaded. null means the user's own (id === uid).
+  // Per-device: viewing a partner's bistro on one device doesn't switch others.
+  activeBistroId: string | null;
+  // True once this account's data lives at bistros/{uid}/… (see MigrationState).
+  // Until then reads and writes go to the legacy users/{uid}/… paths.
+  bistroMigrated: boolean;
+  // Bistros this user can open, keyed by id. The own bistro is always present
+  // (synthesised if its doc hasn't been created yet).
+  bistros: Record<string, Bistro>;
 }

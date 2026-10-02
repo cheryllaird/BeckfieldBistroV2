@@ -7,6 +7,7 @@ import { authErrorMessage } from './lib/authErrors';
 import { useStore } from './store';
 import { SplashScreen } from './pages/SplashScreen';
 import { AuthPage } from './pages/AuthPage';
+import { MigrationScreen } from './components/MigrationScreen';
 import { AppLayout } from './components/layout/AppLayout';
 import { LibraryPage } from './pages/Library/index';
 import { RecipeDetailPage } from './pages/RecipeDetail/index';
@@ -32,7 +33,7 @@ function FirebaseSetupScreen() {
 
 // Separated so hooks are always called in the same order (Rules of Hooks).
 function AuthenticatedApp() {
-  const { splashDone, isAuthenticated, signIn, resubscribe } = useStore();
+  const { splashDone, isAuthenticated, signIn, resubscribe, migration } = useStore();
   const [redirectError, setRedirectError] = useState<string | null>(null);
 
   // Single gate: render nothing until Zustand has hydrated from persisted
@@ -101,6 +102,9 @@ function AuthenticatedApp() {
     return <SplashScreen />;
   }
   if (!isAuthenticated) return <AuthPage initialError={redirectError} />;
+  // Nothing may be written while an older account's library is being copied
+  // to its bistro, so the app waits here until the copy has cut over.
+  if (migration) return <MigrationScreen />;
 
   return (
     <Routes>

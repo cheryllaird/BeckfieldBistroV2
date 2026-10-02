@@ -1,17 +1,33 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { LogOut, Settings, User } from 'lucide-react';
-import { useStore } from '../../store';
+import { Check, LogOut, Settings, User } from 'lucide-react';
+import { useStore, scopeOf } from '../../store';
+import type { Bistro } from '../../types';
 
 export function Header() {
-  const { user, signOut } = useStore();
+  const { user, signOut, bistros, switchBistro } = useStore();
+  const activeId = useStore(scopeOf);
   const navigate = useNavigate();
   const [menuOpen, setMenuOpen] = useState(false);
+
+  // Own bistro first, then the rest by name.
+  const bistroList = Object.values(bistros).sort((a: Bistro, b: Bistro) =>
+    a.id === user?.uid ? -1 : b.id === user?.uid ? 1 : a.name.localeCompare(b.name),
+  );
+  const activeBistro = activeId ? bistros[activeId] : undefined;
+  const showBistros = bistroList.length > 1;
 
   return (
     <header className="sticky top-0 z-40 bg-white border-b border-slate-200">
       <div className="max-w-md mx-auto px-4 h-14 flex items-center justify-between">
-        <img src="/logo-wordmark.png" alt="Beckfield Bistro" className="h-8 w-auto" />
+        <div className="flex flex-col justify-center min-w-0">
+          <img src="/logo-wordmark.png" alt="Beckfield Bistro" className="h-8 w-auto self-start" />
+          {showBistros && activeBistro && (
+            <p className="text-[11px] font-medium text-amber-600 truncate leading-tight">
+              {activeBistro.name}
+            </p>
+          )}
+        </div>
 
         {user && (
           <div className="relative">
@@ -42,12 +58,31 @@ export function Header() {
                   className="fixed inset-0 z-40"
                   onClick={() => setMenuOpen(false)}
                 />
-                <div className="absolute right-0 top-full mt-2 z-50 bg-white rounded-xl border border-slate-200 shadow-lg py-1 min-w-40 animate-in">
+                <div className="absolute right-0 top-full mt-2 z-50 bg-white rounded-xl border border-slate-200 shadow-lg py-1 min-w-48 max-w-64 animate-in">
                   <div className="px-3 py-2 border-b border-slate-100">
                     <p className="text-sm font-medium text-slate-800">{user.name}</p>
                     <p className="text-xs text-slate-400">{user.email}</p>
                     <p className="text-xs text-slate-300 mt-1">v{__APP_VERSION__}</p>
                   </div>
+                  {showBistros && (
+                    <div className="py-1 border-b border-slate-100">
+                      <p className="px-3 pt-1 pb-0.5 text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+                        Bistros
+                      </p>
+                      {bistroList.map((b) => (
+                        <button
+                          key={b.id}
+                          onClick={() => { switchBistro(b.id); setMenuOpen(false); }}
+                          className="w-full flex items-center gap-2 px-3 py-2 text-sm text-slate-600 hover:bg-slate-50 transition-colors text-left"
+                        >
+                          <span className="w-3.5 shrink-0">
+                            {b.id === activeId && <Check size={14} className="text-amber-500" />}
+                          </span>
+                          <span className="truncate">{b.name}</span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
                   <button
                     onClick={() => { navigate('/settings'); setMenuOpen(false); }}
                     className="w-full flex items-center gap-2 px-3 py-2 text-sm text-slate-600 hover:bg-slate-50 transition-colors"

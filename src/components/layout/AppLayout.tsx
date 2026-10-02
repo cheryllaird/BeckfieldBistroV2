@@ -3,6 +3,7 @@ import { Outlet, useLocation } from 'react-router-dom';
 import { WifiOff, Wifi } from 'lucide-react';
 import { Header } from './Header';
 import { BottomNav } from './BottomNav';
+import { BistroInviteBanner } from '../BistroInviteBanner';
 import { useOnlineStatus } from '../../hooks/useOnlineStatus';
 
 function ScrollToTop() {
@@ -39,6 +40,7 @@ export function AppLayout() {
       <ScrollToTop />
       <Header />
       <NetworkBanner />
+      <BistroInviteBanner />
       <main className="flex-1 flex flex-col max-w-md mx-auto w-full px-4 pt-4 pb-28 animate-in">
         <Outlet />
       </main>

@@ -1,28 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { initializeApp, cert, getApps } from 'firebase-admin/app';
-import { getAuth } from 'firebase-admin/auth';
 import { getFirestore } from 'firebase-admin/firestore';
-
-function initFirebaseAdmin() {
-  if (getApps().length > 0) return;
-  const raw = process.env.FIREBASE_SERVICE_ACCOUNT;
-  if (!raw) throw new Error('FIREBASE_SERVICE_ACCOUNT env var is not set');
-  initializeApp({ credential: cert(JSON.parse(raw)) });
-}
-
-async function getUser(req: VercelRequest): Promise<{ uid: string; email: string } | null> {
-  const token = req.headers.authorization?.startsWith('Bearer ')
-    ? req.headers.authorization.slice(7)
-    : null;
-  if (!token) return null;
-  try {
-    initFirebaseAdmin();
-    const decoded = await getAuth().verifyIdToken(token);
-    return { uid: decoded.uid, email: decoded.email ?? '' };
-  } catch {
-    return null;
-  }
-}
+import { getUser } from './_utils/auth.js';
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   const user = await getUser(req);

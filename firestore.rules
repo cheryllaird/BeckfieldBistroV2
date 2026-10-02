@@ -1,9 +1,38 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
+    // Personal data: the encrypted Gemini key (meta/profile), the bistro access
+    // list (meta/bistroAccess), and pre-bistro libraries awaiting or kept after
+    // migration. A user can write their own bistroAccess, which is harmless: it
+    // only tells the client what to try to open — access to a bistro is decided
+    // by bistros/{bid}.memberUids below.
     match /users/{uid}/{document=**} {
       allow read, write: if request.auth != null && request.auth.uid == uid;
     }
+
+    // A bistro's id is its owner's uid. The owner is let in directly, which
+    // costs no extra read and works before the bistro doc exists; everyone
+    // else must be listed in memberUids.
+    function isBistroMember(bid) {
+      return request.auth.uid == bid
+        || request.auth.uid in get(/databases/$(database)/documents/bistros/$(bid)).data.memberUids;
+    }
+
+    // Membership changes are made only by /api/bistro (admin SDK).
+    match /bistros/{bid} {
+      allow read: if request.auth != null
+        && (request.auth.uid == bid || request.auth.uid in resource.data.memberUids);
+      allow write: if false;
+    }
+
+    // Everything *under* a bistro. The {collection} segment matters: a bare
+    // {document=**} also matches zero segments, i.e. bistros/{bid} itself,
+    // which would let any member rewrite memberUids and let anyone in.
+    match /bistros/{bid}/{collection}/{document=**} {
+      allow read, write: if request.auth != null && isBistroMember(bid);
+    }
+
+    // bistroInvites has no rule: it is reachable only through /api/bistro.
 
     match /sharedRecipes/{shareId} {
       allow create: if request.auth != null

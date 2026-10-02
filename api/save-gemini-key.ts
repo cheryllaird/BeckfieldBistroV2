@@ -1,15 +1,8 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { initializeApp, cert, getApps } from 'firebase-admin/app';
 import { getAuth } from 'firebase-admin/auth';
+import { initFirebaseAdmin } from './_utils/auth.js';
 import { getFirestore, FieldValue } from 'firebase-admin/firestore';
 import { encryptSecret } from './_utils/crypto.js';
-
-function initFirebaseAdmin() {
-  if (getApps().length > 0) return;
-  const raw = process.env.FIREBASE_SERVICE_ACCOUNT;
-  if (!raw) throw new Error('FIREBASE_SERVICE_ACCOUNT env var is not set');
-  initializeApp({ credential: cert(JSON.parse(raw)) });
-}
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'POST') {
