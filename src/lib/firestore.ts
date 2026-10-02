@@ -165,6 +165,8 @@ export interface UserDataCallbacks {
   onPantryItems: (items: PantryItem[]) => void;
   onKnownSources: (sources: string[]) => void;
   onHasGeminiApiKey: (hasKey: boolean) => void;
+  /** The bistro to open on launch (null: whichever was open last). */
+  onDefaultBistroId?: (bistroId: string | null) => void;
   onError?: (err: Error) => void;
 }
 
@@ -258,6 +260,7 @@ export function subscribeToUserData(
     (snap) => {
       if (snap.metadata.fromCache && !snap.exists()) return;
       callbacks.onHasGeminiApiKey(!!snap.data()?.geminiApiKeyEncrypted);
+      callbacks.onDefaultBistroId?.((snap.data()?.defaultBistroId as string | undefined) ?? null);
     },
     handleError
   );
@@ -386,6 +389,13 @@ export function saveKnownSources(bistroId: string, sources: string[]): void {
   setDoc(bistroProfileDoc(bistroId), { knownSources: sources }, { merge: true }).catch(logFirestoreError);
 }
 
+/** Personal preference: the bistro to open on launch, or null for the last one open. */
+export function saveDefaultBistro(uid: string, bistroId: string | null): void {
+  ensureFirestoreOnline();
+  setDoc(userProfileDoc(uid), { defaultBistroId: bistroId ?? deleteField() }, { merge: true })
+    .catch(logFirestoreError);
+}
+
 // ── AI API key ────────────────────────────────────────────────────────────────
 // Each user supplies their own Gemini API key so recipe-extraction usage/cost is
 // billed to their own account rather than a single shared key. The key itself
@@ -489,6 +499,11 @@ export interface BistroAccess {
   bistroIds: string[];
   /** Their own library has been copied to bistros/{uid}/…. */
   migrated: boolean;
+  /**
+   * Served from the local cache, which can predate an invite accepted on
+   * another device — so it can't be trusted to say a bistro has been lost.
+   */
+  fromCache?: boolean;
 }
 
 /**
@@ -507,6 +522,7 @@ export function subscribeToBistroAccess(
       callback({
         bistroIds: (data?.bistroIds as string[] | undefined) ?? [],
         migrated: !!data?.migratedAt,
+        fromCache: snap.metadata.fromCache,
       });
     },
     (err) => {

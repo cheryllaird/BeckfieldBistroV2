@@ -26,6 +26,7 @@ import {
   setDataRoot,
   subscribeToBistroAccess,
   subscribeToBistro,
+  saveDefaultBistro,
   type BistroAccess,
 } from '../lib/firestore';
 import {
@@ -82,6 +83,9 @@ let _legacySyncStarted = false;
 let _switchToken = 0;
 // Where an in-flight switch is heading (null when none is).
 let _switchTarget: string | null = null;
+// Whether this session's launch bistro has been decided: the default bistro is
+// applied once, at launch, and never after the user has switched themselves.
+let _launchScopeSettled = false;
 
 /** The bistro whose data is loaded: the active one, else the user's own. */
 export const scopeOf = (s: Pick<AppState, 'activeBistroId' | 'user'>) =>
@@ -142,6 +146,8 @@ interface Store extends AppState {
 
   // Bistro actions
   switchBistro: (bistroId: string) => Promise<void>;
+  // null: open whichever bistro was open last.
+  setDefaultBistro: (bistroId: string | null) => void;
   refreshInvites: () => Promise<void>;
   acceptInvite: (invite: BistroInvite) => Promise<string>;
   declineInvite: (inviteId: string) => Promise<void>;
@@ -373,6 +379,11 @@ function attachDataListeners(bistroId: string, ownUid: string, set: SetState, ge
       );
     },
     onHasGeminiApiKey: (hasGeminiApiKey) => set({ hasGeminiApiKey }),
+    onDefaultBistroId: (defaultBistroId) => {
+      if (defaultBistroId !== get().defaultBistroId) set({ defaultBistroId });
+      // A fresh sign-in only learns the default from here, so apply it now.
+      openLaunchBistro(set, get);
+    },
     onError: (err) => {
       // Lost access to someone else's bistro (removed by another member).
       if (bistroId !== ownUid && (err as { code?: string }).code === 'permission-denied') {
@@ -417,9 +428,24 @@ function detachSessionListeners() {
   _bistroUnsubs.forEach((unsub) => unsub());
   _bistroUnsubs.clear();
   _legacySyncStarted = false;
+  _launchScopeSettled = false;
   // Abandon any switch in flight.
   _switchToken++;
   _switchTarget = null;
+}
+
+// Opens the default bistro, once per session, if the user has chosen one and
+// hasn't switched bistros themselves since launch. Without a default, the
+// bistro that was open last (the persisted activeBistroId) stays open.
+function openLaunchBistro(set: SetState, get: () => Store) {
+  if (_launchScopeSettled) return;
+  const s = get();
+  if (!s.user || !s.bistroMigrated) return;
+  _launchScopeSettled = true;
+  const target = s.defaultBistroId;
+  if (target && target !== (_switchTarget ?? scopeOf(s))) {
+    switchScope(target, true, set, get).catch(() => {});
+  }
 }
 
 function onAccess(access: BistroAccess, set: SetState, get: () => Store) {
@@ -455,11 +481,18 @@ function onAccess(access: BistroAccess, set: SetState, get: () => Store) {
       ),
     );
   }
-  // Known bistros we've lost, plus a persisted active one we no longer have
-  // access to — deduped, so each is handled once.
+  // A cached access list can predate joining a bistro (an invite accepted on
+  // another device, or before the cache caught up), so only the server's word
+  // counts as losing one. Without this, relaunching into a bistro could bounce
+  // the user back to their own. A genuine removal still arrives from the server
+  // here, and as permission-denied on the bistro's listeners.
+  if (access.fromCache) return;
+  // Known bistros we've lost, plus a persisted active or default one we no
+  // longer have access to — deduped, so each is handled once.
   const lost = new Set(Object.keys(get().bistros));
-  const active = get().activeBistroId;
+  const { activeBistroId: active, defaultBistroId: preferred } = get();
   if (active) lost.add(active);
+  if (preferred) lost.add(preferred);
   for (const id of lost) if (!ids.has(id)) loseBistro(id, set, get);
 }
 
@@ -473,6 +506,10 @@ function loseBistro(id: string, set: SetState, get: () => Store) {
   const { [id]: lost, ...rest } = get().bistros;
   set({ bistros: rest });
   clearScopeCache(user.uid, id).catch(() => {});
+  if (get().defaultBistroId === id) {
+    set({ defaultBistroId: null });
+    saveDefaultBistro(user.uid, null);
+  }
   if (get().activeBistroId === id) {
     // The same loss can be reported twice (access list and doc listener);
     // don't let the second, which no longer knows the name, overwrite it.
@@ -592,6 +629,7 @@ export const useStore = create<Store>()(
       splashDone: false,
       incomingShares: [],
       activeBistroId: null,
+      defaultBistroId: null,
       bistroMigrated: false,
       bistros: {},
       pendingInvites: [],
@@ -724,8 +762,11 @@ export const useStore = create<Store>()(
         // churns watch-target adds/removes on the Listen stream, the race
         // behind Firestore's fatal "INTERNAL ASSERTION FAILED (ID: ca9)"
         // (firebase-js-sdk#9267), and buys nothing.
+        // A launch switch to the default bistro counts as live listeners too:
+        // the data listeners are detached only while its cache loads.
         const keepListeners =
-          _unsubscribeUserData !== null && existingUid === firebaseUser.uid;
+          (_unsubscribeUserData !== null || _switchTarget !== null) &&
+          existingUid === firebaseUser.uid;
 
         if (!keepListeners) {
           // Tear down any previous listeners (e.g. switching accounts)
@@ -749,6 +790,7 @@ export const useStore = create<Store>()(
             hasGeminiApiKey: false,
             incomingShares: [],
             activeBistroId: null,
+            defaultBistroId: null,
             bistroMigrated: false,
             bistros: {},
             pendingInvites: [],
@@ -774,9 +816,17 @@ export const useStore = create<Store>()(
       // IndexedDB data is available immediately, before Firebase validates.
       resubscribe: () => {
         const s = get();
-        if (!s.user || _unsubscribeUserData) return;
+        if (!s.user || _unsubscribeUserData || _switchTarget) return;
         setDataRoot(s.bistroMigrated);
-        attachDataListeners(scopeOf(s)!, s.user.uid, set, get);
+        const target = s.defaultBistroId;
+        if (s.bistroMigrated && target && target !== scopeOf(s)) {
+          // Open the default bistro straight away rather than attaching to the
+          // last one first and switching once its profile has loaded.
+          _launchScopeSettled = true;
+          switchScope(target, true, set, get).catch(() => {});
+        } else {
+          attachDataListeners(scopeOf(s)!, s.user.uid, set, get);
+        }
         attachSessionListeners(s.user, set, get);
       },
 
@@ -796,6 +846,7 @@ export const useStore = create<Store>()(
           hasGeminiApiKey: false,
           incomingShares: [],
           activeBistroId: null,
+          defaultBistroId: null,
           bistroMigrated: false,
           bistros: {},
           pendingInvites: [],
@@ -888,7 +939,18 @@ export const useStore = create<Store>()(
 
       // ── bistros ───────────────────────────────────────────────────────────
 
-      switchBistro: (bistroId) => switchScope(bistroId, true, set, get),
+      switchBistro: (bistroId) => {
+        // The user's own choice: a default arriving later mustn't override it.
+        _launchScopeSettled = true;
+        return switchScope(bistroId, true, set, get);
+      },
+
+      setDefaultBistro: (bistroId) => {
+        const user = get().user;
+        if (!user) return;
+        set({ defaultBistroId: bistroId });
+        saveDefaultBistro(user.uid, bistroId);
+      },
 
       refreshInvites: async () => {
         if (!get().user) return;
@@ -980,6 +1042,7 @@ export const useStore = create<Store>()(
         // has moved to bistros/{uid}/…, so the offline-first boot attaches to
         // the right paths before the network has answered.
         activeBistroId: s.activeBistroId,
+        defaultBistroId: s.defaultBistroId,
         bistroMigrated: s.bistroMigrated,
         bistros: s.bistros,
       }),

@@ -179,6 +179,10 @@ export interface AppState {
   // The bistro whose data is loaded. null means the user's own (id === uid).
   // Per-device: viewing a partner's bistro on one device doesn't switch others.
   activeBistroId: string | null;
+  // The bistro to open on launch, chosen in Settings. null opens whichever was
+  // open last (activeBistroId, persisted). Per-account: synced via the user's
+  // profile so it applies on every device.
+  defaultBistroId: string | null;
   // True once this account's data lives at bistros/{uid}/… (see MigrationState).
   // Until then reads and writes go to the legacy users/{uid}/… paths.
   bistroMigrated: boolean;
