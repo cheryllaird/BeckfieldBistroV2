@@ -134,6 +134,32 @@ describe('switching bistros', () => {
     expect(useStore.getState().recipes.map((r) => r.id)).toEqual(['anns']);
   });
 
+  it('honours switching straight back before the first switch has landed', async () => {
+    launch({ recipes: [makeRecipe({ id: 'mine' })] });
+    vi.mocked(firestore.subscribeToUserData).mockClear();
+
+    const toAnn = useStore.getState().switchBistro('ann'); // still loading Ann's cache
+    await useStore.getState().switchBistro('me');
+    await toAnn;
+
+    expect(useStore.getState().activeBistroId).toBeNull();
+    expect(useStore.getState().recipes.map((r) => r.id)).toEqual(['mine']);
+    const calls = vi.mocked(firestore.subscribeToUserData).mock.calls;
+    expect(calls[calls.length - 1][0]).toBe('me');
+  });
+
+  it('ignores a repeat tap on the bistro already being switched to', async () => {
+    launch();
+    vi.mocked(firestore.subscribeToUserData).mockClear();
+
+    const first = useStore.getState().switchBistro('ann');
+    await useStore.getState().switchBistro('ann');
+    await first;
+
+    expect(useStore.getState().activeBistroId).toBe('ann');
+    expect(firestore.subscribeToUserData).toHaveBeenCalledTimes(1);
+  });
+
   it('is a no-op for the bistro already open, and before migration', async () => {
     launch({ bistroMigrated: false });
     vi.mocked(firestore.subscribeToUserData).mockClear();

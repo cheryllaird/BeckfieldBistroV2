@@ -80,6 +80,8 @@ let _migrationRunning = false;
 let _legacySyncStarted = false;
 // Bumped by every switchBistro so a slower, superseded switch can't land last.
 let _switchToken = 0;
+// Where an in-flight switch is heading (null when none is).
+let _switchTarget: string | null = null;
 
 /** The bistro whose data is loaded: the active one, else the user's own. */
 export const scopeOf = (s: Pick<AppState, 'activeBistroId' | 'user'>) =>
@@ -415,6 +417,9 @@ function detachSessionListeners() {
   _bistroUnsubs.forEach((unsub) => unsub());
   _bistroUnsubs.clear();
   _legacySyncStarted = false;
+  // Abandon any switch in flight.
+  _switchToken++;
+  _switchTarget = null;
 }
 
 function onAccess(access: BistroAccess, set: SetState, get: () => Store) {
@@ -486,14 +491,28 @@ async function switchScope(bistroId: string, park: boolean, set: SetState, get: 
   const s = get();
   const user = s.user;
   const current = scopeOf(s);
-  if (!user || !s.bistroMigrated || bistroId === current) return;
-  const token = ++_switchToken;
+  // Compare against where we're heading, not where we are: during a switch
+  // the state still shows the bistro being left.
+  if (!user || !s.bistroMigrated || bistroId === (_switchTarget ?? current)) return;
 
+  if (bistroId === current) {
+    // Back to the bistro whose data is still loaded: cancel the switch in
+    // flight and listen to it again, rather than reloading it from the cache.
+    _switchToken++;
+    _switchTarget = null;
+    detachDataListeners();
+    attachDataListeners(current, user.uid, set, get);
+    return;
+  }
+
+  const token = ++_switchToken;
+  _switchTarget = bistroId;
   detachDataListeners();
   if (park && current) saveScopeCache(user.uid, current, pickScopeData(s)).catch(() => {});
   const data = await loadScopeCache(user.uid, bistroId);
   if (token !== _switchToken) return; // superseded by a later switch
 
+  _switchTarget = null;
   set({ ...data, activeBistroId: bistroId === user.uid ? null : bistroId });
   attachDataListeners(bistroId, user.uid, set, get);
 }

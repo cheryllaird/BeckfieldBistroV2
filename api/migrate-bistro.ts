@@ -8,7 +8,12 @@ import {
   type Firestore,
 } from 'firebase-admin/firestore';
 import { getUser } from './_utils/auth.js';
-import { planLegacySync } from './_utils/legacySync.js';
+import {
+  NOT_OURS,
+  planLegacySync,
+  seedLedger,
+  type LedgerEntry,
+} from './_utils/legacySync.js';
 
 // Moves a pre-bistro account's library from users/{uid}/… to its own bistro
 // at bistros/{uid}/…, and keeps the copy current while older app versions
@@ -34,6 +39,10 @@ import { planLegacySync } from './_utils/legacySync.js';
 //   For migrated accounts: brings across what an older app version changed in
 //   the legacy library since the last copy (see planLegacySync). Called in the
 //   background on launch; throttled per account.
+//
+// Both record every legacy doc they copy in a ledger at
+// users/{uid}/legacyLedger/{collection}~{id}, so the sync can tell a doc
+// deleted in the new app from one that is new in the old app.
 
 // Recipes embed base64 cover/original images and can each approach
 // Firestore's 1 MiB doc limit, while a batch commit is capped at ~10 MiB, so
@@ -55,6 +64,12 @@ interface Progress {
   copied: number;
   startedAt: Timestamp; // server time the run began
 }
+
+/** Firestore write times have microsecond precision; keep all of it. */
+const micros = (t: Timestamp) => t.seconds * 1_000_000 + Math.floor(t.nanoseconds / 1000);
+
+const ledgerCol = (userDoc: DocumentReference) => userDoc.collection('legacyLedger');
+const ledgerId = (name: string, id: string) => `${name}~${id}`;
 
 interface Ctx {
   db: Firestore;
@@ -95,7 +110,17 @@ async function migrate(ctx: Ctx, uid: string, restart: boolean) {
 
     const batch = db.batch();
     for (const d of snap.docs) batch.set(bistroDoc.collection(name).doc(d.id), d.data());
-    await batch.commit();
+    const results = await batch.commit();
+    const ledger = db.batch();
+    snap.docs.forEach((d, i) =>
+      ledger.set(ledgerCol(userDoc).doc(ledgerId(name, d.id)), {
+        c: name,
+        id: d.id,
+        legacy: d.updateTime,
+        bistro: results[i].writeTime,
+      }),
+    );
+    await ledger.commit();
     progress.cursor = snap.docs[snap.docs.length - 1].id;
     progress.copied += snap.size;
 
@@ -121,6 +146,7 @@ async function migrate(ctx: Ctx, uid: string, restart: boolean) {
       migratedAt: new Date().toISOString(),
       legacySyncedFrom: progress.startedAt,
       legacyMigratedTo: FieldValue.serverTimestamp(),
+      legacyLedger: true,
     },
     { merge: true },
   );
@@ -128,17 +154,70 @@ async function migrate(ctx: Ctx, uid: string, restart: boolean) {
   return { done: true, copied: progress.copied };
 }
 
-/**
- * Doc id → server write time, reading no field data. Kept as Timestamps:
- * preconditions need the exact value, which has sub-millisecond precision.
- */
-async function writeTimes(ref: DocumentReference, name: string): Promise<Map<string, Timestamp>> {
-  const snap = await ref.collection(name).select().get();
-  return new Map(snap.docs.map((d) => [d.id, d.updateTime]));
+interface Scan {
+  /** Doc id → write time (exact, for preconditions). */
+  times: Map<string, Timestamp>;
+  /** Earliest create time in the collection, if any. */
+  firstCreated?: Timestamp;
 }
 
-const toMillis = (times: Map<string, Timestamp>) =>
-  new Map([...times].map(([id, t]) => [id, t.toMillis()]));
+/** Doc ids and write times, reading no field data. */
+async function scan(ref: DocumentReference, name: string): Promise<Scan> {
+  const snap = await ref.collection(name).select().get();
+  let firstCreated: Timestamp | undefined;
+  for (const d of snap.docs) {
+    if (!firstCreated || d.createTime.toMillis() < firstCreated.toMillis()) firstCreated = d.createTime;
+  }
+  return { times: new Map(snap.docs.map((d) => [d.id, d.updateTime])), firstCreated };
+}
+
+const toMicros = (times: Map<string, Timestamp>) =>
+  new Map([...times].map(([id, t]) => [id, micros(t)]));
+
+/**
+ * Copies one legacy doc into the bistro, provided the bistro doc is still as
+ * it was when the plan was made — the app may be writing while this runs.
+ * Returns the write times to record in the ledger, or null if it was skipped.
+ */
+async function copyDoc(
+  ctx: Ctx,
+  name: string,
+  id: string,
+  planned: Timestamp | undefined,
+): Promise<{ legacy: Timestamp; bistro: Timestamp } | null> {
+  const source = await ctx.userDoc.collection(name).doc(id).get();
+  if (!source.exists) return null;
+  const data = source.data()!;
+  const target = ctx.bistroDoc.collection(name).doc(id);
+  try {
+    if (!planned) {
+      const { writeTime } = await target.create(data); // fails if it now exists
+      return { legacy: source.updateTime!, bistro: writeTime };
+    }
+    // A full replace, preconditioned on the doc being unchanged: update the
+    // source's fields and delete any the target has that the source lacks.
+    const current = await target.get();
+    if (!current.exists || !current.updateTime!.isEqual(planned)) return null;
+    const replacement: Record<string, unknown> = { ...data };
+    for (const key of Object.keys(current.data()!)) {
+      if (!(key in data)) replacement[key] = FieldValue.delete();
+    }
+    const { writeTime } = await target.update(replacement, { lastUpdateTime: planned });
+    return { legacy: source.updateTime!, bistro: writeTime };
+  } catch {
+    return null; // changed in the new app meanwhile — leave it
+  }
+}
+
+async function readLedger(ctx: Ctx, name: string): Promise<Map<string, LedgerEntry>> {
+  const snap = await ledgerCol(ctx.userDoc).where('c', '==', name).get();
+  return new Map(
+    snap.docs.map((d) => {
+      const { id, legacy, bistro } = d.data() as { id: string; legacy: Timestamp; bistro: Timestamp | null };
+      return [id, { legacy: micros(legacy), bistro: bistro ? micros(bistro) : NOT_OURS }];
+    }),
+  );
+}
 
 async function sync(ctx: Ctx) {
   const { db, userDoc, bistroDoc, accessRef } = ctx;
@@ -147,61 +226,89 @@ async function sync(ctx: Ctx) {
 
   // Throttle, unless the previous pass ran out of time and has more to do.
   const lastStart = access.legacySyncStartedAt as Timestamp | undefined;
-  const syncedFrom = access.legacySyncedFrom as Timestamp | undefined;
   if (lastStart && access.legacySyncDone && Date.now() - lastStart.toMillis() < SYNC_INTERVAL_MS) {
     return { done: true, copied: 0, removed: 0, skipped: 'recent' };
   }
-
-  // Accounts migrated before these baselines existed fall back to the
-  // migratedAt stamp, which was written just after the copy finished.
-  const migratedAtMs = Date.parse(access.migratedAt as string);
-  const since = syncedFrom?.toMillis() ?? migratedAtMs - 60_000;
-  const migratedTo = (access.legacyMigratedTo as Timestamp | undefined)?.toMillis() ?? migratedAtMs;
 
   const { writeTime: passStart } = await accessRef.set(
     { legacySyncStartedAt: FieldValue.serverTimestamp(), legacySyncDone: false },
     { merge: true },
   );
 
+  const scans = await Promise.all(
+    COLLECTIONS.map(async ({ name }) => ({
+      legacy: await scan(userDoc, name),
+      bistro: await scan(bistroDoc, name),
+    })),
+  );
+
+  // Accounts migrated before ledgers existed get one time-window pass, after
+  // which their ledger is seeded. The window: from when the original copy
+  // started — the earliest doc it created, as no new-app write can predate
+  // it — to the migratedAt stamp written once it finished.
+  const hasLedger = !!access.legacyLedger;
+  const migratedAtMicros = Date.parse(access.migratedAt as string) * 1000;
+  const migratedTo = access.legacyMigratedTo ? micros(access.legacyMigratedTo as Timestamp) : migratedAtMicros;
+  const firstCopied = scans
+    .map((s) => s.bistro.firstCreated)
+    .filter((t): t is Timestamp => !!t)
+    .reduce<number | undefined>((min, t) => (min === undefined ? micros(t) : Math.min(min, micros(t))), undefined);
+  const since = access.legacySyncedFrom
+    ? micros(access.legacySyncedFrom as Timestamp)
+    : (firstCopied ?? migratedAtMicros);
+
   let copied = 0;
   let removed = 0;
-  for (const { name, batch: size } of COLLECTIONS) {
-    const [legacy, bistro] = await Promise.all([
-      writeTimes(userDoc, name),
-      writeTimes(bistroDoc, name),
-    ]);
-    const plan = planLegacySync(toMillis(legacy), toMillis(bistro), since, migratedTo);
+  for (let c = 0; c < COLLECTIONS.length; c++) {
+    const { name } = COLLECTIONS[c];
+    const { legacy, bistro } = scans[c];
+    const legacyMicros = toMicros(legacy.times);
+    const bistroMicros = toMicros(bistro.times);
+    const plan = planLegacySync({
+      legacy: legacyMicros,
+      bistro: bistroMicros,
+      ledger: hasLedger ? await readLedger(ctx, name) : null,
+      since,
+      migratedTo,
+    });
 
-    // The app may be writing to the bistro while this runs, so each copy
-    // re-checks the bistro doc inside a transaction and leaves it alone if it
-    // changed since the plan was made.
-    for (let i = 0; i < plan.copy.length; i += size) {
-      const ids = plan.copy.slice(i, i + size);
-      copied += await db.runTransaction(async (tx) => {
-        const targets = ids.map((id) => bistroDoc.collection(name).doc(id));
-        const current = await tx.getAll(...targets);
-        const sources = await tx.getAll(...ids.map((id) => userDoc.collection(name).doc(id)));
-        let n = 0;
-        ids.forEach((id, k) => {
-          const planned = bistro.get(id);
-          const now = current[k].exists ? current[k].updateTime : undefined;
-          const unchanged = planned && now ? planned.isEqual(now) : planned === now;
-          if (!unchanged || !sources[k].exists) return;
-          tx.set(targets[k], sources[k].data()!);
-          n++;
-        });
-        return n;
-      });
+    const justCopied = new Map<string, number>();
+    for (const id of plan.copy) {
+      const result = await copyDoc(ctx, name, id, bistro.times.get(id));
+      if (!result) continue;
+      copied++;
+      justCopied.set(id, micros(result.bistro));
+      await ledgerCol(userDoc).doc(ledgerId(name, id)).set({ c: name, id, ...result });
     }
 
-    // Deletes are preconditioned on the doc being unchanged since planning.
     for (const id of plan.remove) {
-      const ref = bistroDoc.collection(name).doc(id);
       try {
-        await ref.delete({ lastUpdateTime: bistro.get(id)! });
+        // Preconditioned: a doc edited in the new app meanwhile is kept.
+        await bistroDoc.collection(name).doc(id).delete({ lastUpdateTime: bistro.times.get(id)! });
         removed++;
       } catch {
-        // Edited in the new app meanwhile — keep it.
+        continue;
+      }
+      await ledgerCol(userDoc).doc(ledgerId(name, id)).delete();
+    }
+
+    for (const id of plan.forget) await ledgerCol(userDoc).doc(ledgerId(name, id)).delete();
+
+    if (!hasLedger) {
+      // Docs copied this pass already have exact entries from the copy loop.
+      const seeded = seedLedger(legacyMicros, bistroMicros, justCopied, migratedTo);
+      const entries = [...seeded].filter(([id]) => !justCopied.has(id));
+      for (let i = 0; i < entries.length; i += 400) {
+        const batch = db.batch();
+        for (const [id, entry] of entries.slice(i, i + 400)) {
+          batch.set(ledgerCol(userDoc).doc(ledgerId(name, id)), {
+            c: name,
+            id,
+            legacy: legacy.times.get(id)!,
+            bistro: entry.bistro === NOT_OURS ? null : bistro.times.get(id)!,
+          });
+        }
+        await batch.commit();
       }
     }
 
@@ -210,15 +317,18 @@ async function sync(ctx: Ctx) {
 
   const legacyProfile = await userDoc.collection('meta').doc('profile').get();
   const knownSources = legacyProfile.data()?.knownSources as string[] | undefined;
-  if (knownSources?.length && legacyProfile.updateTime!.toMillis() > since) {
+  if (knownSources?.length && micros(legacyProfile.updateTime!) > since) {
     await bistroDoc
       .collection('meta')
       .doc('profile')
       .set({ knownSources: FieldValue.arrayUnion(...knownSources) }, { merge: true });
   }
 
-  // Only a completed pass moves the baseline.
-  await accessRef.set({ legacySyncedFrom: passStart, legacySyncDone: true }, { merge: true });
+  // Only a completed pass moves the baseline (and switches on the ledger).
+  await accessRef.set(
+    { legacySyncedFrom: passStart, legacySyncDone: true, legacyLedger: true },
+    { merge: true },
+  );
   return { done: true, copied, removed };
 }
 
