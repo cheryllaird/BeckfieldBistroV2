@@ -15,7 +15,7 @@ export interface Rejection {
   error: string;
 }
 
-const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+export const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 export const MAX_BISTRO_NAME = 60;
 
 export const normalizeEmail = (email: unknown): string =>

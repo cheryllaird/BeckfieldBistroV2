@@ -37,6 +37,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (trimmed.length > 500) {
     return res.status(400).json({ error: 'API key is too long' });
   }
+  // Google API keys are URL-safe tokens. A loose shape check (not a strict
+  // AIza… match, so a new key format doesn't lock users out) keeps arbitrary
+  // text from passing as a key.
+  if (!/^[A-Za-z0-9._-]{20,}$/.test(trimmed)) {
+    return res.status(400).json({ error: "That doesn't look like a Gemini API key." });
+  }
 
   try {
     await profileRef.set({ geminiApiKeyEncrypted: encryptSecret(trimmed) }, { merge: true });
