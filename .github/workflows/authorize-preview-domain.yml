@@ -1,0 +1,48 @@
+name: Authorize preview domain for Firebase sign-in
+
+# Firebase Auth only allows sign-in from listed domains and doesn't accept
+# wildcards, so each Vercel preview URL is added once its deployment is ready.
+# See scripts/authorize-preview-domain.mjs.
+#
+# Needs repository secrets:
+#   FIREBASE_SERVICE_ACCOUNT  JSON key of a service account with the
+#                             "Firebase Authentication Admin" role
+#   VERCEL_TOKEN              Vercel access token (to look up the branch URL)
+#
+# deployment_status workflows run from the default branch, so this starts
+# working once it's merged to main.
+
+on:
+  deployment_status:
+
+jobs:
+  authorize:
+    if: >-
+      github.event.deployment_status.state == 'success' &&
+      github.event.deployment.environment != 'Production'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+
+      - id: gcp
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+
+      - uses: google-github-actions/setup-gcloud@v2
+
+      - name: Add preview hostnames to Firebase authorized domains
+        env:
+          DEPLOYMENT_URL: ${{ github.event.deployment_status.environment_url }}
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_TEAM_ID: team_nguGJQ4bsMOK15vJaLbAPwiY
+          FIREBASE_PROJECT_ID: ${{ steps.gcp.outputs.project_id }}
+        run: |
+          export GOOGLE_ACCESS_TOKEN="$(gcloud auth print-access-token)"
+          node scripts/authorize-preview-domain.mjs
