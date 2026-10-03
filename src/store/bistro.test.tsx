@@ -247,6 +247,59 @@ describe('bistro access', () => {
   });
 });
 
+describe('relaunch', () => {
+  it('reopens the last bistro even if the cached access list predates joining it', async () => {
+    launch({ activeBistroId: 'ann' });
+    emitAccess({ bistroIds: ['me'], migrated: true, fromCache: true });
+    await flush();
+    expect(useStore.getState().activeBistroId).toBe('ann');
+    expect(useStore.getState().removedFromBistro).toBeNull();
+
+    emitAccess({ bistroIds: ['me', 'ann'], migrated: true });
+    await flush();
+    expect(useStore.getState().activeBistroId).toBe('ann');
+  });
+
+  it('opens the default bistro instead of the last one', async () => {
+    launch({ defaultBistroId: 'ann', recipes: [makeRecipe({ id: 'mine' })] });
+    await flush();
+
+    expect(useStore.getState().activeBistroId).toBe('ann');
+    const calls = vi.mocked(firestore.subscribeToUserData).mock.calls;
+    expect(calls.map((c) => c[0])).toEqual(['ann']); // never attached to the last one first
+    expect(await idbStorage.getItem('bistro-cache:me:me')).not.toBeNull(); // parked
+  });
+
+  it('applies a default learned after sign-in once, and never over a manual switch', async () => {
+    let onDefault: (id: string | null) => void = () => {};
+    vi.mocked(firestore.subscribeToUserData).mockImplementation((_b, _u, cbs) => {
+      onDefault = cbs.onDefaultBistroId!;
+      return () => {};
+    });
+    launch();
+    onDefault('ann');
+    await flush();
+    expect(useStore.getState().defaultBistroId).toBe('ann');
+    expect(useStore.getState().activeBistroId).toBe('ann');
+
+    await useStore.getState().switchBistro('me');
+    onDefault('ann');
+    await flush();
+    expect(useStore.getState().activeBistroId).toBeNull();
+  });
+
+  it('saves the default to the account, and forgets it when that bistro is lost', async () => {
+    launch();
+    useStore.getState().setDefaultBistro('ann');
+    expect(firestore.saveDefaultBistro).toHaveBeenLastCalledWith('me', 'ann');
+
+    emitAccess({ bistroIds: ['me'], migrated: true });
+    await flush();
+    expect(useStore.getState().defaultBistroId).toBeNull();
+    expect(firestore.saveDefaultBistro).toHaveBeenLastCalledWith('me', null);
+  });
+});
+
 describe('migration', () => {
   it('copies an unmigrated account, then flips the data root and re-attaches', async () => {
     vi.mocked(api.migrateBistroStep)

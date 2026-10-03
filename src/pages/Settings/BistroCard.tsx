@@ -20,6 +20,8 @@ export function BistroCard() {
   const renameBistro = useStore((s) => s.renameBistro);
   const leaveBistro = useStore((s) => s.leaveBistro);
   const switchBistro = useStore((s) => s.switchBistro);
+  const defaultBistroId = useStore((s) => s.defaultBistroId);
+  const setDefaultBistro = useStore((s) => s.setDefaultBistro);
   const refreshInvites = useStore((s) => s.refreshInvites);
   const { isOnline } = useOnlineStatus();
 
@@ -72,6 +74,10 @@ export function BistroCard() {
 
   const ownerName = bistro.members[bistro.ownerUid]?.name ?? 'someone';
   const otherBistros = Object.values(bistros).filter((b) => b.id !== bistro.id);
+  // Own bistro first, then the rest by name — as in the header menu.
+  const launchOptions = Object.values(bistros).sort((a, b) =>
+    a.id === user.uid ? -1 : b.id === user.uid ? 1 : a.name.localeCompare(b.name),
+  );
 
   return (
     <Card className="flex flex-col gap-4">
@@ -179,6 +185,25 @@ export function BistroCard() {
               </Button>
             </div>
           ))}
+        </div>
+      )}
+
+      {launchOptions.length > 1 && (
+        <div className="flex flex-col gap-1.5 pt-3 border-t border-slate-100">
+          <label htmlFor="default-bistro" className="text-xs font-medium text-slate-600 uppercase tracking-wide">
+            Open on launch
+          </label>
+          <select
+            id="default-bistro"
+            value={defaultBistroId ?? ''}
+            onChange={(e) => setDefaultBistro(e.target.value || null)}
+            className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-amber-300"
+          >
+            <option value="">Last bistro I had open</option>
+            {launchOptions.map((b) => (
+              <option key={b.id} value={b.id}>{b.name}</option>
+            ))}
+          </select>
         </div>
       )}
 

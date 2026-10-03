@@ -1,0 +1,63 @@
+name: Authorize preview domain for Firebase sign-in
+
+# Firebase Auth only allows sign-in from listed domains and doesn't accept
+# wildcards, so each Vercel preview URL is added once its deployment is ready.
+# See scripts/authorize-preview-domain.mjs.
+#
+# Needs repository secrets:
+#   FIREBASE_SERVICE_ACCOUNT  JSON key of a service account with the
+#                             "Firebase Authentication Admin" role
+#   VERCEL_TOKEN              Vercel access token (to look up the branch URL)
+# Until both are set, the job skips with a notice rather than failing.
+
+on:
+  deployment_status:
+
+jobs:
+  authorize:
+    if: >-
+      github.event.deployment_status.state == 'success' &&
+      github.event.deployment.environment != 'Production'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - id: secrets
+        name: Check secrets are configured
+        env:
+          HAS_SA: ${{ secrets.FIREBASE_SERVICE_ACCOUNT != '' }}
+          HAS_VERCEL: ${{ secrets.VERCEL_TOKEN != '' }}
+        run: |
+          if [ "$HAS_SA" = true ] && [ "$HAS_VERCEL" = true ]; then
+            echo "configured=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::notice::Skipping: add the FIREBASE_SERVICE_ACCOUNT and VERCEL_TOKEN repository secrets to authorize preview domains automatically."
+          fi
+
+      - if: steps.secrets.outputs.configured == 'true'
+        uses: actions/checkout@v4
+
+      - if: steps.secrets.outputs.configured == 'true'
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+
+      - id: gcp
+        if: steps.secrets.outputs.configured == 'true'
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+
+      - if: steps.secrets.outputs.configured == 'true'
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Add preview hostnames to Firebase authorized domains
+        if: steps.secrets.outputs.configured == 'true'
+        env:
+          DEPLOYMENT_URL: ${{ github.event.deployment_status.environment_url }}
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_TEAM_ID: team_nguGJQ4bsMOK15vJaLbAPwiY
+          FIREBASE_PROJECT_ID: ${{ steps.gcp.outputs.project_id }}
+        run: |
+          export GOOGLE_ACCESS_TOKEN="$(gcloud auth print-access-token)"
+          node scripts/authorize-preview-domain.mjs
