@@ -6,6 +6,7 @@ import { Input } from '../../components/ui/Input';
 import { resizeImage } from '../../lib/recipeExtraction';
 import { ImageCropper } from '../../components/ImageCropper';
 import { CameraCapture } from '../../components/CameraCapture';
+import { SourceInput } from './SourceInput';
 
 /**
  * Tidies a hand-typed recipe link. Accepts a bare host ("bbcgoodfood.com/x")
@@ -164,20 +165,7 @@ export function RecipeForm({ initial, knownSources, onSave, onCancel, isSaving }
         />
 
         {/* Source with suggestions */}
-        <div className="flex flex-col gap-1">
-          <Input
-            label="Source"
-            placeholder="e.g. NYT Cooking"
-            value={source}
-            onChange={(e) => setSource(e.target.value)}
-            list="sources-list"
-          />
-          <datalist id="sources-list">
-            {knownSources.map((s) => (
-              <option key={s} value={s} />
-            ))}
-          </datalist>
-        </div>
+        <SourceInput value={source} onChange={setSource} suggestions={knownSources} />
 
         {/* Optional link to go with the source — e.g. a book plus its listing */}
         <Input
