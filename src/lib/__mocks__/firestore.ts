@@ -26,6 +26,7 @@ export const deleteCategoryOverride = vi.fn();
 export const recoverIfSdkCrashed = vi.fn();
 export const ensureFirestoreOnline = vi.fn(async () => {});
 export const flushPendingWrites = vi.fn(async () => {});
+export const waitForServerSync = vi.fn(async () => {});
 export const setDataRoot = vi.fn();
 export const subscribeToBistroAccess = vi.fn(() => () => {});
 export const subscribeToBistro = vi.fn(() => () => {});

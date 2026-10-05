@@ -132,6 +132,19 @@ export function flushPendingWrites(): Promise<void> {
   return waitForPendingWrites(db).catch(() => {});
 }
 
+/**
+ * Resolves once every write queued before the call has been acknowledged by
+ * the server — i.e. this device is up to date with it. Never settles while
+ * offline. Deliberately does not wake the network itself: the connectivity
+ * manager already forces a wake on the `online` event, and a second
+ * enableNetwork alongside it is the stream-restart pressure that
+ * ensureFirestoreOnline exists to avoid.
+ */
+export function waitForServerSync(): Promise<void> {
+  if (!db) return Promise.resolve();
+  return waitForPendingWrites(db).catch(() => {});
+}
+
 // ── data root ─────────────────────────────────────────────────────────────────
 // A library lives at bistros/{bistroId}/…, and a user's own bistro id is their
 // uid. Accounts created before bistros existed kept their library at
