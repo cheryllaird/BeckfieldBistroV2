@@ -1,49 +1,69 @@
 import { act, renderHook } from '@testing-library/react';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { useOnlineStatus } from './useOnlineStatus';
+import { waitForServerSync } from '../lib/firestore';
+
+vi.mock('../lib/firestore');
 
 const goOnline = () => act(() => void window.dispatchEvent(new Event('online')));
 const goOffline = () => act(() => void window.dispatchEvent(new Event('offline')));
 
-describe('useOnlineStatus', () => {
-  beforeEach(() => {
-    vi.useFakeTimers();
-  });
+// A drain the test settles by hand, standing in for waitForPendingWrites.
+function deferSync() {
+  let resolve!: () => void;
+  vi.mocked(waitForServerSync).mockReturnValueOnce(new Promise<void>((r) => (resolve = r)));
+  return { settle: () => act(async () => resolve()) };
+}
 
+describe('useOnlineStatus', () => {
   afterEach(() => {
-    vi.useRealTimers();
     vi.restoreAllMocks();
   });
 
   it('starts from navigator.onLine', () => {
     vi.spyOn(navigator, 'onLine', 'get').mockReturnValue(false);
     const { result } = renderHook(() => useOnlineStatus());
-    expect(result.current).toEqual({ isOnline: false, justReconnected: false });
+    expect(result.current).toEqual({ isOnline: false, isSyncing: false });
   });
 
-  it('flags a reconnect for three seconds', () => {
+  it('stays syncing after reconnecting until queued writes reach the server', async () => {
+    const sync = deferSync();
     const { result } = renderHook(() => useOnlineStatus());
 
     goOffline();
-    expect(result.current).toEqual({ isOnline: false, justReconnected: false });
+    expect(result.current).toEqual({ isOnline: false, isSyncing: false });
 
     goOnline();
-    expect(result.current).toEqual({ isOnline: true, justReconnected: true });
+    expect(result.current).toEqual({ isOnline: true, isSyncing: true });
 
-    act(() => vi.advanceTimersByTime(2_999));
-    expect(result.current.justReconnected).toBe(true);
-
-    act(() => vi.advanceTimersByTime(1));
-    expect(result.current.justReconnected).toBe(false);
+    await sync.settle();
+    expect(result.current).toEqual({ isOnline: true, isSyncing: false });
   });
 
-  it('cancels the reconnect banner if the connection drops again', () => {
+  it('ignores a drain that settles after the connection drops again', async () => {
+    const stale = deferSync();
+    const fresh = deferSync();
+    const { result } = renderHook(() => useOnlineStatus());
+
+    goOnline();
+    goOffline();
+    goOnline();
+
+    await stale.settle();
+    expect(result.current).toEqual({ isOnline: true, isSyncing: true });
+
+    await fresh.settle();
+    expect(result.current.isSyncing).toBe(false);
+  });
+
+  it('shows offline, not syncing, if the connection drops mid-sync', () => {
+    deferSync();
     const { result } = renderHook(() => useOnlineStatus());
 
     goOnline();
     goOffline();
 
-    expect(result.current).toEqual({ isOnline: false, justReconnected: false });
+    expect(result.current).toEqual({ isOnline: false, isSyncing: false });
   });
 
   it('removes its listeners on unmount', () => {
