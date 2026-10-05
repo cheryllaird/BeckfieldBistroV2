@@ -1,7 +1,7 @@
 {
   "name": "beckfield-bistro",
   "private": true,
-  "version": "1.0.39",
+  "version": "1.0.40",
   "type": "module",
   "engines": {
     "node": "24.x"
