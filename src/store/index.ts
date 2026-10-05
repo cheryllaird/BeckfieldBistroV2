@@ -22,6 +22,8 @@ import {
   acceptShare as firestoreAcceptShare,
   dismissShare as firestoreDismissShare,
   logCategoryOverride as firestoreLogCategoryOverride,
+  saveCategoryOverride,
+  deleteCategoryOverride,
   flushPendingWrites,
   setDataRoot,
   subscribeToBistroAccess,
@@ -54,6 +56,7 @@ import {
   nextClock,
   reconcileShoppingSnapshot,
 } from '../lib/shoppingSync';
+import { defaultCategory } from '../lib/ingredients';
 import type {
   Recipe,
   MealEntry,
@@ -62,7 +65,7 @@ import type {
   AppState,
   SharedRecipe,
   BistroInvite,
-  CategoryOverrideLog,
+  CategoryChange,
   MigrationState,
 } from '../types';
 
@@ -141,8 +144,12 @@ interface Store extends AppState {
   acceptAllShares: () => Promise<void>;
   dismissAllShares: () => Promise<void>;
 
-  // Shopping list telemetry
-  logCategoryOverride: (entry: Omit<CategoryOverrideLog, 'id'>) => void;
+  // Category actions
+  /**
+   * Files an ingredient under an aisle from now on, wherever it's added, and
+   * logs the change. Choosing the built-in aisle again forgets the override.
+   */
+  rememberCategory: (change: CategoryChange) => void;
 
   // Bistro actions
   switchBistro: (bistroId: string) => Promise<void>;
@@ -372,6 +379,11 @@ function attachDataListeners(bistroId: string, ownUid: string, set: SetState, ge
         set({ pantryItems: merged });
         if (toResend.length) toResend.forEach((item) => savePantryItem(bistroId, item));
       });
+    },
+    onCategoryOverrides: (overrides) => {
+      applyCollectionSnapshot('categoryOverrides', overrides, Object.keys(get().categoryOverrides).length, () =>
+        set({ categoryOverrides: Object.fromEntries(overrides.map((o) => [o.ingredientKey, o.category])) }),
+      );
     },
     onKnownSources: (knownSources) => {
       applyCollectionSnapshot('knownSources', knownSources, get().knownSources.length, () =>
@@ -622,6 +634,7 @@ export const useStore = create<Store>()(
       shoppingItems: [],
       shoppingTombstones: {},
       pantryItems: [],
+      categoryOverrides: {},
       knownSources: [],
       hasGeminiApiKey: false,
       isAuthenticated: false,
@@ -932,9 +945,27 @@ export const useStore = create<Store>()(
         set({ incomingShares: [] });
       },
 
-      logCategoryOverride: (entry) => {
+      rememberCategory: ({ itemName, ingredientKey, fromCategory, toCategory, source }) => {
+        if (!ingredientKey || fromCategory === toCategory) return;
+        const overrides = { ...get().categoryOverrides };
+        // Back to where the keyword tables would put it: nothing to remember.
+        const isDefault = toCategory === defaultCategory(itemName);
+        if (isDefault) delete overrides[ingredientKey];
+        else overrides[ingredientKey] = toCategory;
+        set({ categoryOverrides: overrides });
+
         const scope = scopeOf(get());
-        if (scope) firestoreLogCategoryOverride(scope, entry);
+        if (!scope) return;
+        if (isDefault) deleteCategoryOverride(scope, ingredientKey);
+        else saveCategoryOverride(scope, { ingredientKey, category: toCategory, updatedAt: Date.now() });
+        firestoreLogCategoryOverride(scope, {
+          itemName,
+          ingredientKey,
+          source,
+          fromCategory,
+          toCategory,
+          timestamp: new Date().toISOString(),
+        });
       },
 
       // ── bistros ───────────────────────────────────────────────────────────
@@ -1036,6 +1067,7 @@ export const useStore = create<Store>()(
         // tombstone must outlive the session to keep beating stale copies.
         shoppingTombstones: s.shoppingTombstones,
         pantryItems: s.pantryItems,
+        categoryOverrides: s.categoryOverrides,
         knownSources: s.knownSources,
         hasGeminiApiKey: s.hasGeminiApiKey,
         // Which bistro this device is viewing, and whether the account's data

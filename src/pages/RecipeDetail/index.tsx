@@ -18,7 +18,8 @@ import {
 import { useStore } from '../../store';
 import { useSwipeNavigate } from '../../hooks/useSwipeNavigate';
 import { Button } from '../../components/ui/Button';
-import { scaleIngredient, formatQuantity, recipeSourceLabel } from '../../lib/utils';
+import { scaleIngredient, recipeSourceLabel } from '../../lib/utils';
+import { formatQuantity } from '../../lib/ingredients';
 import { PlanDateModal } from './PlanDateModal';
 import { ShareModal } from './ShareModal';
 import { ImageViewerModal } from './ImageViewerModal';

@@ -2,7 +2,8 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Plus, UtensilsCrossed, MapPin, FileText, Minus, Trash2, ShoppingCart, CalendarDays, CalendarPlus, ChevronDown, Check, Users } from 'lucide-react';
 import { useStore } from '../../store';
-import { formatDayLabel, isoDate, mergeIntoShoppingList, getRecipeIngredients, categorize, generateId } from '../../lib/utils';
+import { formatDayLabel, isoDate, getRecipeIngredients, generateId } from '../../lib/utils';
+import { categorize, mergeIntoShoppingList } from '../../lib/ingredients';
 import type { MealEntry, MealTime, ShoppingItem } from '../../types';
 import { PlanMealModal } from './PlanMealModal';
 import { ChangeDayModal } from './ChangeDayModal';
@@ -29,7 +30,7 @@ function ordinal(n: number) {
 
 export function DayRow({ date }: Props) {
   const navigate = useNavigate();
-  const { mealEntries, recipes, shoppingItems, pantryItems, deleteMealEntry, updateMealEntry, setShoppingItems } = useStore();
+  const { mealEntries, recipes, shoppingItems, pantryItems, categoryOverrides, deleteMealEntry, updateMealEntry, setShoppingItems } = useStore();
   const { isToday } = formatDayLabel(date);
   const fullWeekday = date.toLocaleDateString('en-GB', { weekday: 'long' });
   const dateLabel = `${ordinal(date.getDate())} ${date.toLocaleDateString('en-GB', { month: 'short' })}`;
@@ -72,7 +73,13 @@ export function DayRow({ date }: Props) {
       if (!recipe) return;
       const scale = recipe.servings > 0 ? entry.servings / recipe.servings : 1;
       setShoppingItems(
-        mergeIntoShoppingList(shoppingItems, getRecipeIngredients(recipe), scale, entry.id, recipe.title, pantryItems)
+        mergeIntoShoppingList(shoppingItems, getRecipeIngredients(recipe), {
+          scale,
+          mealEntryId: entry.id,
+          recipeTitle: recipe.title,
+          pantryItems,
+          categoryOverrides,
+        })
       );
       return;
     }
@@ -82,7 +89,7 @@ export function DayRow({ date }: Props) {
       const newItem: ShoppingItem = {
         id: generateId(),
         name: title,
-        category: categorize(title),
+        category: categorize(title, categoryOverrides),
         checked: false,
         mealSources: [
           { mealEntryId: entry.id, recipeTitle: title, scaledQuantity: 0, unit: '', ingredientName: title },

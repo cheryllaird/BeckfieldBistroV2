@@ -38,7 +38,7 @@ const RECIPE_JSON_SCHEMA = `{
       "title": "string — section heading, e.g. 'For the dressing' or '' if there is only one unlabeled group",
       "ingredients": [
         {
-          "name": "string — ingredient name only, no quantity or unit",
+          "name": "string — the ingredient as written, minus its quantity and unit. Keep every descriptive note exactly as the source has it (e.g. '2 spring onions, thin strips' → 'spring onions, thin strips'; '1 onion, finely chopped' → 'onion, finely chopped')",
           "quantity": number,
           "unit": "string — e.g. 'cup', 'g', 'tbsp', or '' if none",
           "originalText": "string — the ingredient line exactly as written, e.g. '2 cups flour'"

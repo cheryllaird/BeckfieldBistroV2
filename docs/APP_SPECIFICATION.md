@@ -277,6 +277,16 @@ where the most specific keyword match wins (e.g. "cherry tomato" → Vegetables 
 the specific match, not a generic one). Categories drive grouping and the
 auto-sort order.
 
+**Remembered choices.** When anyone in the bistro moves an item to another
+category — on the shopping list or in the store cupboard — that choice is
+remembered for the ingredient (keyed by its normalised name, so "200 g rice
+noodles" and "Rice noodle, soaked" share it) and wins over keyword matching
+wherever the ingredient is added again: a generated list, a meal added from the
+plan, a typed item, a cupboard item. On the list, every line of that ingredient
+moves together. Moving it back to the keyword category forgets the choice.
+Stored per bistro in `categoryOverrides` (one doc per ingredient); every change
+is also appended to the `categoryOverrideLogs` audit trail.
+
 ### 6.5 Source tracking
 Generated/merged items remember **which planned meals contributed them** and in
 what scaled quantity, so a shopping item can show a "used in these meals"
@@ -325,8 +335,8 @@ explicit list) belong to **Immediate**, so existing lists carry over unchanged.
 ### 7.3 Shopping & curating
 - **Check-off** with running progress (checked/total); checked items collect in an
   "In basket" group.
-- **Curate:** rename items, recategorise them (a manual recategorisation is
-  remembered as a signal to improve future auto-categorisation), reorder them
+- **Curate:** rename items, recategorise them (remembered for that ingredient
+  from then on — see §6.4), reorder them
   (including one-tap **auto-sort by category**), and remove them.
 - **Undo:** list-changing actions (check, remove, edit, sort, reorder) are
   revertible.

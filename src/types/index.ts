@@ -103,12 +103,30 @@ export interface SharedRecipe {
   createdAt: string;
 }
 
+// Audit trail of every aisle change a user makes. Entries written before
+// overrides were remembered carry no ingredientKey or source.
 export interface CategoryOverrideLog {
   id: string;
   itemName: string;
+  ingredientKey?: string; // the key the choice is remembered under (see CategoryOverride)
+  source?: 'shopping-list' | 'pantry';
   fromCategory: ShoppingCategory;
   toCategory: ShoppingCategory;
   timestamp: string; // ISO datetime
+}
+
+// A user moving an item to another aisle, as the store receives it.
+export type CategoryChange = Pick<CategoryOverrideLog, 'itemName' | 'fromCategory' | 'toCategory' | 'source'> & {
+  ingredientKey: string;
+};
+
+// The aisle a bistro has chosen for an ingredient, applied whenever that
+// ingredient is added again. One doc per ingredient key; removed when the
+// choice goes back to the built-in category.
+export interface CategoryOverride {
+  ingredientKey: string; // normalizeIngredientName of the ingredient
+  category: ShoppingCategory;
+  updatedAt: number; // epoch ms
 }
 
 export interface PantryItem {
@@ -171,6 +189,8 @@ export interface AppState {
   // can't resurrect the item. Entries are pruned after TOMBSTONE_RETENTION_MS.
   shoppingTombstones: Record<string, number>;
   pantryItems: PantryItem[];
+  // Ingredient key → the aisle this bistro files it under (CategoryOverride).
+  categoryOverrides: Record<string, ShoppingCategory>;
   knownSources: string[];
   hasGeminiApiKey: boolean;
   isAuthenticated: boolean;

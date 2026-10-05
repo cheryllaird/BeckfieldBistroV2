@@ -11,7 +11,7 @@ import {
   waitForPendingWrites,
 } from 'firebase/firestore';
 import { db, auth } from './firebase';
-import type { Recipe, MealEntry, ShoppingItem, PantryItem, SharedRecipe, CategoryOverrideLog, Bistro } from '../types';
+import type { Recipe, MealEntry, ShoppingItem, PantryItem, SharedRecipe, CategoryOverride, CategoryOverrideLog, Bistro } from '../types';
 import type { ShoppingItemPatch } from './shoppingSync';
 
 // ── helpers ──────────────────────────────────────────────────────────────────
@@ -150,6 +150,7 @@ const recipesCol = (bistroId: string) => collection(db!, _root, bistroId, 'recip
 const mealEntriesCol = (bistroId: string) => collection(db!, _root, bistroId, 'mealEntries');
 const shoppingItemsCol = (bistroId: string) => collection(db!, _root, bistroId, 'shoppingItems');
 const pantryItemsCol = (bistroId: string) => collection(db!, _root, bistroId, 'pantryItems');
+const categoryOverridesCol = (bistroId: string) => collection(db!, _root, bistroId, 'categoryOverrides');
 /** Shared bistro settings (knownSources). */
 const bistroProfileDoc = (bistroId: string) => doc(db!, _root, bistroId, 'meta', 'profile');
 /** Personal, never shared: holds the encrypted Gemini key. */
@@ -163,6 +164,7 @@ export interface UserDataCallbacks {
   onMealEntries: (entries: MealEntry[]) => void;
   onShoppingItems: (items: ShoppingItem[]) => void;
   onPantryItems: (items: PantryItem[]) => void;
+  onCategoryOverrides: (overrides: CategoryOverride[]) => void;
   onKnownSources: (sources: string[]) => void;
   onHasGeminiApiKey: (hasKey: boolean) => void;
   /** The bistro to open on launch (null: whichever was open last). */
@@ -246,6 +248,15 @@ export function subscribeToUserData(
     handleError
   );
 
+  const unsubCategoryOverrides = onSnapshot(
+    categoryOverridesCol(bistroId),
+    (snap) => {
+      if (skipIfCacheMiss(snap)) return;
+      callbacks.onCategoryOverrides(snap.docs.map((d) => d.data() as CategoryOverride));
+    },
+    handleError
+  );
+
   const unsubProfile = onSnapshot(
     bistroProfileDoc(bistroId),
     (snap) => {
@@ -270,6 +281,7 @@ export function subscribeToUserData(
     unsubMealEntries();
     unsubShoppingItems();
     unsubPantryItems();
+    unsubCategoryOverrides();
     unsubProfile();
     unsubUserProfile();
   };
@@ -372,10 +384,25 @@ export function savePantryItems(bistroId: string, items: PantryItem[]): void {
   batch.commit().catch(logFirestoreError);
 }
 
-// ── category override log ─────────────────────────────────────────────────────
+// ── category overrides ────────────────────────────────────────────────────────
 
 const categoryOverrideLogsCol = (bistroId: string) =>
   collection(db!, _root, bistroId, 'categoryOverrideLogs');
+
+// Ingredient keys are free text ("rice noodle", "salt, flaky"); encode them so
+// a "/" can't split the path and "__x__" can't hit Firestore's reserved ids.
+const categoryOverrideDoc = (bistroId: string, ingredientKey: string) =>
+  doc(categoryOverridesCol(bistroId), `k_${encodeURIComponent(ingredientKey)}`);
+
+export function saveCategoryOverride(bistroId: string, override: CategoryOverride): void {
+  ensureFirestoreOnline();
+  setDoc(categoryOverrideDoc(bistroId, override.ingredientKey), override).catch(logFirestoreError);
+}
+
+export function deleteCategoryOverride(bistroId: string, ingredientKey: string): void {
+  ensureFirestoreOnline();
+  deleteDoc(categoryOverrideDoc(bistroId, ingredientKey)).catch(logFirestoreError);
+}
 
 export function logCategoryOverride(bistroId: string, entry: Omit<CategoryOverrideLog, 'id'>): void {
   ensureFirestoreOnline();
