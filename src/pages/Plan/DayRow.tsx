@@ -30,7 +30,7 @@ function ordinal(n: number) {
 
 export function DayRow({ date }: Props) {
   const navigate = useNavigate();
-  const { mealEntries, recipes, shoppingItems, pantryItems, deleteMealEntry, updateMealEntry, setShoppingItems } = useStore();
+  const { mealEntries, recipes, shoppingItems, pantryItems, categoryOverrides, deleteMealEntry, updateMealEntry, setShoppingItems } = useStore();
   const { isToday } = formatDayLabel(date);
   const fullWeekday = date.toLocaleDateString('en-GB', { weekday: 'long' });
   const dateLabel = `${ordinal(date.getDate())} ${date.toLocaleDateString('en-GB', { month: 'short' })}`;
@@ -73,7 +73,13 @@ export function DayRow({ date }: Props) {
       if (!recipe) return;
       const scale = recipe.servings > 0 ? entry.servings / recipe.servings : 1;
       setShoppingItems(
-        mergeIntoShoppingList(shoppingItems, getRecipeIngredients(recipe), scale, entry.id, recipe.title, pantryItems)
+        mergeIntoShoppingList(shoppingItems, getRecipeIngredients(recipe), {
+          scale,
+          mealEntryId: entry.id,
+          recipeTitle: recipe.title,
+          pantryItems,
+          categoryOverrides,
+        })
       );
       return;
     }
@@ -83,7 +89,7 @@ export function DayRow({ date }: Props) {
       const newItem: ShoppingItem = {
         id: generateId(),
         name: title,
-        category: categorize(title),
+        category: categorize(title, categoryOverrides),
         checked: false,
         mealSources: [
           { mealEntryId: entry.id, recipeTitle: title, scaledQuantity: 0, unit: '', ingredientName: title },

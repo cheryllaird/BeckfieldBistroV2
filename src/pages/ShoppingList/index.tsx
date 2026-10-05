@@ -21,7 +21,7 @@ import {
 import { useStore } from '../../store';
 import { Button } from '../../components/ui/Button';
 import { generateId } from '../../lib/utils';
-import { categorize, formatQuantity } from '../../lib/ingredients';
+import { categorize, formatQuantity, itemCategoryKey } from '../../lib/ingredients';
 import type { MealSource, ShoppingCategory, ShoppingItem, ShoppingListType } from '../../types';
 import { GenerateListModal } from './GenerateListModal';
 import { ModalPortal } from '../../components/ui/ModalPortal';
@@ -56,7 +56,8 @@ export function ShoppingListPage() {
     removeShoppingItem,
     setShoppingItems,
     reorderShoppingItems,
-    logCategoryOverride,
+    categoryOverrides,
+    rememberCategory,
   } = useStore();
 
   const [mode, setMode] = useState<Mode>('shop');
@@ -122,7 +123,7 @@ export function ShoppingListPage() {
     const newItem: ShoppingItem = {
       id: generateId(),
       name: manualItem.trim(),
-      category: categorize(manualItem.trim()),
+      category: categorize(manualItem.trim(), categoryOverrides),
       listType: activeList,
       checked: false,
       manual: true,
@@ -158,12 +159,18 @@ export function ShoppingListPage() {
     const item = shoppingItems.find((i) => i.id === id);
     if (!item || item.category === category) return;
     pushHistory();
-    setShoppingItems(shoppingItems.map((i) => i.id === id ? { ...i, category } : i));
-    logCategoryOverride({
+    // The choice is remembered per ingredient, so move every line of it —
+    // on either list — not just the one that was tapped.
+    const key = itemCategoryKey(item);
+    setShoppingItems(
+      shoppingItems.map((i) => (i.id === id || itemCategoryKey(i) === key ? { ...i, category } : i))
+    );
+    rememberCategory({
       itemName: item.name,
+      ingredientKey: key,
       fromCategory: item.category,
       toCategory: category,
-      timestamp: new Date().toISOString(),
+      source: 'shopping-list',
     });
   };
 

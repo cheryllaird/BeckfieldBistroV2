@@ -128,7 +128,7 @@ describe('consolidateIngredients', () => {
 
 describe('mergeIntoShoppingList', () => {
   it('adds new ingredients with a meal source', () => {
-    const result = mergeIntoShoppingList([], [makeIngredient({ name: 'eggs', quantity: 2, unit: '' })], 1, 'm1', 'Omelette');
+    const result = mergeIntoShoppingList([], [makeIngredient({ name: 'eggs', quantity: 2, unit: '' })], { scale: 1, mealEntryId: 'm1', recipeTitle: 'Omelette' });
 
     expect(result).toHaveLength(1);
     expect(result[0]).toMatchObject({
@@ -144,18 +144,13 @@ describe('mergeIntoShoppingList', () => {
     const pantry = [makePantryItem({ normalizedName: 'olive oil' })];
     const result = mergeIntoShoppingList(
       [],
-      [makeIngredient({ name: 'extra virgin olive oil' }), makeIngredient({ name: 'garlic', unit: '' })],
-      1,
-      'm1',
-      'Pasta',
-      pantry,
-    );
+      [makeIngredient({ name: 'extra virgin olive oil' }), makeIngredient({ name: 'garlic', unit: '' })], { scale: 1, mealEntryId: 'm1', recipeTitle: 'Pasta', pantryItems: pantry });
     expect(result.map((i) => i.name)).toEqual(['100 garlic']);
   });
 
   it('adds a second meal to an existing item and re-totals it', () => {
-    const first = mergeIntoShoppingList([], [makeIngredient({ name: 'flour', quantity: 200 })], 1, 'm1', 'Cake');
-    const second = mergeIntoShoppingList(first, [makeIngredient({ name: 'flour', quantity: 300 })], 1, 'm2', 'Bread');
+    const first = mergeIntoShoppingList([], [makeIngredient({ name: 'flour', quantity: 200 })], { scale: 1, mealEntryId: 'm1', recipeTitle: 'Cake' });
+    const second = mergeIntoShoppingList(first, [makeIngredient({ name: 'flour', quantity: 300 })], { scale: 1, mealEntryId: 'm2', recipeTitle: 'Bread' });
 
     expect(second).toHaveLength(1);
     expect(second[0].id).toBe(first[0].id);
@@ -171,33 +166,33 @@ describe('mergeIntoShoppingList', () => {
       mealSources: [{ mealEntryId: 'm1', recipeTitle: 'Cake', scaledQuantity: 200, unit: 'g', ingredientName: 'flour' }],
     });
 
-    const result = mergeIntoShoppingList([legacy], [makeIngredient({ name: 'flour', quantity: 300 })], 1, 'm2', 'Bread');
+    const result = mergeIntoShoppingList([legacy], [makeIngredient({ name: 'flour', quantity: 300 })], { scale: 1, mealEntryId: 'm2', recipeTitle: 'Bread' });
 
     expect(result).toHaveLength(1);
     expect(result[0]).toMatchObject({ id: 'legacy', name: '500 g flour', ingredientKey: 'flour' });
   });
 
   it('is idempotent for the same meal entry', () => {
-    const once = mergeIntoShoppingList([], [makeIngredient({ name: 'flour', quantity: 200 })], 1, 'm1', 'Cake');
-    const twice = mergeIntoShoppingList(once, [makeIngredient({ name: 'flour', quantity: 200 })], 1, 'm1', 'Cake');
+    const once = mergeIntoShoppingList([], [makeIngredient({ name: 'flour', quantity: 200 })], { scale: 1, mealEntryId: 'm1', recipeTitle: 'Cake' });
+    const twice = mergeIntoShoppingList(once, [makeIngredient({ name: 'flour', quantity: 200 })], { scale: 1, mealEntryId: 'm1', recipeTitle: 'Cake' });
     expect(twice).toEqual(once);
   });
 
   it('applies the scale factor', () => {
-    const result = mergeIntoShoppingList([], [makeIngredient({ name: 'rice', quantity: 150 })], 2);
+    const result = mergeIntoShoppingList([], [makeIngredient({ name: 'rice', quantity: 150 })], { scale: 2 });
     expect(result[0].name).toBe('300 g rice');
     expect(result[0].mealSources).toBeUndefined();
   });
 
   it('does not duplicate a manually-added item with identical text', () => {
     const manual = makeShoppingItem({ id: 'manual', name: '100 g flour', manual: true });
-    const result = mergeIntoShoppingList([manual], [makeIngredient({ name: 'flour', quantity: 100 })], 1);
+    const result = mergeIntoShoppingList([manual], [makeIngredient({ name: 'flour', quantity: 100 })], { scale: 1 });
     expect(result).toEqual([manual]);
   });
 
   it('does not mutate the existing list', () => {
     const existing: ShoppingItem[] = [];
-    mergeIntoShoppingList(existing, [makeIngredient()], 1);
+    mergeIntoShoppingList(existing, [makeIngredient()], { scale: 1 });
     expect(existing).toEqual([]);
   });
 });
@@ -255,25 +250,17 @@ describe('mergeIntoShoppingList with repeated ingredients', () => {
       [
         makeIngredient({ name: 'lemon', quantity: 1, unit: '' }),
         makeIngredient({ name: 'juice of 1 lemon', quantity: 1, unit: '' }),
-      ],
-      1,
-      'm1',
-      'Lemon Tart',
-    );
+      ], { scale: 1, mealEntryId: 'm1', recipeTitle: 'Lemon Tart' });
     expect(result).toHaveLength(1);
     expect(result[0].name).toBe('2 lemon');
     expect(result[0].mealSources).toHaveLength(2);
   });
 
   it('merges an alternative-laden line into the item already on the list', () => {
-    const first = mergeIntoShoppingList([], [makeIngredient({ name: 'shallots', quantity: 2, unit: '' })], 1, 'm1', 'Stew');
+    const first = mergeIntoShoppingList([], [makeIngredient({ name: 'shallots', quantity: 2, unit: '' })], { scale: 1, mealEntryId: 'm1', recipeTitle: 'Stew' });
     const second = mergeIntoShoppingList(
       first,
-      [makeIngredient({ name: 'Shallots, or red onion', quantity: 1, unit: '' })],
-      1,
-      'm2',
-      'Curry',
-    );
+      [makeIngredient({ name: 'Shallots, or red onion', quantity: 1, unit: '' })], { scale: 1, mealEntryId: 'm2', recipeTitle: 'Curry' });
     expect(second).toHaveLength(1);
     expect(second[0].name).toBe('3 shallots');
   });
@@ -290,7 +277,7 @@ describe('recipe text versus list text', () => {
 
   it('lists the plain ingredient, without the prep notes', () => {
     const generated = consolidateIngredients([{ ingredients: recipeLines, servings: 1, originalServings: 1, mealEntryId: 'm1', recipeTitle: 'Stir-fry' }]);
-    const merged = mergeIntoShoppingList([], recipeLines, 1, 'm1', 'Stir-fry');
+    const merged = mergeIntoShoppingList([], recipeLines, { scale: 1, mealEntryId: 'm1', recipeTitle: 'Stir-fry' });
     for (const items of [generated, merged]) {
       expect(items.map((i) => i.name).sort()).toEqual(['1 onion', '200 g mushrooms', '3 spring onions', '500 g potatoes']);
     }
@@ -298,9 +285,26 @@ describe('recipe text versus list text', () => {
 
   it('leaves the recipe as written, and keeps that text in the meal breakdown', () => {
     const items = consolidateIngredients([{ ingredients: recipeLines, servings: 2, originalServings: 1, mealEntryId: 'm1', recipeTitle: 'Stir-fry' }]);
-    mergeIntoShoppingList([], recipeLines, 2, 'm1', 'Stir-fry');
+    mergeIntoShoppingList([], recipeLines, { scale: 2, mealEntryId: 'm1', recipeTitle: 'Stir-fry' });
     expect(recipeLines).toEqual(asWritten);
     const springOnions = items.find((i) => i.ingredientKey === 'spring onion');
     expect(springOnions?.mealSources?.[0].ingredientName).toBe('spring onions, thin strips');
+  });
+});
+
+describe('remembered categories', () => {
+  const overrides = { 'rice noodle': 'Other', tofu: 'Dairy & Eggs' } as const;
+
+  it('files generated items where the household put them before', () => {
+    const items = consolidateIngredients(
+      [{ ingredients: [makeIngredient({ name: 'Rice noodles' }), makeIngredient({ name: 'flour' })], servings: 1, originalServings: 1 }],
+      overrides,
+    );
+    expect(Object.fromEntries(items.map((i) => [i.ingredientKey, i.category]))).toEqual({ 'rice noodle': 'Other', flour: 'Pantry' });
+  });
+
+  it('files items added from a meal the same way', () => {
+    const result = mergeIntoShoppingList([], [makeIngredient({ name: 'firm tofu, cubed', unit: 'g' })], { categoryOverrides: { 'firm tofu': 'Dairy & Eggs' } });
+    expect(result[0].category).toBe('Dairy & Eggs');
   });
 });

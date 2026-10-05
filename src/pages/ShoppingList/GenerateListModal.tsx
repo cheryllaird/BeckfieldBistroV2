@@ -12,7 +12,7 @@ interface Props {
 }
 
 export function GenerateListModal({ onClose }: Props) {
-  const { mealEntries, recipes, pantryItems, shoppingItems, setShoppingItems } = useStore();
+  const { mealEntries, recipes, pantryItems, categoryOverrides, shoppingItems, setShoppingItems } = useStore();
   const isInCupboard = (item: ShoppingItem) => !!findPantryMatch(item.ingredientKey ?? item.name, pantryItems);
 
   const allWeekDays = [...getWeekDays(0), ...getWeekDays(1)];
@@ -43,7 +43,7 @@ export function GenerateListModal({ onClose }: Props) {
         recipeTitle: recipe.title,
       }];
     });
-  const consolidated = consolidateIngredients(groups);
+  const consolidated = consolidateIngredients(groups, categoryOverrides);
   const toBuy = consolidated.filter((item) => !isInCupboard(item));
   const pantrySkipCount = consolidated.length - toBuy.length;
 

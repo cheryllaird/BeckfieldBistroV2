@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { categorize } from './categorize';
+import { categoryKey, itemCategoryKey } from './categoryOverrides';
 
 describe('categorize', () => {
   it.each([
@@ -41,5 +42,25 @@ describe('categorize with UK names and whole words', () => {
     ['aubergine', 'Vegetables'], // not Beverages via "gin"
   ])('%j → %j', (name, expected) => {
     expect(categorize(name)).toBe(expected);
+  });
+});
+
+describe('categorize with remembered choices', () => {
+  const overrides = { 'rice noodle': 'Other' } as const;
+
+  it('uses the remembered aisle whatever the amount, number or prep', () => {
+    expect(categorize('rice noodles', overrides)).toBe('Other');
+    expect(categorize('200 g rice noodles', overrides)).toBe('Other');
+    expect(categorize('Rice noodle, soaked', overrides)).toBe('Other');
+  });
+
+  it('falls back to the keyword tables for everything else', () => {
+    expect(categorize('egg noodles', overrides)).toBe('Pantry');
+  });
+
+  it('keys typed text and list items the same way', () => {
+    expect(categoryKey('2 tins chickpeas')).toBe('chickpea');
+    expect(itemCategoryKey({ name: '400 g flour', ingredientKey: 'flour__g' })).toBe('flour');
+    expect(itemCategoryKey({ name: 'Cilantro' })).toBe('coriander');
   });
 });

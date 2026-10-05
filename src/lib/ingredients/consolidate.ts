@@ -3,6 +3,7 @@ import { generateId } from '../utils';
 import { formatItemName, ingredientUnit, leadingCount, readsAsPlural, round2, type IngredientAmount } from './amounts';
 import { canonicalizeIngredientName, normalizeIngredientName } from './canonicalName';
 import { categorize } from './categorize';
+import type { CategoryOverrides } from './categoryOverrides';
 import { findPantryMatch } from './pantry';
 import { isPluralWord, lastWord } from './words';
 
@@ -87,7 +88,10 @@ function servingsScale(servings: number, originalServings: number): number {
  * Keyed on the ingredient alone, not the unit, so the same thing measured two
  * ways ("1 lemon", "2 tbsp lemon juice") lands on one line.
  */
-export function consolidateIngredients(groups: readonly IngredientGroup[]): ShoppingItem[] {
+export function consolidateIngredients(
+  groups: readonly IngredientGroup[],
+  categoryOverrides: CategoryOverrides = {},
+): ShoppingItem[] {
   const lines = groups.flatMap(({ ingredients, servings, originalServings, mealEntryId, recipeTitle }) =>
     ingredients.map((ingredient) =>
       toListLine(ingredient, servingsScale(servings, originalServings), mealEntryId ?? '', recipeTitle ?? '')
@@ -96,7 +100,7 @@ export function consolidateIngredients(groups: readonly IngredientGroup[]): Shop
 
   return Array.from(groupByKey(lines), ([key, keyed]) => {
     const name = labelFor(keyed);
-    const category: ShoppingCategory = categorize(keyed[0].name);
+    const category: ShoppingCategory = categoryOverrides[key] ?? categorize(keyed[0].name);
     const sources = keyed.map((line) => line.source).filter((source) => source.mealEntryId && source.recipeTitle);
     return {
       id: generateId(),
@@ -109,6 +113,18 @@ export function consolidateIngredients(groups: readonly IngredientGroup[]): Shop
   }).sort((a, b) => a.category.localeCompare(b.category));
 }
 
+export interface MergeOptions {
+  /** Planned servings ÷ the recipe's servings. Defaults to 1. */
+  scale?: number;
+  /** The planned meal, recorded as each item's source and used to skip re-adds. */
+  mealEntryId?: string;
+  recipeTitle?: string;
+  /** Store cupboard staples, which are never added. */
+  pantryItems?: readonly PantryItem[];
+  /** The household's remembered aisles, which win over the keyword tables. */
+  categoryOverrides?: CategoryOverrides;
+}
+
 /**
  * Adds one meal's ingredients to an existing list, folding each into the item
  * already there for it. Adding the same meal twice changes nothing, and store
@@ -117,10 +133,7 @@ export function consolidateIngredients(groups: readonly IngredientGroup[]): Shop
 export function mergeIntoShoppingList(
   existing: ShoppingItem[],
   ingredients: Ingredient[],
-  scale: number,
-  mealEntryId?: string,
-  recipeTitle?: string,
-  pantryItems: readonly PantryItem[] = [],
+  { scale = 1, mealEntryId, recipeTitle, pantryItems = [], categoryOverrides = {} }: MergeOptions = {},
 ): ShoppingItem[] {
   const result = [...existing];
   const lines = ingredients
@@ -158,7 +171,7 @@ export function mergeIntoShoppingList(
     result.push({
       id: generateId(),
       name,
-      category: categorize(keyed[0].name),
+      category: categoryOverrides[key] ?? categorize(keyed[0].name),
       checked: false,
       mealSources: newSources.length > 0 ? newSources : undefined,
       ingredientKey: key,

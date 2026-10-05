@@ -1,4 +1,5 @@
 import type { ShoppingCategory } from '../../types';
+import { categoryKey, type CategoryOverrides } from './categoryOverrides';
 import { toUkNames } from './ukNames';
 import { foldDiacritics } from './words';
 
@@ -90,8 +91,16 @@ const KEYWORDS: Keyword[] = Object.entries(CATEGORY_KEYWORDS).flatMap(([category
   })
 );
 
-/** The supermarket aisle an ingredient is found in. */
-export function categorize(name: string): ShoppingCategory {
+/**
+ * The supermarket aisle an ingredient is found in: the household's own choice
+ * if they've made one, otherwise the best keyword match.
+ */
+export function categorize(name: string, overrides: CategoryOverrides = {}): ShoppingCategory {
+  return overrides[categoryKey(name)] ?? defaultCategory(name);
+}
+
+/** The aisle the keyword tables put an ingredient in, ignoring household choices. */
+export function defaultCategory(name: string): ShoppingCategory {
   const text = foldDiacritics(toUkNames(name.toLowerCase()));
   let best: Keyword | undefined;
   for (const keyword of KEYWORDS) {
