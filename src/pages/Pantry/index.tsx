@@ -4,7 +4,8 @@ import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, Plus, Trash2, ChevronDown, Archive, GripVertical, ArrowUpDown } from 'lucide-react';
 import { useStore } from '../../store';
 import { Button } from '../../components/ui/Button';
-import { categorize, generateId, normalizeIngredientName } from '../../lib/utils';
+import { generateId } from '../../lib/utils';
+import { categorize, normalizeIngredientName } from '../../lib/ingredients';
 import type { PantryItem, ShoppingCategory } from '../../types';
 
 const CATEGORY_ORDER: ShoppingCategory[] = [

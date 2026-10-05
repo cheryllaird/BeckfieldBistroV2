@@ -3,7 +3,8 @@ import { X, Check, Package } from 'lucide-react';
 import { useStore } from '../../store';
 import { Button } from '../../components/ui/Button';
 import { ModalPortal } from '../../components/ui/ModalPortal';
-import { consolidateIngredients, findPantryMatch, getRecipeIngredients, isoDate, getWeekDays } from '../../lib/utils';
+import { getRecipeIngredients, isoDate, getWeekDays } from '../../lib/utils';
+import { consolidateIngredients, findPantryMatch, type IngredientGroup } from '../../lib/ingredients';
 import type { ShoppingItem } from '../../types';
 
 interface Props {
@@ -12,8 +13,7 @@ interface Props {
 
 export function GenerateListModal({ onClose }: Props) {
   const { mealEntries, recipes, pantryItems, shoppingItems, setShoppingItems } = useStore();
-  const isInCupboard = (item: ShoppingItem) =>
-    !!findPantryMatch(item.ingredientKey?.split('__')[0] ?? '', pantryItems);
+  const isInCupboard = (item: ShoppingItem) => !!findPantryMatch(item.ingredientKey ?? item.name, pantryItems);
 
   const allWeekDays = [...getWeekDays(0), ...getWeekDays(1)];
   const plannedEntries = mealEntries.filter((e) =>
@@ -28,22 +28,24 @@ export function GenerateListModal({ onClose }: Props) {
     new Set(recipeEntries.map((e) => e.id))
   );
 
-  const pantrySkipCount = (() => {
-    if (pantryItems.length === 0 || selected.size === 0) return 0;
-    const groups = recipeEntries
-      .filter((e) => selected.has(e.id))
-      .map((e) => {
-        const recipe = recipes.find((r) => r.id === e.recipeId)!;
-        return {
-          ingredients: getRecipeIngredients(recipe),
-          servings: e.servings,
-          originalServings: recipe.servings,
-        };
-      })
-      .filter((g) => g.ingredients);
-    const allItems = consolidateIngredients(groups);
-    return allItems.filter(isInCupboard).length;
-  })();
+  // The selected meals' ingredients, consolidated, split into what to buy and
+  // what the store cupboard already covers.
+  const groups: IngredientGroup[] = recipeEntries
+    .filter((e) => selected.has(e.id))
+    .flatMap((e) => {
+      const recipe = recipes.find((r) => r.id === e.recipeId);
+      if (!recipe) return [];
+      return [{
+        ingredients: getRecipeIngredients(recipe),
+        servings: e.servings,
+        originalServings: recipe.servings,
+        mealEntryId: e.id,
+        recipeTitle: recipe.title,
+      }];
+    });
+  const consolidated = consolidateIngredients(groups);
+  const toBuy = consolidated.filter((item) => !isInCupboard(item));
+  const pantrySkipCount = consolidated.length - toBuy.length;
 
   const toggle = (id: string) =>
     setSelected((prev) => {
@@ -53,25 +55,8 @@ export function GenerateListModal({ onClose }: Props) {
     });
 
   const handleGenerate = () => {
-    const groups = recipeEntries
-      .filter((e) => selected.has(e.id))
-      .map((e) => {
-        const recipe = recipes.find((r) => r.id === e.recipeId)!;
-        return {
-          ingredients: getRecipeIngredients(recipe),
-          servings: e.servings,
-          originalServings: recipe.servings,
-          mealEntryId: e.id,
-          recipeTitle: recipe.title,
-        };
-      })
-      .filter((g) => g.ingredients);
-
-    const allItems = consolidateIngredients(groups);
-    const items = allItems
-      .filter((item) => !isInCupboard(item))
-      // Generated items always populate the Immediate list.
-      .map((item) => ({ ...item, listType: 'immediate' as const }));
+    // Generated items always populate the Immediate list.
+    const items = toBuy.map((item) => ({ ...item, listType: 'immediate' as const }));
     // Replace only the Immediate list; leave Stock up items untouched.
     const stockUp = shoppingItems.filter(
       (i) => (i.listType ?? 'immediate') === 'stock-up'

@@ -20,7 +20,8 @@ import {
 } from 'lucide-react';
 import { useStore } from '../../store';
 import { Button } from '../../components/ui/Button';
-import { categorize, formatQuantity, generateId } from '../../lib/utils';
+import { generateId } from '../../lib/utils';
+import { categorize, formatQuantity } from '../../lib/ingredients';
 import type { MealSource, ShoppingCategory, ShoppingItem, ShoppingListType } from '../../types';
 import { GenerateListModal } from './GenerateListModal';
 import { ModalPortal } from '../../components/ui/ModalPortal';
