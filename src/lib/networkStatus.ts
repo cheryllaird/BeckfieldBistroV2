@@ -32,6 +32,18 @@ let generation = 0;
 let pollTimer: ReturnType<typeof setInterval> | null = null;
 let probeInFlight: Promise<void> | null = null;
 
+// The most recent connection check, for the diagnostics line in the profile
+// menu: what the check said and when, alongside what the browser claims.
+export interface ConnectionCheck {
+  result: 'ok' | 'failed' | 'timed out';
+  at: number;
+}
+let lastCheck: ConnectionCheck | null = null;
+
+export function getLastConnectionCheck(): ConnectionCheck | null {
+  return lastCheck;
+}
+
 function set(next: NetworkStatus) {
   status = next;
   listeners.forEach((l) => l());
@@ -58,8 +70,10 @@ function goOnline() {
  * Checks for a real connection with a HEAD request the service worker can't
  * answer from its cache (the query string misses the precache), so only the
  * network can. Any HTTP response means online; a network error means
- * offline. A request that merely times out is inconclusive — a slow
- * connection isn't an absent one — so it leaves the status alone.
+ * offline. A request that gets no answer within the timeout also counts as
+ * offline: iOS can leave a request hanging in aeroplane mode rather than
+ * failing it, and a connection that can't fetch a favicon in 8s is unusable
+ * anyway. The offline poll clears it as soon as a check succeeds.
  */
 function probe(): Promise<void> {
   if (!navigator.onLine) {
@@ -69,11 +83,8 @@ function probe(): Promise<void> {
   if (probeInFlight) return probeInFlight;
 
   const controller = new AbortController();
-  let timedOut = false;
-  const timer = setTimeout(() => {
-    timedOut = true;
-    controller.abort();
-  }, PROBE_TIMEOUT_MS);
+  const timer = setTimeout(() => controller.abort(), PROBE_TIMEOUT_MS);
+  const startedAt = Date.now();
 
   probeInFlight = fetch(`/favicon.ico?online-probe=${Date.now()}`, {
     method: 'HEAD',
@@ -81,9 +92,15 @@ function probe(): Promise<void> {
     signal: controller.signal,
   })
     .then(
-      // The browser may have reported offline while the request was out.
-      () => { if (navigator.onLine) goOnline(); },
-      () => { if (!timedOut) goOffline(); },
+      () => {
+        lastCheck = { result: 'ok', at: startedAt };
+        // The browser may have reported offline while the request was out.
+        if (navigator.onLine) goOnline();
+      },
+      () => {
+        lastCheck = { result: controller.signal.aborted ? 'timed out' : 'failed', at: startedAt };
+        goOffline();
+      },
     )
     .finally(() => {
       clearTimeout(timer);

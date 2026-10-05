@@ -27,7 +27,7 @@ export default defineConfig({
       {
         // Components, hooks and the store.
         plugins: [react()],
-        define: { __APP_VERSION__: JSON.stringify('test') },
+        define: { __APP_VERSION__: JSON.stringify('test'), __APP_BUILD__: JSON.stringify('test') },
         test: {
           name: 'dom',
           environment: 'jsdom',

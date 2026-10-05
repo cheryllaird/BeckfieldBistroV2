@@ -2,6 +2,7 @@ import { act, renderHook } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { useOnlineStatus } from './useOnlineStatus';
 import { waitForServerSync } from '../lib/firestore';
+import { getLastConnectionCheck } from '../lib/networkStatus';
 
 vi.mock('../lib/firestore');
 
@@ -52,7 +53,7 @@ describe('useOnlineStatus', () => {
     expect(result.current).toEqual({ isOnline: false, isSyncing: false });
   });
 
-  it('treats a probe timeout as inconclusive, not offline', async () => {
+  it('treats a probe that never answers as offline', async () => {
     vi.useFakeTimers();
     vi.mocked(fetch).mockImplementation(
       (_url, init) =>
@@ -61,8 +62,12 @@ describe('useOnlineStatus', () => {
         ),
     );
     const { result } = renderHook(() => useOnlineStatus());
-    await act(async () => vi.advanceTimersByTime(8_000));
+    await act(async () => vi.advanceTimersByTime(7_999));
     expect(result.current.isOnline).toBe(true);
+
+    await act(async () => vi.advanceTimersByTime(1));
+    expect(result.current.isOnline).toBe(false);
+    expect(getLastConnectionCheck()?.result).toBe('timed out');
   });
 
   it('re-probes while offline and recovers without an online event', async () => {
