@@ -278,3 +278,29 @@ describe('mergeIntoShoppingList with repeated ingredients', () => {
     expect(second[0].name).toBe('3 shallots');
   });
 });
+
+describe('recipe text versus list text', () => {
+  const recipeLines = [
+    makeIngredient({ name: 'spring onions, thin strips', quantity: 3, unit: '' }),
+    makeIngredient({ name: 'onion, finely chopped', quantity: 1, unit: '' }),
+    makeIngredient({ name: 'sliced mushrooms', quantity: 200, unit: 'g' }),
+    makeIngredient({ name: 'potatoes, peeled and mashed', quantity: 500, unit: 'g' }),
+  ];
+  const asWritten = recipeLines.map((line) => ({ ...line }));
+
+  it('lists the plain ingredient, without the prep notes', () => {
+    const generated = consolidateIngredients([{ ingredients: recipeLines, servings: 1, originalServings: 1, mealEntryId: 'm1', recipeTitle: 'Stir-fry' }]);
+    const merged = mergeIntoShoppingList([], recipeLines, 1, 'm1', 'Stir-fry');
+    for (const items of [generated, merged]) {
+      expect(items.map((i) => i.name).sort()).toEqual(['1 onion', '200 g mushrooms', '3 spring onions', '500 g potatoes']);
+    }
+  });
+
+  it('leaves the recipe as written, and keeps that text in the meal breakdown', () => {
+    const items = consolidateIngredients([{ ingredients: recipeLines, servings: 2, originalServings: 1, mealEntryId: 'm1', recipeTitle: 'Stir-fry' }]);
+    mergeIntoShoppingList([], recipeLines, 2, 'm1', 'Stir-fry');
+    expect(recipeLines).toEqual(asWritten);
+    const springOnions = items.find((i) => i.ingredientKey === 'spring onion');
+    expect(springOnions?.mealSources?.[0].ingredientName).toBe('spring onions, thin strips');
+  });
+});
