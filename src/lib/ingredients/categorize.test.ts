@@ -64,3 +64,47 @@ describe('categorize with remembered choices', () => {
     expect(itemCategoryKey({ name: 'Cilantro' })).toBe('coriander');
   });
 });
+
+describe('categorize matches whole words, singular or plural', () => {
+  it.each([
+    // A keyword inside another word no longer counts
+    ['watercress', 'Vegetables'], // not Beverages via "water"
+    ['butterflied chicken thighs', 'Meat & Seafood'], // not Dairy via "butter"
+    ['extra virgin olive oil', 'Pantry'], // not Beverages via "gin"
+    ['toilet roll', 'Bakery'], // "roll" still counts; "oil" in "toilet" doesn't
+    ['shampoo', 'Other'], // not Meat via "ham"
+    // Plurals, including -ies
+    ['blackberries', 'Fruit'],
+    ['strawberries', 'Fruit'],
+    ['peaches', 'Fruit'],
+    ['anchovies', 'Meat & Seafood'],
+    ['bay leaves', 'Herbs & Spices'],
+  ])('%j → %j', (name, expected) => {
+    expect(categorize(name)).toBe(expected);
+  });
+});
+
+describe('categorize covers common items people had to file by hand', () => {
+  it.each([
+    ['tagliatelle', 'Pantry'],
+    ['orzo', 'Pantry'],
+    ['taco shells', 'Pantry'],
+    ['coconut cream', 'Pantry'], // not Fruit via "coconut"
+    ['chicken stock', 'Pantry'], // not Meat via "chicken"
+    ['tinned tomatoes', 'Pantry'],
+    ['croissants', 'Bakery'],
+    ['papaya', 'Fruit'],
+    ['mixed fruit', 'Fruit'],
+    ['cola', 'Beverages'],
+    ['tonic', 'Beverages'],
+    ['elderflower cordial', 'Beverages'],
+    ['oat fraîche', 'Dairy & Eggs'], // not Pantry via "oat"
+    ['oat milk', 'Dairy & Eggs'],
+    ['diced meat', 'Meat & Seafood'],
+    ['gammon steaks', 'Meat & Seafood'],
+    ['ras el hanout seasoning', 'Herbs & Spices'],
+    ['garam masala', 'Herbs & Spices'],
+  ])('%j → %j', (name, expected) => {
+    expect(categorize(name)).toBe(expected);
+  });
+});
