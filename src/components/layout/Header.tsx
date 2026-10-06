@@ -3,24 +3,6 @@ import { useNavigate } from 'react-router-dom';
 import { Check, LogOut, Settings, User } from 'lucide-react';
 import { useStore, scopeOf } from '../../store';
 import type { Bistro } from '../../types';
-import { useOnlineStatus } from '../../hooks/useOnlineStatus';
-import { getLastConnectionCheck } from '../../lib/networkStatus';
-
-// One line saying what the app believes about the connection and why, so a
-// banner that doesn't match reality can be diagnosed on the device itself.
-function ConnectionDiagnostics() {
-  const { isOnline, isSyncing } = useOnlineStatus();
-  const check = getLastConnectionCheck();
-  const state = !isOnline ? 'offline' : isSyncing ? 'syncing' : 'online';
-  const checkText = check
-    ? `check ${check.result} at ${new Date(check.at).toLocaleTimeString()}`
-    : 'no check yet';
-  return (
-    <p className="text-[11px] text-slate-300">
-      {state} · browser {navigator.onLine ? 'online' : 'offline'} · {checkText}
-    </p>
-  );
-}
 
 export function Header() {
   const { user, signOut, bistros, switchBistro } = useStore();
@@ -79,7 +61,6 @@ export function Header() {
                     <p className="text-sm font-medium text-slate-800">{user.name}</p>
                     <p className="text-xs text-slate-400">{user.email}</p>
                     <p className="text-xs text-slate-300 mt-1">v{__APP_VERSION__} · {__APP_BUILD__}</p>
-                    <ConnectionDiagnostics />
                   </div>
                   {showBistros && (
                     <div className="py-1 border-b border-slate-100">

@@ -2,7 +2,6 @@ import { act, renderHook } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { useOnlineStatus } from './useOnlineStatus';
 import { waitForServerSync } from '../lib/firestore';
-import { getLastConnectionCheck } from '../lib/networkStatus';
 
 vi.mock('../lib/firestore');
 
@@ -67,7 +66,6 @@ describe('useOnlineStatus', () => {
 
     await act(async () => vi.advanceTimersByTime(1));
     expect(result.current.isOnline).toBe(false);
-    expect(getLastConnectionCheck()?.result).toBe('timed out');
   });
 
   it('re-probes while offline and recovers without an online event', async () => {
