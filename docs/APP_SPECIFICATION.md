@@ -87,7 +87,7 @@ Given a recipe web address, the app fetches the page and tries, in order:
 
 1. **The page's own structured recipe data** (schema.org/Recipe JSON-LD). This is
    the site's machine-readable recipe, so it is exact to source, instant, free,
-   and immune to AI copyright blocks. Most recipe sites publish it. Ingredients,
+   and needs no AI. Most recipe sites publish it. Ingredients,
    steps, yield/servings, and prep/total times are parsed directly (ISO-8601
    durations converted to friendly text).
 2. **AI structuring of the page text** — if there is no usable structured data,
@@ -106,14 +106,15 @@ tries, in order:
 
 1. **Direct AI vision** — the model reads the image and returns structured recipe
    data. This is the most accurate transcriber when it isn't blocked.
-2. **OCR + AI structuring** — if vision fails or is blocked, the image is
-   transcribed **deterministically** with on-device-style OCR (including image
-   preprocessing and multi-column reflow), and only the resulting *text* is handed
-   to the model to structure. Restructuring handed-over text is faithful and far
-   less likely to trip AI copyright filters than transcribing a copyrighted page.
+2. **OCR + AI structuring** — if vision fails for an ordinary reason (an error or
+   unreadable output), the image is transcribed **deterministically** with
+   on-device-style OCR (including image preprocessing and multi-column reflow),
+   and only the resulting *text* is handed to the model to structure.
 3. **Deterministic local parsing** — if AI is unavailable (e.g. the key is out of
-   quota) but OCR produced legible text, a built-in parser structures that text
-   into a recipe with no AI at all.
+   quota), or the model declined the recipe under its copyright (recitation)
+   filter, a built-in parser structures the OCR text into a recipe with no AI at
+   all. A copyright block is respected: the same content is never sent back to
+   the model in another form.
 4. **A clear failure** — only if the photo can't be read by either vision or OCR,
    with guidance to take a clearer, well-lit photo of just the ingredients and
    steps, or enter it manually.

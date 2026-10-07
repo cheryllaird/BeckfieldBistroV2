@@ -63,10 +63,10 @@ Rules:
 - Match the "steps" array to the recipe's own method structure: create exactly one array entry per numbered step or paragraph in the source. Do NOT break a step into smaller pieces than the recipe does, and do NOT merge separate steps together.
 - If the recipe numbers its steps (1, 2, 3…), produce one entry per number, preserving that grouping — even when a single numbered step spans several sentences.`;
 
-// OCR-first path: the photo is transcribed deterministically by tesseract and
-// only the TEXT reaches Gemini. Restructuring text it was handed is far less
-// likely to trip the RECITATION filter than transcribing a copyrighted page,
-// and the verbatim rules below keep the output accurate to the scanned source.
+// OCR path: the photo is transcribed deterministically by tesseract and only
+// the TEXT reaches Gemini, which structures it. The verbatim rules below keep
+// the output accurate to the scanned source. This path is never used to retry
+// content Gemini has already blocked for RECITATION — see the photo ladder.
 const OCR_SYSTEM_PROMPT =
   'You are a recipe extraction assistant. You are given raw OCR text scanned from a photo of a recipe (cookbook page, recipe card, or printout). Structure it and return ONLY a valid JSON object — no markdown, no explanation, no code fences.';
 
@@ -182,13 +182,25 @@ function isOverloadError(err: unknown): boolean {
 
 // RECITATION — Gemini blocks a candidate when its OUTPUT reproduces copyrighted
 // material (published cookbooks, recipe sites) too closely. It is the generated
-// text that is flagged, not the prompt, and it is not tied to quota. It is
-// surfaced to the caller, which recovers with something more faithful than a
-// phrasing-loosened retry: photos fall to deterministic OCR, and a URL yields a
-// clear "enter it manually" 422 rather than a silently altered recipe.
+// text that is flagged, not the prompt, and it is not tied to quota. The block
+// is respected: once Gemini declines a recipe for RECITATION, no other Gemini
+// call is made for that request. Photos fall to deterministic OCR + local
+// parsing (no model), and a URL returns its partial JSON-LD or a clear "enter it
+// manually" 422.
 function isRecitationError(err: unknown): boolean {
   const message = (err instanceof Error ? err.message : String(err)).toLowerCase();
   return message.includes('recitation');
+}
+
+// Why a Gemini step didn't produce a recipe — recorded with the extraction
+// metric so fallback causes (above all RECITATION) can be counted.
+type GeminiFailure = 'recitation' | 'rate-limit' | 'overload' | 'error' | 'bad-json';
+
+function classifyGeminiError(err: unknown): GeminiFailure {
+  if (isRecitationError(err)) return 'recitation';
+  if (isRateLimitError(err)) return 'rate-limit';
+  if (isOverloadError(err)) return 'overload';
+  return 'error';
 }
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -277,19 +289,28 @@ function coerceIngredientSections(data: Record<string, unknown>) {
 // the fallback rate can be watched over time and the method order revisited if
 // one path starts dominating. Aggregated lifetime + per-day counters live in
 // Firestore under analytics/; failures never block or fail the request.
-async function recordExtractionMethod(method: string): Promise<void> {
-  console.log(`extract-recipe: extractionMethod=${method}`);
+//
+// `fallbackReasons` names each Gemini step that was tried and didn't produce
+// the recipe, as `<step>-<reason>` (e.g. 'vision-recitation',
+// 'ocrGemini-bad-json', 'urlGemini-overload'). Each is counted under
+// `fallbackReasons` beside `counts`, so `counts` is unchanged by it.
+async function recordExtractionMethod(method: string, fallbackReasons: string[] = []): Promise<void> {
+  const reasonsLog = fallbackReasons.length ? ` fallbackReasons=${fallbackReasons.join(',')}` : '';
+  console.log(`extract-recipe: extractionMethod=${method}${reasonsLog}`);
   try {
     const db = getFirestore();
     const inc = FieldValue.increment(1);
     const day = new Date().toISOString().slice(0, 10);
+    const reasons = fallbackReasons.length
+      ? { fallbackReasons: Object.fromEntries(fallbackReasons.map((r) => [r, inc])) }
+      : {};
     await Promise.all([
       db.collection('analytics').doc('extractionStats').set(
-        { counts: { [method]: inc }, total: inc, updatedAt: FieldValue.serverTimestamp() },
+        { counts: { [method]: inc }, ...reasons, total: inc, updatedAt: FieldValue.serverTimestamp() },
         { merge: true },
       ),
       db.collection('analytics').doc(`extractionStats-${day}`).set(
-        { counts: { [method]: inc }, total: inc, date: day },
+        { counts: { [method]: inc }, ...reasons, total: inc, date: day },
         { merge: true },
       ),
     ]);
@@ -379,7 +400,7 @@ function sendGeminiError(res: VercelResponse, err: unknown): VercelResponse {
   }
   if (isRecitationError(err)) {
     return res.status(422).json({
-      error: 'This recipe matches a copyrighted source too closely for the AI to copy. Try a clearer photo of just the ingredients and steps, or enter it manually.',
+      error: 'The AI declined to copy this recipe because it closely matches a copyrighted source. Please enter it manually.',
     });
   }
   return res.status(502).json({ error: 'AI service error. Please try again.' });
@@ -448,10 +469,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     // 1. VISION FIRST — Gemini reads the photo directly; it's the most accurate
     //    transcriber when it isn't blocked. A RECITATION block throws here and
-    //    drops to OCR, which is deterministic and faithful to the source.
+    //    drops to OCR + the local parser, with no further Gemini call.
     //    forceOcr skips vision entirely (debug / rollback lever).
     let visionError: unknown = null;
-    if (req.body.forceOcr !== true) {
+    // Why each Gemini step fell through, for the extraction metric.
+    const fallbackReasons: string[] = [];
+    if (req.body.forceOcr === true) {
+      fallbackReasons.push('vision-forced');
+    } else {
       try {
         const raw = await callGeminiWithRetry(genAI, imageParts, SYSTEM_PROMPT);
         const data = parseRecipeJson(raw);
@@ -460,8 +485,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           return res.status(200).json({ ...buildRecipePayload(data, 'Photo Upload'), extractionMethod: 'gemini-vision' });
         }
         console.error('vision: JSON parse failure — falling back to OCR. Raw:', raw.slice(0, 500));
+        fallbackReasons.push('vision-bad-json');
       } catch (err) {
         visionError = err;
+        fallbackReasons.push(`vision-${classifyGeminiError(err)}`);
         console.error(`vision failed (${isRecitationError(err) ? 'recitation' : 'error'}): ${err instanceof Error ? err.message : String(err)} — falling back to OCR`);
       }
     }
@@ -480,13 +507,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       console.log(`extract-recipe: ocr confidence=${Math.round(ocr.confidence)} chars=${ocrText.length} columnsReflowed=${ocr.columnsReflowed}`);
 
       // 2a. Structure the OCR TEXT with Gemini — skip when vision already showed
-      //     the key is over quota (the same key would just fail again).
-      if (!isRateLimitError(visionError)) {
+      //     the key is over quota (the same key would just fail again), and when
+      //     Gemini declined the recipe for RECITATION: that block is respected,
+      //     never routed around by handing the same content back as text.
+      if (!isRateLimitError(visionError) && !isRecitationError(visionError)) {
         try {
           const raw = await callGeminiWithRetry(genAI, [ocrUserPrompt(ocrText)], OCR_SYSTEM_PROMPT);
           const structured = parseRecipeJson(raw);
           if (structured) {
-            await recordExtractionMethod('ocr+gemini');
+            await recordExtractionMethod('ocr+gemini', fallbackReasons);
             return res.status(200).json({
               ...buildRecipePayload(structured, 'Photo Upload'),
               extractionMethod: 'ocr+gemini',
@@ -494,14 +523,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             });
           }
           console.error('OCR structuring: JSON parse failure. Raw:', raw.slice(0, 500));
+          fallbackReasons.push('ocrGemini-bad-json');
         } catch (err) {
-          console.error('OCR structuring failed:', err instanceof Error ? err.message : String(err));
+          fallbackReasons.push(`ocrGemini-${classifyGeminiError(err)}`);
+          console.error(`OCR structuring failed (${isRecitationError(err) ? 'recitation' : 'error'}):`, err instanceof Error ? err.message : String(err));
         }
       }
 
       // 2b. Deterministic local parser — always yields a result from the OCR text.
+      //     No model involved, so this is also the only path after RECITATION.
       const local = parseRecipeText(ocrText);
-      await recordExtractionMethod('ocr+local');
+      await recordExtractionMethod('ocr+local', fallbackReasons);
       return res.status(200).json({
         title: local.title,
         source: 'Photo Upload',
@@ -518,7 +550,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     // 3. Neither vision nor OCR could read the photo.
     console.log(`extract-recipe: vision + OCR both failed (ocr gate: ${gate.reason})`);
-    await recordExtractionMethod('failed');
+    await recordExtractionMethod('failed', fallbackReasons);
     if (visionError) return sendGeminiError(res, visionError);
     return res.status(422).json({
       error: 'Could not read the recipe from that photo. Try a clearer, well-lit photo of just the ingredients and steps, or enter it manually.',
@@ -528,7 +560,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   // URL path — mirrors the photo ladder: an AI pass first, then a deterministic
   // fallback (the page's own JSON-LD recipe data), then a tracked failure. So a
   // Gemini outage or RECITATION no longer hard-fails a page that publishes
-  // structured data.
+  // structured data. A RECITATION block is never retried with Gemini.
   let coverImage = '';
   let html = '';
   let pageText: string;
@@ -574,8 +606,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   // ingredients we already have.
   const structuredHasSteps =
     Array.isArray(structured?.steps) && (structured!.steps as unknown[]).length > 0;
-  const returnStructured = async () => {
-    await recordExtractionMethod('url+structured');
+  const returnStructured = async (fallbackReason: string) => {
+    await recordExtractionMethod('url+structured', [fallbackReason]);
     return res.status(200).json({ ...withCover(buildRecipePayload(structured!, hostname)), extractionMethod: 'url+structured' });
   };
   if (structured && structuredHasSteps) {
@@ -597,17 +629,18 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     console.error('URL structuring: JSON parse failure. Raw:', rawText.slice(0, 500));
   } catch (err) {
     console.error(`URL Gemini failed: ${err instanceof Error ? err.message : String(err)}`);
+    const reason = `urlGemini-${classifyGeminiError(err)}`;
     // Partial JSON-LD (ingredients but no method) still beats a hard failure.
-    if (structured) return returnStructured();
-    await recordExtractionMethod('failed');
+    if (structured) return returnStructured(reason);
+    await recordExtractionMethod('failed', [reason]);
     return sendGeminiError(res, err);
   }
 
   // 3. Gemini returned nothing usable. If we salvaged partial structured data
   //    earlier, return that; otherwise it's a tracked failure.
-  if (structured) return returnStructured();
+  if (structured) return returnStructured('urlGemini-bad-json');
   console.log('extract-recipe: url extraction failed (no JSON-LD, Gemini unparseable)');
-  await recordExtractionMethod('failed');
+  await recordExtractionMethod('failed', ['urlGemini-bad-json']);
   return res.status(422).json({
     error: 'Could not extract the recipe from that page. Try a different URL or enter it manually.',
   });
