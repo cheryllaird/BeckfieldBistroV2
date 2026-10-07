@@ -30,10 +30,13 @@ The pipeline is built around three principles:
 3. **Observability over guesswork.** Which method produced each result is recorded,
    so the ordering can be tuned from real fallback rates rather than assumption.
 
-RECITATION is the key constraint to keep in mind: it fires on the **output** matching
-copyrighted text, so it correlates with published cookbooks. Deterministic steps
-(OCR, JSON‑LD, local parsing) can never trip it; a Gemini call that reproduces the
-recipe can.
+RECITATION fires on the **output** matching copyrighted text, so it correlates with
+published cookbooks. **The block is respected, never routed around:** once Gemini
+declines a recipe for RECITATION, no further Gemini call is made for that request.
+Photos fall to OCR + the deterministic local parser (no model at all); URLs return
+partial JSON‑LD if the page had it, else a 422 asking the user to enter it manually.
+Do not add a path that hands blocked content back to Gemini in another form (e.g.
+as OCR text) — that would circumvent the filter.
 
 ---
 
@@ -68,6 +71,7 @@ flowchart TD
         P1[gemini-vision<br/>image → Gemini] -->|ok| R1([return gemini-vision])
         P1 -->|RECITATION / error / bad JSON| P2[Preprocess + Tesseract OCR<br/>+ column reflow]
         P2 --> GATE{OCR quality gate}
+        GATE -->|pass, vision was RECITATION| P4
         GATE -->|pass| P3[ocr+gemini<br/>OCR text → Gemini]
         P3 -->|ok| R2([return ocr+gemini])
         P3 -->|fail / bad JSON / key over quota| P4[ocr+local<br/>parseRecipeText]
@@ -125,11 +129,12 @@ uses 2048/0.9, which stays under the endpoint's 8 MB body limit.
 2. **OCR** — `preprocessForOcr(buffer)` → `getOcrEngine().recognize(...)` →
    `assessOcrQuality(ocr)`.
    - **Gate passes:**
-     - **`ocr+gemini`** — unless `visionError` was a rate‑limit (same key would fail
-       again), `callGeminiWithRetry([ocrUserPrompt(text)], OCR_SYSTEM_PROMPT)`.
-       Parseable → return, with `ocrText` included.
+     - **`ocr+gemini`** — `callGeminiWithRetry([ocrUserPrompt(text)], OCR_SYSTEM_PROMPT)`,
+       **skipped** when `visionError` was a rate‑limit (same key would fail again)
+       or **RECITATION** (the block is respected — the same content is not handed
+       back to Gemini as text). Parseable → return, with `ocrText` included.
      - **`ocr+local`** — `parseRecipeText(ocrText)` (deterministic) → return, with
-       `ocrText` included.
+       `ocrText` included. This is the only structuring path after RECITATION.
    - **Gate fails** → **`failed`**: if `visionError` exists, map it with
      `sendGeminiError`; otherwise 422 "try a clearer photo / enter manually".
 
@@ -157,9 +162,9 @@ uses 2048/0.9, which stays under the endpoint's 8 MB body limit.
 - `PRIMARY = gemini-3.1-flash-lite`, `FALLBACK = gemini-3.5-flash`.
 - Retries the primary on **503 overload** with backoff `[0, 1000, 2500] ms`; a **429
   rate‑limit** skips straight to the fallback model (separate quota bucket).
-- **RECITATION and any other error are thrown to the caller** — each caller has a more
-  faithful recovery than a phrasing‑loosened retry (photos → OCR; URLs → JSON‑LD or a
-  clear 422). There is intentionally **no temperature‑1.3 recovery** anymore.
+- **RECITATION and any other error are thrown to the caller.** RECITATION is never
+  retried with Gemini in any form: photos → OCR + local parser; URLs → partial
+  JSON‑LD or a clear 422. There is intentionally **no temperature‑1.3 recovery**.
 
 ### 5.5 Error classification & mapping
 - `isRateLimitError` → 429, `isOverloadError` → 503, `isRecitationError` → 422,
@@ -273,8 +278,8 @@ persists anything unexpected to Firestore.
 
 | Method | Input | Meaning | Gemini sees the image? |
 |--------|-------|---------|------------------------|
-| `gemini-vision` | photo | Gemini transcribed + structured the image | **yes** (only path where RECITATION is possible) |
-| `ocr+gemini` | photo | Tesseract transcribed; Gemini structured the **text** | no |
+| `gemini-vision` | photo | Gemini transcribed + structured the image | **yes** |
+| `ocr+gemini` | photo | Tesseract transcribed; Gemini structured the **text** (never after RECITATION) | no |
 | `ocr+local` | photo | Tesseract transcribed; `parseRecipeText` structured it | no (no Gemini) |
 | `url+structured` | url | Page's own JSON‑LD recipe data | no |
 | `url+gemini` | url | Gemini structured the page text | no |

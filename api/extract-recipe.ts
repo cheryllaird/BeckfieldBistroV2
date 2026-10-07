@@ -63,10 +63,10 @@ Rules:
 - Match the "steps" array to the recipe's own method structure: create exactly one array entry per numbered step or paragraph in the source. Do NOT break a step into smaller pieces than the recipe does, and do NOT merge separate steps together.
 - If the recipe numbers its steps (1, 2, 3…), produce one entry per number, preserving that grouping — even when a single numbered step spans several sentences.`;
 
-// OCR-first path: the photo is transcribed deterministically by tesseract and
-// only the TEXT reaches Gemini. Restructuring text it was handed is far less
-// likely to trip the RECITATION filter than transcribing a copyrighted page,
-// and the verbatim rules below keep the output accurate to the scanned source.
+// OCR path: the photo is transcribed deterministically by tesseract and only
+// the TEXT reaches Gemini, which structures it. The verbatim rules below keep
+// the output accurate to the scanned source. This path is never used to retry
+// content Gemini has already blocked for RECITATION — see the photo ladder.
 const OCR_SYSTEM_PROMPT =
   'You are a recipe extraction assistant. You are given raw OCR text scanned from a photo of a recipe (cookbook page, recipe card, or printout). Structure it and return ONLY a valid JSON object — no markdown, no explanation, no code fences.';
 
@@ -182,10 +182,11 @@ function isOverloadError(err: unknown): boolean {
 
 // RECITATION — Gemini blocks a candidate when its OUTPUT reproduces copyrighted
 // material (published cookbooks, recipe sites) too closely. It is the generated
-// text that is flagged, not the prompt, and it is not tied to quota. It is
-// surfaced to the caller, which recovers with something more faithful than a
-// phrasing-loosened retry: photos fall to deterministic OCR, and a URL yields a
-// clear "enter it manually" 422 rather than a silently altered recipe.
+// text that is flagged, not the prompt, and it is not tied to quota. The block
+// is respected: once Gemini declines a recipe for RECITATION, no other Gemini
+// call is made for that request. Photos fall to deterministic OCR + local
+// parsing (no model), and a URL returns its partial JSON-LD or a clear "enter it
+// manually" 422.
 function isRecitationError(err: unknown): boolean {
   const message = (err instanceof Error ? err.message : String(err)).toLowerCase();
   return message.includes('recitation');
@@ -379,7 +380,7 @@ function sendGeminiError(res: VercelResponse, err: unknown): VercelResponse {
   }
   if (isRecitationError(err)) {
     return res.status(422).json({
-      error: 'This recipe matches a copyrighted source too closely for the AI to copy. Try a clearer photo of just the ingredients and steps, or enter it manually.',
+      error: 'The AI declined to copy this recipe because it closely matches a copyrighted source. Please enter it manually.',
     });
   }
   return res.status(502).json({ error: 'AI service error. Please try again.' });
@@ -448,7 +449,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     // 1. VISION FIRST — Gemini reads the photo directly; it's the most accurate
     //    transcriber when it isn't blocked. A RECITATION block throws here and
-    //    drops to OCR, which is deterministic and faithful to the source.
+    //    drops to OCR + the local parser, with no further Gemini call.
     //    forceOcr skips vision entirely (debug / rollback lever).
     let visionError: unknown = null;
     if (req.body.forceOcr !== true) {
@@ -480,8 +481,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       console.log(`extract-recipe: ocr confidence=${Math.round(ocr.confidence)} chars=${ocrText.length} columnsReflowed=${ocr.columnsReflowed}`);
 
       // 2a. Structure the OCR TEXT with Gemini — skip when vision already showed
-      //     the key is over quota (the same key would just fail again).
-      if (!isRateLimitError(visionError)) {
+      //     the key is over quota (the same key would just fail again), and when
+      //     Gemini declined the recipe for RECITATION: that block is respected,
+      //     never routed around by handing the same content back as text.
+      if (!isRateLimitError(visionError) && !isRecitationError(visionError)) {
         try {
           const raw = await callGeminiWithRetry(genAI, [ocrUserPrompt(ocrText)], OCR_SYSTEM_PROMPT);
           const structured = parseRecipeJson(raw);
@@ -495,11 +498,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           }
           console.error('OCR structuring: JSON parse failure. Raw:', raw.slice(0, 500));
         } catch (err) {
-          console.error('OCR structuring failed:', err instanceof Error ? err.message : String(err));
+          console.error(`OCR structuring failed (${isRecitationError(err) ? 'recitation' : 'error'}):`, err instanceof Error ? err.message : String(err));
         }
       }
 
       // 2b. Deterministic local parser — always yields a result from the OCR text.
+      //     No model involved, so this is also the only path after RECITATION.
       const local = parseRecipeText(ocrText);
       await recordExtractionMethod('ocr+local');
       return res.status(200).json({
@@ -528,7 +532,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   // URL path — mirrors the photo ladder: an AI pass first, then a deterministic
   // fallback (the page's own JSON-LD recipe data), then a tracked failure. So a
   // Gemini outage or RECITATION no longer hard-fails a page that publishes
-  // structured data.
+  // structured data. A RECITATION block is never retried with Gemini.
   let coverImage = '';
   let html = '';
   let pageText: string;
