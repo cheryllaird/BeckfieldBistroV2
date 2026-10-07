@@ -289,7 +289,22 @@ persists anything unexpected to Firestore.
 - logs `extract-recipe: extractionMethod=<method>`;
 - increments Firestore counters at `analytics/extractionStats` (lifetime) and
   `analytics/extractionStats-YYYY-MM-DD` (daily), each holding
-  `{ counts: { <method>: n, … }, total }`.
+  `{ counts: { <method>: n, … }, fallbackReasons: { <step>-<reason>: n, … }, total }`.
+
+**Fallback reasons** — `recordExtractionMethod(method, fallbackReasons)` also counts
+why each Gemini step that was tried didn't produce the recipe, keyed
+`<step>-<reason>`:
+
+| Step | Reasons |
+|------|---------|
+| `vision` | `recitation`, `rate-limit`, `overload`, `error`, `bad-json`, `forced` (`forceOcr`) |
+| `ocrGemini` | `recitation`, `rate-limit`, `overload`, `error`, `bad-json` |
+| `urlGemini` | `recitation`, `rate-limit`, `overload`, `error`, `bad-json` |
+
+One request can add several (e.g. `vision-overload` then `ocrGemini-bad-json` →
+`ocr+local`). `vision-recitation` counts the cookbook photos Gemini declined;
+those always end in `ocr+local` or `failed`. The `<method>` counts are unaffected.
+Counters before this was added have no `fallbackReasons`.
 
 **Reading the signal.** A rising `ocr+*` share means vision is being blocked/failing a
 lot on photos; a high `url+gemini` share means few sites carried usable JSON‑LD. Either
