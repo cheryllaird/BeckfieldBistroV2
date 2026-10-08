@@ -14,6 +14,13 @@ export default defineConfig({
     // told apart even when the version number hasn't changed. Vercel sets this.
     __APP_BUILD__: JSON.stringify(process.env.VERCEL_GIT_COMMIT_SHA?.slice(0, 7) ?? 'dev'),
   },
+  // Down-level the bundle for older iPad Safari (iPadOS 15/16). Vite 8's default
+  // target assumes ~Safari 16, so modern syntax from dependencies can throw on
+  // older Safari and leave the app painted but unresponsive to touch.
+  build: {
+    target: ['es2019', 'safari15'],
+    cssTarget: 'safari15',
+  },
   server: {
     port: process.env.PORT ? Number(process.env.PORT) : 5173,
   },

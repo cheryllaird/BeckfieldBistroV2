@@ -50,6 +50,8 @@ export function RecipeCard({ recipe, isSelectMode, isSelected, onLongPress, onSe
     <div
       onClick={handleClick}
       {...longPressHandlers}
+      role="button"
+      tabIndex={0}
       className={[
         'bg-white rounded-2xl border shadow-sm cursor-pointer transition-all duration-200 overflow-hidden group relative select-none',
         isSelected
@@ -57,20 +59,21 @@ export function RecipeCard({ recipe, isSelectMode, isSelected, onLongPress, onSe
           : 'border-slate-100 hover:shadow-md',
       ].join(' ')}
     >
-      {/* Cover image */}
-      <div className="relative aspect-[4/3] bg-slate-100">
+      {/* Cover image — padding-top box keeps a 4:3 ratio on every Safari version
+          (older iPad Safari drops the collapsed card without this). */}
+      <div className="relative bg-slate-100" style={{ paddingTop: '75%' }}>
         {recipe.coverImage && !imgError ? (
           <img
             src={recipe.coverImage}
             alt={recipe.title}
-            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+            className="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
             loading="lazy"
             draggable={false}
             onError={() => setImgError(true)}
             style={{ pointerEvents: 'none', userSelect: 'none', WebkitTouchCallout: 'none' }}
           />
         ) : (
-          <div className="w-full h-full flex items-center justify-center text-slate-300">
+          <div className="absolute inset-0 w-full h-full flex items-center justify-center text-slate-300">
             <UtensilsCrossed size={40} />
           </div>
         )}
