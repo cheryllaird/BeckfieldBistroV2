@@ -1,0 +1,92 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-settings.json",
+  "permissions": {
+    "allow": [
+      "Bash(npm ci)",
+      "Bash(npm ci:*)",
+      "Bash(npm run lint)",
+      "Bash(npm run lint:*)",
+      "Bash(npm run typecheck)",
+      "Bash(npm test)",
+      "Bash(npm test:*)",
+      "Bash(npm run test:*)",
+      "Bash(npm run build)",
+      "Bash(npm run knip)",
+      "Bash(npm run knip:*)",
+      "Bash(npx vitest:*)",
+      "Bash(npx knip:*)",
+      "Bash(git status:*)",
+      "Bash(git diff:*)",
+      "Bash(git log:*)",
+      "Bash(git show:*)",
+      "Bash(git branch:*)",
+      "Bash(git fetch:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git checkout -b claude/:*)",
+      "Bash(git push -u origin claude/:*)"
+    ],
+    "ask": [
+      "Edit(./firestore.rules)",
+      "Edit(./firebase.json)",
+      "Edit(./vercel.json)",
+      "Edit(./package.json)",
+      "Edit(./.github/**)",
+      "Edit(./.claude/settings.json)",
+      "Edit(./.claude/hooks/**)",
+      "Edit(./api/_utils/auth.ts)",
+      "Edit(./api/_utils/crypto.ts)",
+      "Edit(./api/_utils/safeFetch.ts)",
+      "Bash(npm install:*)",
+      "Bash(npm i:*)",
+      "Bash(npm uninstall:*)"
+    ],
+    "deny": [
+      "Read(./.env)",
+      "Read(./.env.*.local)",
+      "Read(./.env.local)",
+      "Read(./.env.production)",
+      "Read(./.env.development)",
+      "Read(**/*.pem)",
+      "Read(**/*service-account*.json)",
+      "Read(./.vercel/**)",
+      "Bash(cat .env:*)",
+      "Bash(cat .env.local:*)",
+      "Bash(printenv:*)",
+      "Bash(env)",
+      "Bash(firebase:*)",
+      "Bash(npx firebase:*)",
+      "Bash(npx firebase-tools:*)",
+      "Bash(vercel:*)",
+      "Bash(npx vercel:*)",
+      "Bash(git push origin main:*)",
+      "Bash(git push origin HEAD:main:*)",
+      "Bash(git push --force:*)",
+      "Bash(git push -f:*)",
+      "Bash(git push origin --force:*)",
+      "Bash(git push --force-with-lease origin main:*)",
+      "Bash(curl:* | sh)",
+      "Bash(curl:* | bash)",
+      "Bash(rm -rf /:*)",
+      "Bash(rm -rf ~:*)",
+      "mcp__github__merge_pull_request",
+      "mcp__github__enable_pr_auto_merge",
+      "mcp__github__delete_file",
+      "mcp__github__create_repository",
+      "mcp__github__fork_repository",
+      "mcp__github__actions_run_trigger"
+    ]
+  },
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/session-start.sh"
+          }
+        ]
+      }
+    ]
+  }
+}

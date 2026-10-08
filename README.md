@@ -78,3 +78,17 @@ The root `test-*.ts` scripts are separate manual smoke checks against live APIs,
 - **Auth + DB**: Firebase (Google Sign-in, Firestore)
 - **AI**: Gemini (recipe extraction via Vercel serverless function)
 - **Hosting**: Vercel
+
+## Install & deployment
+
+- **Live URL**: https://beckfield-bistro.vercel.app. Vercel deploys every push to `main`; the service worker picks up updates silently.
+- **iOS**: Safari → Share → "Add to Home Screen". **Android**: Chrome → "Install app" (or menu → "Add to Home Screen").
+
+## Working with agents
+
+Features are shipped by Claude agents through pull requests that a human reviews and merges. Start with:
+
+- [`AGENTS.md`](AGENTS.md): rules, architecture map and definition of done for any agent.
+- [`docs/agentic-workflow.md`](docs/agentic-workflow.md): how the workflow, guardrails and nightly agents fit together.
+- [`docs/adr/`](docs/adr/README.md): architecture decision records.
+- [`docs/friction-log.md`](docs/friction-log.md): what slows work down, so it can be fixed.

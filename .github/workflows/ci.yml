@@ -6,6 +6,9 @@ on:
     branches:
       - main
 
+permissions:
+  contents: read
+
 jobs:
   check:
     runs-on: ubuntu-latest
@@ -31,3 +34,32 @@ jobs:
 
       - name: Build
         run: npm run build
+
+      # Informational for now: findings show in the log and feed the nightly
+      # cleanup agent, but don't fail the build.
+      - name: Dependency audit
+        continue-on-error: true
+        run: npm audit --audit-level=high --omit=dev
+
+      - name: Dead code report (knip)
+        continue-on-error: true
+        run: npm run knip
+
+  # Scans the full git history for committed secrets (keys, tokens, service
+  # account JSON). Runs the gitleaks binary directly so it needs no API access.
+  secret-scan:
+    runs-on: ubuntu-latest
+    env:
+      GITLEAKS_VERSION: 8.28.0
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install gitleaks
+        run: |
+          curl -sSfL "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz" \
+            | tar -xz -C "$RUNNER_TEMP" gitleaks
+
+      - name: Scan for secrets
+        run: '"$RUNNER_TEMP"/gitleaks git . --redact --verbose'
