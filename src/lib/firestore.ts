@@ -180,6 +180,8 @@ export interface UserDataCallbacks {
   onCategoryOverrides: (overrides: CategoryOverride[]) => void;
   onKnownSources: (sources: string[]) => void;
   onHasGeminiApiKey: (hasKey: boolean) => void;
+  /** The Terms version the user last accepted, or null if never. */
+  onTermsAcceptedVersion?: (version: string | null) => void;
   /** The bistro to open on launch (null: whichever was open last). */
   onDefaultBistroId?: (bistroId: string | null) => void;
   onError?: (err: Error) => void;
@@ -284,6 +286,7 @@ export function subscribeToUserData(
     (snap) => {
       if (snap.metadata.fromCache && !snap.exists()) return;
       callbacks.onHasGeminiApiKey(!!snap.data()?.geminiApiKeyEncrypted);
+      callbacks.onTermsAcceptedVersion?.((snap.data()?.termsAcceptedVersion as string | undefined) ?? null);
       callbacks.onDefaultBistroId?.((snap.data()?.defaultBistroId as string | undefined) ?? null);
     },
     handleError
@@ -427,6 +430,16 @@ export function logCategoryOverride(bistroId: string, entry: Omit<CategoryOverri
 export function saveKnownSources(bistroId: string, sources: string[]): void {
   ensureFirestoreOnline();
   setDoc(bistroProfileDoc(bistroId), { knownSources: sources }, { merge: true }).catch(logFirestoreError);
+}
+
+/** Records that the user accepted this version of the Terms, and when. */
+export function saveTermsAcceptance(uid: string, version: string): void {
+  ensureFirestoreOnline();
+  setDoc(
+    userProfileDoc(uid),
+    { termsAcceptedVersion: version, termsAcceptedAt: new Date().toISOString() },
+    { merge: true },
+  ).catch(logFirestoreError);
 }
 
 /** Personal preference: the bistro to open on launch, or null for the last one open. */

@@ -436,6 +436,12 @@ appears on another without manual refresh. The functional guarantees:
   standalone/PWA contexts). There is no password to manage.
 - The Google **name, email, and avatar** identify the user and are the addressing
   mechanism for sharing and bistro invites.
+- **Accepting the Terms:** once the legal pages are published (set in
+  `src/lib/legal.ts`), a signed-in user who hasn't accepted the current Terms
+  version sees a one-time screen with links to the Terms and Privacy Policy and
+  must tick to agree before continuing. The accepted version and time are kept
+  on their personal profile; changing the version asks everyone again. It is off
+  until the version and page links are set, and never holds up an offline launch.
 
 ### 12.1 Bistros
 
