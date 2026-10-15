@@ -20,6 +20,8 @@ export interface AuthedUser {
   email: string;
   name: string;
   avatar?: string;
+  /** When the user last signed in or re-authenticated (seconds since epoch). */
+  authTime?: number;
 }
 
 /** Verifies the `Authorization: Bearer <idToken>` header. null when absent/invalid. */
@@ -36,6 +38,7 @@ export async function getUser(req: VercelRequest): Promise<AuthedUser | null> {
       email: decoded.email_verified ? (decoded.email ?? '').toLowerCase() : '',
       name: (decoded.name as string | undefined) ?? decoded.email ?? 'Someone',
       avatar: decoded.picture,
+      authTime: decoded.auth_time,
     };
   } catch {
     return null;
