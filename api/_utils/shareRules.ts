@@ -6,6 +6,7 @@
 
 import { EMAIL_RE, normalizeEmail, type Rejection } from './bistroRules.js';
 import type { AuthedUser } from './auth.js';
+import { pendingExpiry } from './pendingExpiry.js';
 
 /** Shares one account may send per rolling day. */
 export const MAX_SHARES_PER_DAY = 50;
@@ -43,6 +44,8 @@ export interface ShareDoc {
   toEmail: string;
   recipe: ShareRecipe;
   createdAt: string;
+  /** Deleted by a Firestore TTL policy after this (see pendingExpiry.ts). */
+  expiresAt: Date;
 }
 
 class Invalid extends Error {}
@@ -160,6 +163,7 @@ export function buildShare(
       toEmail,
       recipe: recipe(b.recipe),
       createdAt: now.toISOString(),
+      expiresAt: pendingExpiry(now),
     };
     if (sender.avatar) share.fromAvatar = sender.avatar;
     return { share };

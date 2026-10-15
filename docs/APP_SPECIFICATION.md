@@ -381,6 +381,8 @@ explicit list) belong to **Immediate**, so existing lists carry over unchanged.
   its recipes.
 - Delivery is account-to-account and shows up whenever the recipient next signs in;
   it doesn't require the two users to be online simultaneously.
+- **Expiry:** a share nobody saves or dismisses is deleted after **90 days**, so the
+  recipient's email address isn't kept indefinitely.
 
 ---
 
@@ -444,7 +446,8 @@ appears on another without manual refresh. The functional guarantees:
   menu**; the choice is per device.
 - **Inviting:** any member can invite someone by the email of their Google account.
   No email is sent: the invitee sees a Join / Decline banner the next time they
-  open the app. Pending invites can be revoked.
+  open the app. Pending invites can be revoked, and expire after **90 days**
+  (after which the same person can be invited again).
 - **Joining** adds access; nothing is moved or hidden. The member's own bistro is
   untouched and always one tap away.
 - **Everyone is equal:** any member can rename the bistro, invite, and remove other

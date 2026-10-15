@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { buildShare, checkShareQuota, MAX_SHARES_PER_DAY, safeImage, safeLink } from './shareRules';
+import { pendingExpiry } from './pendingExpiry';
 
 const sender = { uid: 'u1', email: 'cook@example.com', name: 'Cook', avatar: 'https://lh3.example/a.png' };
 const now = new Date('2026-10-02T12:00:00Z');
@@ -32,6 +33,7 @@ describe('buildShare', () => {
         toEmail: 'friend@example.com',
         recipe,
         createdAt: now.toISOString(),
+        expiresAt: pendingExpiry(now),
       },
     });
   });

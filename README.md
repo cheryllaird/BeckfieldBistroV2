@@ -45,7 +45,18 @@ In **Google Cloud Console → APIs & Services → Credentials → your OAuth 2.0
 npx firebase-tools deploy --only firestore:rules --project <your-project-id>
 ```
 
-### 5. Install and run
+### 5. Firestore TTL policies
+
+Shared recipes and bistro invites hold the email address of someone who may never sign in, so they expire after 90 days. Each doc carries an `expiresAt` timestamp, and a Firestore TTL policy deletes it after that time (usually within a day; the API also hides expired ones straight away). The policies are project settings, not code, so create them once per project:
+
+```bash
+gcloud firestore fields ttls update expiresAt --collection-group=sharedRecipes --enable-ttl --project <your-project-id>
+gcloud firestore fields ttls update expiresAt --collection-group=bistroInvites --enable-ttl --project <your-project-id>
+```
+
+Or in **Firebase Console → Firestore → TTL**. Docs created before `expiresAt` was added need it set once, with `node scripts/backfill-pending-expiry.mjs` (a dry run; add `--apply` to write).
+
+### 6. Install and run
 
 ```bash
 npm install
