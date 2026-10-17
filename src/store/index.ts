@@ -4,6 +4,7 @@ import { signOut as firebaseSignOut } from 'firebase/auth';
 import type { User as FirebaseUser } from 'firebase/auth';
 import { auth } from '../lib/firebase';
 import { idbStorage } from '../lib/idbStorage';
+import { clearFirestoreCache, deleteAccountOnServer } from '../lib/account';
 import {
   subscribeToUserData,
   saveRecipe,
@@ -129,6 +130,9 @@ interface Store extends AppState {
   signIn: (firebaseUser: FirebaseUser) => void;
   resubscribe: () => void;
   signOut: () => Promise<void>;
+  // Permanently deletes the account and its data, then clears this device.
+  // Rejects (with nothing deleted) if the confirming sign-in is cancelled.
+  deleteAccount: () => Promise<void>;
   setSplashDone: () => void;
 
   // Source actions
@@ -866,6 +870,15 @@ export const useStore = create<Store>()(
           migration: null,
           removedFromBistro: null,
         });
+      },
+
+      deleteAccount: async () => {
+        await deleteAccountOnServer();
+        // The account is gone; clear this device the same way as signing out,
+        // drop Firestore's offline copy, and reload into the sign-in screen.
+        await get().signOut().catch(() => {});
+        await clearFirestoreCache().catch(() => {});
+        window.location.replace('/');
       },
 
       setSplashDone: () => set({ splashDone: true }),

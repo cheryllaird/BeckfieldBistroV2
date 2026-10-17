@@ -438,6 +438,13 @@ appears on another without manual refresh. The functional guarantees:
   standalone/PWA contexts). There is no password to manage.
 - The Google **name, email, and avatar** identify the user and are the addressing
   mechanism for sharing and bistro invites.
+- **Deleting an account** (Settings → Account) is permanent and needs the user to
+  type DELETE and sign in with Google again; the server refuses a sign-in older
+  than 5 minutes. It deletes the user's own bistro and everything in it (its
+  other members lose access and return to their own), removes them from other
+  bistros (what they added there stays), deletes their API key, everything else
+  under their account, the shares and invites they sent or received, and finally
+  their Google sign-in record. The device's offline copy is then cleared.
 
 ### 12.1 Bistros
 

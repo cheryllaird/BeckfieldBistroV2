@@ -2,6 +2,7 @@ import { useNavigate } from 'react-router-dom';
 import { ArrowLeft } from 'lucide-react';
 import { ApiKeyCard } from './ApiKeyCard';
 import { BistroCard } from './BistroCard';
+import { AccountCard } from './AccountCard';
 
 export function SettingsPage() {
   const navigate = useNavigate();
@@ -21,6 +22,7 @@ export function SettingsPage() {
 
       <BistroCard />
       <ApiKeyCard />
+      <AccountCard />
     </div>
   );
 }
