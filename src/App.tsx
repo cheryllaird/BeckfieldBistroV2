@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Navigate, Route, Routes } from 'react-router-dom';
+import { Navigate, Route, Routes, useLocation } from 'react-router-dom';
 import { onAuthStateChanged, getRedirectResult } from 'firebase/auth';
 import { auth, firebaseConfigured } from './lib/firebase';
 import { startConnectivityManager } from './lib/connectivity';
@@ -8,6 +8,8 @@ import { useStore } from './store';
 import { SplashScreen } from './pages/SplashScreen';
 import { AuthPage } from './pages/AuthPage';
 import { MigrationScreen } from './components/MigrationScreen';
+import { TermsScreen } from './components/TermsScreen';
+import { needsTermsAcceptance } from './lib/legal';
 import { AppLayout } from './components/layout/AppLayout';
 import { LibraryPage } from './pages/Library/index';
 import { RecipeDetailPage } from './pages/RecipeDetail/index';
@@ -16,6 +18,8 @@ import { PlanPage } from './pages/Plan/index';
 import { ShoppingListPage } from './pages/ShoppingList/index';
 import { PantryPage } from './pages/Pantry/index';
 import { SettingsPage } from './pages/Settings/index';
+import { LegalPage } from './pages/Legal/index';
+import { legalPathOf } from './legal/pages';
 
 function FirebaseSetupScreen() {
   return (
@@ -33,7 +37,7 @@ function FirebaseSetupScreen() {
 
 // Separated so hooks are always called in the same order (Rules of Hooks).
 function AuthenticatedApp() {
-  const { splashDone, isAuthenticated, signIn, resubscribe, migration } = useStore();
+  const { splashDone, isAuthenticated, signIn, resubscribe, migration, termsAcceptedVersion } = useStore();
   const [redirectError, setRedirectError] = useState<string | null>(null);
 
   // Single gate: render nothing until Zustand has hydrated from persisted
@@ -105,6 +109,7 @@ function AuthenticatedApp() {
   // Nothing may be written while an older account's library is being copied
   // to its bistro, so the app waits here until the copy has cut over.
   if (migration) return <MigrationScreen />;
+  if (needsTermsAcceptance(termsAcceptedVersion)) return <TermsScreen />;
 
   return (
     <Routes>
@@ -125,6 +130,9 @@ function AuthenticatedApp() {
 }
 
 export default function App() {
+  // The legal pages are public: they render before any sign-in or setup gate.
+  const legalPath = legalPathOf(useLocation().pathname);
+  if (legalPath) return <LegalPage path={legalPath} />;
   if (!firebaseConfigured) return <FirebaseSetupScreen />;
   return <AuthenticatedApp />;
 }

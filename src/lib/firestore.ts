@@ -11,7 +11,7 @@ import {
   waitForPendingWrites,
 } from 'firebase/firestore';
 import { db, auth } from './firebase';
-import type { Recipe, MealEntry, ShoppingItem, PantryItem, SharedRecipe, CategoryOverrideLog, Bistro } from '../types';
+import type { Recipe, MealEntry, ShoppingItem, PantryItem, SharedRecipe, CategoryOverride, CategoryOverrideLog, Bistro } from '../types';
 import type { ShoppingItemPatch } from './shoppingSync';
 
 // ── helpers ──────────────────────────────────────────────────────────────────
@@ -132,6 +132,19 @@ export function flushPendingWrites(): Promise<void> {
   return waitForPendingWrites(db).catch(() => {});
 }
 
+/**
+ * Resolves once every write queued before the call has been acknowledged by
+ * the server — i.e. this device is up to date with it. Never settles while
+ * offline. Deliberately does not wake the network itself: the connectivity
+ * manager already forces a wake on the `online` event, and a second
+ * enableNetwork alongside it is the stream-restart pressure that
+ * ensureFirestoreOnline exists to avoid.
+ */
+export function waitForServerSync(): Promise<void> {
+  if (!db) return Promise.resolve();
+  return waitForPendingWrites(db).catch(() => {});
+}
+
 // ── data root ─────────────────────────────────────────────────────────────────
 // A library lives at bistros/{bistroId}/…, and a user's own bistro id is their
 // uid. Accounts created before bistros existed kept their library at
@@ -150,6 +163,7 @@ const recipesCol = (bistroId: string) => collection(db!, _root, bistroId, 'recip
 const mealEntriesCol = (bistroId: string) => collection(db!, _root, bistroId, 'mealEntries');
 const shoppingItemsCol = (bistroId: string) => collection(db!, _root, bistroId, 'shoppingItems');
 const pantryItemsCol = (bistroId: string) => collection(db!, _root, bistroId, 'pantryItems');
+const categoryOverridesCol = (bistroId: string) => collection(db!, _root, bistroId, 'categoryOverrides');
 /** Shared bistro settings (knownSources). */
 const bistroProfileDoc = (bistroId: string) => doc(db!, _root, bistroId, 'meta', 'profile');
 /** Personal, never shared: holds the encrypted Gemini key. */
@@ -163,8 +177,11 @@ export interface UserDataCallbacks {
   onMealEntries: (entries: MealEntry[]) => void;
   onShoppingItems: (items: ShoppingItem[]) => void;
   onPantryItems: (items: PantryItem[]) => void;
+  onCategoryOverrides: (overrides: CategoryOverride[]) => void;
   onKnownSources: (sources: string[]) => void;
   onHasGeminiApiKey: (hasKey: boolean) => void;
+  /** The Terms version the user last accepted, or null if never. */
+  onTermsAcceptedVersion?: (version: string | null) => void;
   /** The bistro to open on launch (null: whichever was open last). */
   onDefaultBistroId?: (bistroId: string | null) => void;
   onError?: (err: Error) => void;
@@ -246,6 +263,15 @@ export function subscribeToUserData(
     handleError
   );
 
+  const unsubCategoryOverrides = onSnapshot(
+    categoryOverridesCol(bistroId),
+    (snap) => {
+      if (skipIfCacheMiss(snap)) return;
+      callbacks.onCategoryOverrides(snap.docs.map((d) => d.data() as CategoryOverride));
+    },
+    handleError
+  );
+
   const unsubProfile = onSnapshot(
     bistroProfileDoc(bistroId),
     (snap) => {
@@ -260,6 +286,7 @@ export function subscribeToUserData(
     (snap) => {
       if (snap.metadata.fromCache && !snap.exists()) return;
       callbacks.onHasGeminiApiKey(!!snap.data()?.geminiApiKeyEncrypted);
+      callbacks.onTermsAcceptedVersion?.((snap.data()?.termsAcceptedVersion as string | undefined) ?? null);
       callbacks.onDefaultBistroId?.((snap.data()?.defaultBistroId as string | undefined) ?? null);
     },
     handleError
@@ -270,6 +297,7 @@ export function subscribeToUserData(
     unsubMealEntries();
     unsubShoppingItems();
     unsubPantryItems();
+    unsubCategoryOverrides();
     unsubProfile();
     unsubUserProfile();
   };
@@ -372,10 +400,25 @@ export function savePantryItems(bistroId: string, items: PantryItem[]): void {
   batch.commit().catch(logFirestoreError);
 }
 
-// ── category override log ─────────────────────────────────────────────────────
+// ── category overrides ────────────────────────────────────────────────────────
 
 const categoryOverrideLogsCol = (bistroId: string) =>
   collection(db!, _root, bistroId, 'categoryOverrideLogs');
+
+// Ingredient keys are free text ("rice noodle", "salt, flaky"); encode them so
+// a "/" can't split the path and "__x__" can't hit Firestore's reserved ids.
+const categoryOverrideDoc = (bistroId: string, ingredientKey: string) =>
+  doc(categoryOverridesCol(bistroId), `k_${encodeURIComponent(ingredientKey)}`);
+
+export function saveCategoryOverride(bistroId: string, override: CategoryOverride): void {
+  ensureFirestoreOnline();
+  setDoc(categoryOverrideDoc(bistroId, override.ingredientKey), override).catch(logFirestoreError);
+}
+
+export function deleteCategoryOverride(bistroId: string, ingredientKey: string): void {
+  ensureFirestoreOnline();
+  deleteDoc(categoryOverrideDoc(bistroId, ingredientKey)).catch(logFirestoreError);
+}
 
 export function logCategoryOverride(bistroId: string, entry: Omit<CategoryOverrideLog, 'id'>): void {
   ensureFirestoreOnline();
@@ -387,6 +430,16 @@ export function logCategoryOverride(bistroId: string, entry: Omit<CategoryOverri
 export function saveKnownSources(bistroId: string, sources: string[]): void {
   ensureFirestoreOnline();
   setDoc(bistroProfileDoc(bistroId), { knownSources: sources }, { merge: true }).catch(logFirestoreError);
+}
+
+/** Records that the user accepted this version of the Terms, and when. */
+export function saveTermsAcceptance(uid: string, version: string): void {
+  ensureFirestoreOnline();
+  setDoc(
+    userProfileDoc(uid),
+    { termsAcceptedVersion: version, termsAcceptedAt: new Date().toISOString() },
+    { merge: true },
+  ).catch(logFirestoreError);
 }
 
 /** Personal preference: the bistro to open on launch, or null for the last one open. */

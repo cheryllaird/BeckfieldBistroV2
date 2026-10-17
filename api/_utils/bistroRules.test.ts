@@ -98,13 +98,20 @@ describe('checkRemove', () => {
 });
 
 describe('checkAccept', () => {
+  const now = new Date('2026-10-15T12:00:00Z');
+  const invite = { toEmail: 'cat@example.com', createdAt: '2026-10-01T00:00:00Z' };
+
   it('only the addressee can accept or decline', () => {
-    expect(checkAccept({ toEmail: 'cat@example.com' }, 'cat@example.com')).toBeNull();
-    expect(checkAccept({ toEmail: 'cat@example.com' }, 'eve@example.com')?.status).toBe(403);
-    expect(checkAccept({ toEmail: 'cat@example.com' }, '')?.status).toBe(403);
+    expect(checkAccept(invite, 'cat@example.com', now)).toBeNull();
+    expect(checkAccept(invite, 'eve@example.com', now)?.status).toBe(403);
+    expect(checkAccept(invite, '', now)?.status).toBe(403);
   });
 
   it('reports a revoked or already-used invite as gone', () => {
-    expect(checkAccept(null, 'cat@example.com')?.status).toBe(404);
+    expect(checkAccept(null, 'cat@example.com', now)?.status).toBe(404);
+  });
+
+  it('refuses an expired invite', () => {
+    expect(checkAccept({ ...invite, createdAt: '2026-06-01T00:00:00Z' }, 'cat@example.com', now)?.status).toBe(410);
   });
 });

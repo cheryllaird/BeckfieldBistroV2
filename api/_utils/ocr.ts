@@ -1,6 +1,5 @@
 // OCR for recipe photos. Transcription is deterministic (no generative model),
-// so it can never trip Gemini's RECITATION filter and the extracted text is
-// verbatim-faithful to the photo.
+// so the extracted text is verbatim-faithful to the photo.
 //
 // The engine is behind a small interface so a cloud OCR (e.g. Google Cloud
 // Vision) can replace Tesseract later by adding a class here and switching

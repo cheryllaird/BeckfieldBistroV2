@@ -4,6 +4,8 @@ import { signOut as firebaseSignOut } from 'firebase/auth';
 import type { User as FirebaseUser } from 'firebase/auth';
 import { auth } from '../lib/firebase';
 import { idbStorage } from '../lib/idbStorage';
+import { LEGAL } from '../lib/legal';
+import { clearFirestoreCache, deleteAccountOnServer } from '../lib/account';
 import {
   subscribeToUserData,
   saveRecipe,
@@ -17,11 +19,14 @@ import {
   deletePantryItemDoc,
   saveKnownSources,
   saveGeminiApiKey,
+  saveTermsAcceptance,
   sendRecipeShare,
   subscribeToIncomingShares,
   acceptShare as firestoreAcceptShare,
   dismissShare as firestoreDismissShare,
   logCategoryOverride as firestoreLogCategoryOverride,
+  saveCategoryOverride,
+  deleteCategoryOverride,
   flushPendingWrites,
   setDataRoot,
   subscribeToBistroAccess,
@@ -54,6 +59,7 @@ import {
   nextClock,
   reconcileShoppingSnapshot,
 } from '../lib/shoppingSync';
+import { defaultCategory } from '../lib/ingredients';
 import type {
   Recipe,
   MealEntry,
@@ -62,7 +68,7 @@ import type {
   AppState,
   SharedRecipe,
   BistroInvite,
-  CategoryOverrideLog,
+  CategoryChange,
   MigrationState,
 } from '../types';
 
@@ -126,6 +132,9 @@ interface Store extends AppState {
   signIn: (firebaseUser: FirebaseUser) => void;
   resubscribe: () => void;
   signOut: () => Promise<void>;
+  // Permanently deletes the account and its data, then clears this device.
+  // Rejects (with nothing deleted) if the confirming sign-in is cancelled.
+  deleteAccount: () => Promise<void>;
   setSplashDone: () => void;
 
   // Source actions
@@ -133,6 +142,8 @@ interface Store extends AppState {
 
   // Settings actions
   setGeminiApiKey: (key: string) => Promise<void>;
+  // Records acceptance of the current Terms (lib/legal.ts).
+  acceptTerms: () => void;
 
   // Sharing actions
   sendRecipe: (recipe: Recipe, toEmail: string) => Promise<void>;
@@ -141,8 +152,12 @@ interface Store extends AppState {
   acceptAllShares: () => Promise<void>;
   dismissAllShares: () => Promise<void>;
 
-  // Shopping list telemetry
-  logCategoryOverride: (entry: Omit<CategoryOverrideLog, 'id'>) => void;
+  // Category actions
+  /**
+   * Files an ingredient under an aisle from now on, wherever it's added, and
+   * logs the change. Choosing the built-in aisle again forgets the override.
+   */
+  rememberCategory: (change: CategoryChange) => void;
 
   // Bistro actions
   switchBistro: (bistroId: string) => Promise<void>;
@@ -373,12 +388,18 @@ function attachDataListeners(bistroId: string, ownUid: string, set: SetState, ge
         if (toResend.length) toResend.forEach((item) => savePantryItem(bistroId, item));
       });
     },
+    onCategoryOverrides: (overrides) => {
+      applyCollectionSnapshot('categoryOverrides', overrides, Object.keys(get().categoryOverrides).length, () =>
+        set({ categoryOverrides: Object.fromEntries(overrides.map((o) => [o.ingredientKey, o.category])) }),
+      );
+    },
     onKnownSources: (knownSources) => {
       applyCollectionSnapshot('knownSources', knownSources, get().knownSources.length, () =>
         set({ knownSources }),
       );
     },
     onHasGeminiApiKey: (hasGeminiApiKey) => set({ hasGeminiApiKey }),
+    onTermsAcceptedVersion: (termsAcceptedVersion) => set({ termsAcceptedVersion }),
     onDefaultBistroId: (defaultBistroId) => {
       if (defaultBistroId !== get().defaultBistroId) set({ defaultBistroId });
       // A fresh sign-in only learns the default from here, so apply it now.
@@ -622,8 +643,10 @@ export const useStore = create<Store>()(
       shoppingItems: [],
       shoppingTombstones: {},
       pantryItems: [],
+      categoryOverrides: {},
       knownSources: [],
       hasGeminiApiKey: false,
+      termsAcceptedVersion: undefined,
       isAuthenticated: false,
       user: null,
       splashDone: false,
@@ -788,6 +811,7 @@ export const useStore = create<Store>()(
           ...(existingUid && existingUid !== firebaseUser.uid && {
             ...EMPTY_SCOPE,
             hasGeminiApiKey: false,
+            termsAcceptedVersion: undefined,
             incomingShares: [],
             activeBistroId: null,
             defaultBistroId: null,
@@ -844,6 +868,7 @@ export const useStore = create<Store>()(
           user: null,
           ...EMPTY_SCOPE,
           hasGeminiApiKey: false,
+          termsAcceptedVersion: undefined,
           incomingShares: [],
           activeBistroId: null,
           defaultBistroId: null,
@@ -853,6 +878,15 @@ export const useStore = create<Store>()(
           migration: null,
           removedFromBistro: null,
         });
+      },
+
+      deleteAccount: async () => {
+        await deleteAccountOnServer();
+        // The account is gone; clear this device the same way as signing out,
+        // drop Firestore's offline copy, and reload into the sign-in screen.
+        await get().signOut().catch(() => {});
+        await clearFirestoreCache().catch(() => {});
+        window.location.replace('/');
       },
 
       setSplashDone: () => set({ splashDone: true }),
@@ -865,6 +899,14 @@ export const useStore = create<Store>()(
         }));
         const scope = scopeOf(get());
         if (scope) saveKnownSources(scope, get().knownSources);
+      },
+
+      acceptTerms: () => {
+        const user = get().user;
+        if (!user) return;
+        // Applied locally first and queued for the server, so it works offline.
+        set({ termsAcceptedVersion: LEGAL.termsVersion });
+        saveTermsAcceptance(user.uid, LEGAL.termsVersion);
       },
 
       setGeminiApiKey: async (key) => {
@@ -932,9 +974,27 @@ export const useStore = create<Store>()(
         set({ incomingShares: [] });
       },
 
-      logCategoryOverride: (entry) => {
+      rememberCategory: ({ itemName, ingredientKey, fromCategory, toCategory, source }) => {
+        if (!ingredientKey || fromCategory === toCategory) return;
+        const overrides = { ...get().categoryOverrides };
+        // Back to where the keyword tables would put it: nothing to remember.
+        const isDefault = toCategory === defaultCategory(itemName);
+        if (isDefault) delete overrides[ingredientKey];
+        else overrides[ingredientKey] = toCategory;
+        set({ categoryOverrides: overrides });
+
         const scope = scopeOf(get());
-        if (scope) firestoreLogCategoryOverride(scope, entry);
+        if (!scope) return;
+        if (isDefault) deleteCategoryOverride(scope, ingredientKey);
+        else saveCategoryOverride(scope, { ingredientKey, category: toCategory, updatedAt: Date.now() });
+        firestoreLogCategoryOverride(scope, {
+          itemName,
+          ingredientKey,
+          source,
+          fromCategory,
+          toCategory,
+          timestamp: new Date().toISOString(),
+        });
       },
 
       // ── bistros ───────────────────────────────────────────────────────────
@@ -1036,8 +1096,11 @@ export const useStore = create<Store>()(
         // tombstone must outlive the session to keep beating stale copies.
         shoppingTombstones: s.shoppingTombstones,
         pantryItems: s.pantryItems,
+        categoryOverrides: s.categoryOverrides,
         knownSources: s.knownSources,
         hasGeminiApiKey: s.hasGeminiApiKey,
+        // So an offline relaunch doesn't wait on the profile to know it's accepted.
+        termsAcceptedVersion: s.termsAcceptedVersion,
         // Which bistro this device is viewing, and whether the account's data
         // has moved to bistros/{uid}/…, so the offline-first boot attaches to
         // the right paths before the network has answered.

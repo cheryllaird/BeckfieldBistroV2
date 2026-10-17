@@ -87,7 +87,7 @@ Given a recipe web address, the app fetches the page and tries, in order:
 
 1. **The page's own structured recipe data** (schema.org/Recipe JSON-LD). This is
    the site's machine-readable recipe, so it is exact to source, instant, free,
-   and immune to AI copyright blocks. Most recipe sites publish it. Ingredients,
+   and needs no AI. Most recipe sites publish it. Ingredients,
    steps, yield/servings, and prep/total times are parsed directly (ISO-8601
    durations converted to friendly text).
 2. **AI structuring of the page text** — if there is no usable structured data,
@@ -106,14 +106,15 @@ tries, in order:
 
 1. **Direct AI vision** — the model reads the image and returns structured recipe
    data. This is the most accurate transcriber when it isn't blocked.
-2. **OCR + AI structuring** — if vision fails or is blocked, the image is
-   transcribed **deterministically** with on-device-style OCR (including image
-   preprocessing and multi-column reflow), and only the resulting *text* is handed
-   to the model to structure. Restructuring handed-over text is faithful and far
-   less likely to trip AI copyright filters than transcribing a copyrighted page.
+2. **OCR + AI structuring** — if vision fails for an ordinary reason (an error or
+   unreadable output), the image is transcribed **deterministically** with
+   on-device-style OCR (including image preprocessing and multi-column reflow),
+   and only the resulting *text* is handed to the model to structure.
 3. **Deterministic local parsing** — if AI is unavailable (e.g. the key is out of
-   quota) but OCR produced legible text, a built-in parser structures that text
-   into a recipe with no AI at all.
+   quota), or the model declined the recipe under its copyright (recitation)
+   filter, a built-in parser structures the OCR text into a recipe with no AI at
+   all. A copyright block is respected: the same content is never sent back to
+   the model in another form.
 4. **A clear failure** — only if the photo can't be read by either vision or OCR,
    with guidance to take a clearer, well-lit photo of just the ingredients and
    steps, or enter it manually.
@@ -277,6 +278,16 @@ where the most specific keyword match wins (e.g. "cherry tomato" → Vegetables 
 the specific match, not a generic one). Categories drive grouping and the
 auto-sort order.
 
+**Remembered choices.** When anyone in the bistro moves an item to another
+category — on the shopping list or in the store cupboard — that choice is
+remembered for the ingredient (keyed by its normalised name, so "200 g rice
+noodles" and "Rice noodle, soaked" share it) and wins over keyword matching
+wherever the ingredient is added again: a generated list, a meal added from the
+plan, a typed item, a cupboard item. On the list, every line of that ingredient
+moves together. Moving it back to the keyword category forgets the choice.
+Stored per bistro in `categoryOverrides` (one doc per ingredient); every change
+is also appended to the `categoryOverrideLogs` audit trail.
+
 ### 6.5 Source tracking
 Generated/merged items remember **which planned meals contributed them** and in
 what scaled quantity, so a shopping item can show a "used in these meals"
@@ -325,8 +336,8 @@ explicit list) belong to **Immediate**, so existing lists carry over unchanged.
 ### 7.3 Shopping & curating
 - **Check-off** with running progress (checked/total); checked items collect in an
   "In basket" group.
-- **Curate:** rename items, recategorise them (a manual recategorisation is
-  remembered as a signal to improve future auto-categorisation), reorder them
+- **Curate:** rename items, recategorise them (remembered for that ingredient
+  from then on — see §6.4), reorder them
   (including one-tap **auto-sort by category**), and remove them.
 - **Undo:** list-changing actions (check, remove, edit, sort, reorder) are
   revertible.
@@ -370,6 +381,8 @@ explicit list) belong to **Immediate**, so existing lists carry over unchanged.
   its recipes.
 - Delivery is account-to-account and shows up whenever the recipient next signs in;
   it doesn't require the two users to be online simultaneously.
+- **Expiry:** a share nobody saves or dismisses is deleted after **90 days**, so the
+  recipient's email address isn't kept indefinitely.
 
 ---
 
@@ -425,6 +438,22 @@ appears on another without manual refresh. The functional guarantees:
   standalone/PWA contexts). There is no password to manage.
 - The Google **name, email, and avatar** identify the user and are the addressing
   mechanism for sharing and bistro invites.
+- **Deleting an account** (Settings → Account) is permanent and needs the user to
+  type DELETE and sign in with Google again; the server refuses a sign-in older
+  than 5 minutes. It deletes the user's own bistro and everything in it (its
+  other members lose access and return to their own), removes them from other
+  bistros (what they added there stays), deletes their API key, everything else
+  under their account, the shares and invites they sent or received, and finally
+  their Google sign-in record. The device's offline copy is then cleared.
+- **Legal pages:** the Terms of Service, Privacy Policy and Copyright and
+  Takedown Policy are part of the app at `/terms`, `/privacy` and `/copyright`
+  (text in `src/legal/*.md`). They can be read without signing in, and are
+  linked from the sign-in screen, the Terms screen and Settings.
+- **Accepting the Terms:** a signed-in user who hasn't accepted the current Terms
+  version (`termsVersion` in `src/lib/legal.ts`) sees a one-time screen with
+  links to the Terms and Privacy Policy and must tick to agree before
+  continuing. The accepted version and time are kept on their personal profile;
+  changing the version asks everyone again. It never holds up an offline launch.
 
 ### 12.1 Bistros
 
@@ -433,7 +462,8 @@ appears on another without manual refresh. The functional guarantees:
   menu**; the choice is per device.
 - **Inviting:** any member can invite someone by the email of their Google account.
   No email is sent: the invitee sees a Join / Decline banner the next time they
-  open the app. Pending invites can be revoked.
+  open the app. Pending invites can be revoked, and expire after **90 days**
+  (after which the same person can be invited again).
 - **Joining** adds access; nothing is moved or hidden. The member's own bistro is
   untouched and always one tap away.
 - **Everyone is equal:** any member can rename the bistro, invite, and remove other

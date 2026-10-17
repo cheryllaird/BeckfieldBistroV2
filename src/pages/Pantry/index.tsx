@@ -4,7 +4,8 @@ import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, Plus, Trash2, ChevronDown, Archive, GripVertical, ArrowUpDown } from 'lucide-react';
 import { useStore } from '../../store';
 import { Button } from '../../components/ui/Button';
-import { categorize, generateId, normalizeIngredientName } from '../../lib/utils';
+import { generateId } from '../../lib/utils';
+import { categorize, categoryKey, normalizeIngredientName } from '../../lib/ingredients';
 import type { PantryItem, ShoppingCategory } from '../../types';
 
 const CATEGORY_ORDER: ShoppingCategory[] = [
@@ -22,7 +23,15 @@ const CATEGORY_ORDER: ShoppingCategory[] = [
 
 export function PantryPage() {
   const navigate = useNavigate();
-  const { pantryItems, addPantryItem, updatePantryItem, removePantryItem, reorderPantryItems } = useStore();
+  const {
+    pantryItems,
+    categoryOverrides,
+    addPantryItem,
+    updatePantryItem,
+    removePantryItem,
+    reorderPantryItems,
+    rememberCategory,
+  } = useStore();
   const [input, setInput] = useState('');
   const [draggingItemId, setDraggingItemId] = useState<string | null>(null);
   const [dropTargetIndex, setDropTargetIndex] = useState<number | null>(null);
@@ -40,7 +49,7 @@ export function PantryPage() {
       id: generateId(),
       name,
       normalizedName: normalizeIngredientName(name),
-      category: categorize(name),
+      category: categorize(name, categoryOverrides),
       createdAt: new Date().toISOString(),
     });
     setInput('');
@@ -50,6 +59,13 @@ export function PantryPage() {
     const item = pantryItems.find((p) => p.id === id);
     if (!item || item.category === category) return;
     updatePantryItem({ ...item, category });
+    rememberCategory({
+      itemName: item.name,
+      ingredientKey: categoryKey(item.name),
+      fromCategory: item.category,
+      toCategory: category,
+      source: 'pantry',
+    });
   };
 
   const handleAutoSort = () => {

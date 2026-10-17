@@ -32,6 +32,11 @@ describe('parseIngredientLine', () => {
     });
   });
 
+  it('keeps the descriptive notes in the name, as the recipe shows them', () => {
+    expect(parseIngredientLine('3 spring onions, thin strips')).toMatchObject({ name: 'spring onions, thin strips', quantity: 3 });
+    expect(parseIngredientLine('1 onion, finely chopped')).toMatchObject({ name: 'onion, finely chopped', quantity: 1 });
+  });
+
   it('strips a literal "of" without eating the start of the name', () => {
     expect(parseIngredientLine('2 cups of flour')).toMatchObject({ name: 'flour', unit: 'cups', quantity: 2 });
     expect(parseIngredientLine('2 tbsp olive oil')).toMatchObject({ name: 'olive oil', unit: 'tbsp' });

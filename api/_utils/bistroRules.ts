@@ -2,6 +2,8 @@
 // unit-tested. Every guard returns null when the action is allowed, or the
 // HTTP status + message to reject it with.
 
+import { isPendingExpired } from './pendingExpiry.js';
+
 export interface BistroDoc {
   name: string;
   ownerUid: string;
@@ -89,10 +91,14 @@ export function checkRemove(
 }
 
 export function checkAccept(
-  invite: { toEmail: string } | null,
+  invite: { toEmail: string; createdAt?: string } | null,
   callerEmail: string,
+  now: Date,
 ): Rejection | null {
   if (!invite) return { status: 404, error: 'This invite is no longer available.' };
+  if (isPendingExpired(invite.createdAt, now)) {
+    return { status: 410, error: 'This invite has expired. Ask them to invite you again.' };
+  }
   if (!callerEmail || invite.toEmail !== callerEmail) {
     return { status: 403, error: 'This invite was sent to a different account.' };
   }

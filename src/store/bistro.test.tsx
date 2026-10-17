@@ -91,13 +91,37 @@ describe('scope', () => {
     expect(firestore.saveRecipe).toHaveBeenCalledWith('ann', expect.objectContaining({ userId: 'me' }));
 
     useStore.getState().toggleShoppingItem('nope');
-    useStore.getState().logCategoryOverride({
-      itemName: 'milk',
-      fromCategory: 'Other',
-      toCategory: 'Dairy & Eggs',
-      timestamp: '2026-01-01T00:00:00Z',
+    useStore.getState().rememberCategory({
+      itemName: 'rice noodles',
+      ingredientKey: 'rice noodle',
+      fromCategory: 'Pantry',
+      toCategory: 'Other',
+      source: 'shopping-list',
     });
-    expect(firestore.logCategoryOverride).toHaveBeenCalledWith('ann', expect.objectContaining({ itemName: 'milk' }));
+    expect(firestore.saveCategoryOverride).toHaveBeenCalledWith('ann', expect.objectContaining({ ingredientKey: 'rice noodle', category: 'Other' }));
+    expect(firestore.logCategoryOverride).toHaveBeenCalledWith('ann', expect.objectContaining({ itemName: 'rice noodles', ingredientKey: 'rice noodle' }));
+  });
+
+  it('remembers a category choice and forgets it when set back to the default', () => {
+    launch();
+    const change = { itemName: 'rice noodles', ingredientKey: 'rice noodle', source: 'shopping-list' as const };
+
+    useStore.getState().rememberCategory({ ...change, fromCategory: 'Pantry', toCategory: 'Other' });
+    expect(useStore.getState().categoryOverrides).toEqual({ 'rice noodle': 'Other' });
+
+    useStore.getState().rememberCategory({ ...change, fromCategory: 'Other', toCategory: 'Pantry' });
+    expect(useStore.getState().categoryOverrides).toEqual({});
+    expect(firestore.deleteCategoryOverride).toHaveBeenCalledWith('me', 'rice noodle');
+    expect(firestore.logCategoryOverride).toHaveBeenCalledTimes(2);
+  });
+
+  it('loads category overrides from the server', () => {
+    launch();
+    const callbacks = vi.mocked(firestore.subscribeToUserData).mock.calls.at(-1)![2] as unknown as {
+      onCategoryOverrides: (o: { ingredientKey: string; category: string; updatedAt: number }[]) => void;
+    };
+    callbacks.onCategoryOverrides([{ ingredientKey: 'tofu', category: 'Dairy & Eggs', updatedAt: 1 }]);
+    expect(useStore.getState().categoryOverrides).toEqual({ tofu: 'Dairy & Eggs' });
   });
 
   it('saves accepted recipe shares into the active bistro', async () => {

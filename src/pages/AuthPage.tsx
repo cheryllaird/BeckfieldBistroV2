@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { signInWithPopup, signInWithRedirect } from 'firebase/auth';
 import { auth, googleProvider } from '../lib/firebase';
 import { authErrorMessage } from '../lib/authErrors';
+import { LEGAL } from '../lib/legal';
 
 /** The Firebase error code carried by a thrown sign-in error, if any. */
 function authErrorCode(err: unknown): string {
@@ -78,10 +79,21 @@ export function AuthPage({ initialError }: { initialError?: string | null }) {
         </div>
 
         <p className="text-xs text-white/30 text-center leading-relaxed">
-          By continuing, you agree to our Terms of Service<br />and Privacy Policy.
+          By continuing, you agree to our <LegalLink href={LEGAL.termsUrl}>Terms of Service</LegalLink>
+          <br />and <LegalLink href={LEGAL.privacyUrl}>Privacy Policy</LegalLink>.
         </p>
       </div>
     </div>
+  );
+}
+
+/** A link once the page is published (lib/legal.ts); plain text until then. */
+function LegalLink({ href, children }: { href: string; children: string }) {
+  if (!href) return <>{children}</>;
+  return (
+    <a href={href} target="_blank" rel="noreferrer" className="underline hover:text-white/60">
+      {children}
+    </a>
   );
 }
 

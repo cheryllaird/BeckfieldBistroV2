@@ -13,9 +13,9 @@ function ScrollToTop() {
 }
 
 function NetworkBanner() {
-  const { isOnline, justReconnected } = useOnlineStatus();
+  const { isOnline, isSyncing } = useOnlineStatus();
 
-  if (isOnline && !justReconnected) return null;
+  if (isOnline && !isSyncing) return null;
 
   if (!isOnline) {
     return (

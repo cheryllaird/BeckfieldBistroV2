@@ -10,6 +10,9 @@ const { version } = require('./package.json')
 export default defineConfig({
   define: {
     __APP_VERSION__: JSON.stringify(version),
+    // Short commit of the build, so the exact build running on a device can be
+    // told apart even when the version number hasn't changed. Vercel sets this.
+    __APP_BUILD__: JSON.stringify(process.env.VERCEL_GIT_COMMIT_SHA?.slice(0, 7) ?? 'dev'),
   },
   server: {
     port: process.env.PORT ? Number(process.env.PORT) : 5173,
