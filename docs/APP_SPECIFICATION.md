@@ -471,6 +471,8 @@ appears on another without manual refresh. The functional guarantees:
   own bistro. Anyone else can leave at any time.
 - **Being removed** while viewing a bistro returns the user to their own, with a
   notice; their local copy of the lost bistro is deleted.
+  Removal is decided by the server's list of the user's bistros only; a refused or
+  failed connection to the bistro alone never shows the notice.
 - Membership changes are made server-side only, and every data read/write is
   authorised against the bistro's member list.
 - **Accounts created before bistros existed** have their library copied into their

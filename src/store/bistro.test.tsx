@@ -49,6 +49,12 @@ const bistroListeners = new Map<string, { cb: (b: Bistro | null) => void; onErro
 
 const flush = () => new Promise((r) => setTimeout(r, 0));
 
+const denied = () => Object.assign(new Error('denied'), { code: 'permission-denied' });
+
+/** Callbacks of the most recently attached data listeners. */
+const dataCallbacks = () =>
+  vi.mocked(firestore.subscribeToUserData).mock.calls.at(-1)![2] as unknown as { onError: (e: Error) => void };
+
 /** Signs in with persisted state and attaches listeners, as a relaunch does. */
 function launch(state: Partial<ReturnType<typeof useStore.getState>> = {}) {
   useStore.setState({ user: ME, isAuthenticated: true, bistroMigrated: true, ...state });
@@ -243,13 +249,68 @@ describe('bistro access', () => {
     expect(await idbStorage.getItem('bistro-cache:me:ann')).toBeNull();
   });
 
-  it('treats permission-denied on the bistro doc as removal', async () => {
+  it('treats permission-denied on the bistro doc as removal once the access list agrees', async () => {
     launch({ activeBistroId: 'ann' });
     emitAccess({ bistroIds: ['me', 'ann'], migrated: true });
+    bistroListeners.get('ann')!.cb(annsBistro);
 
-    bistroListeners.get('ann')!.onError(Object.assign(new Error('denied'), { code: 'permission-denied' }));
+    bistroListeners.get('ann')!.onError(denied());
+    await flush();
+    expect(useStore.getState().activeBistroId).toBe('ann');
+
+    emitAccess({ bistroIds: ['me'], migrated: true });
     await flush();
     expect(useStore.getState().activeBistroId).toBeNull();
+    expect(useStore.getState().removedFromBistro).toBe("Ann's Bistro");
+  });
+
+  it('removes straight away when the server has already dropped the bistro', async () => {
+    launch({ activeBistroId: 'ann' });
+    emitAccess({ bistroIds: ['me', 'ann'], migrated: true });
+    // The access update lands just before the doc listener is refused.
+    const annListener = bistroListeners.get('ann')!;
+    emitAccess({ bistroIds: ['me'], migrated: true });
+    annListener.onError(denied());
+    await flush();
+    expect(useStore.getState().activeBistroId).toBeNull();
+  });
+
+  // Regression: a launch listener refused before sign-in had finished (or an
+  // SDK crash) showed "you're no longer a member" and cleared the default.
+  it("doesn't report removal when the server still lists the bistro", async () => {
+    launch({ activeBistroId: 'ann', defaultBistroId: 'ann' });
+    emitAccess({ bistroIds: ['me', 'ann'], migrated: true, fromCache: true });
+    await flush();
+    bistroListeners.get('ann')!.onError(denied());
+    dataCallbacks().onError(denied());
+    await flush();
+
+    vi.mocked(firestore.subscribeToUserData).mockClear();
+    emitAccess({ bistroIds: ['me', 'ann'], migrated: true });
+    await flush();
+
+    const s = useStore.getState();
+    expect(s.activeBistroId).toBe('ann');
+    expect(s.defaultBistroId).toBe('ann');
+    expect(s.removedFromBistro).toBeNull();
+    expect(firestore.saveDefaultBistro).not.toHaveBeenCalled();
+    // Listens again to what was refused.
+    expect(bistroListeners.has('ann')).toBe(true);
+    expect(firestore.subscribeToUserData).toHaveBeenCalledWith('ann', 'me', expect.anything());
+  });
+
+  it('ignores errors on the bistro doc other than permission-denied', async () => {
+    launch({ activeBistroId: 'ann' });
+    emitAccess({ bistroIds: ['me', 'ann'], migrated: true });
+    bistroListeners.get('ann')!.cb(annsBistro);
+
+    bistroListeners.get('ann')!.onError(new Error('INTERNAL ASSERTION FAILED: Unexpected state'));
+    await flush();
+
+    const s = useStore.getState();
+    expect(s.activeBistroId).toBe('ann');
+    expect(s.bistros.ann).toBeDefined();
+    expect(s.removedFromBistro).toBeNull();
   });
 
   it('leaving switches home without a "removed" notice', async () => {
