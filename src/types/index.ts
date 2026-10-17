@@ -193,6 +193,9 @@ export interface AppState {
   categoryOverrides: Record<string, ShoppingCategory>;
   knownSources: string[];
   hasGeminiApiKey: boolean;
+  // The Terms version this user last accepted (lib/legal.ts). undefined until
+  // their profile has loaded; null when they've never accepted.
+  termsAcceptedVersion: string | null | undefined;
   isAuthenticated: boolean;
   user: { uid: string; name: string; email: string; avatar?: string } | null;
   splashDone: boolean;

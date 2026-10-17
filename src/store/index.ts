@@ -4,6 +4,7 @@ import { signOut as firebaseSignOut } from 'firebase/auth';
 import type { User as FirebaseUser } from 'firebase/auth';
 import { auth } from '../lib/firebase';
 import { idbStorage } from '../lib/idbStorage';
+import { LEGAL } from '../lib/legal';
 import { clearFirestoreCache, deleteAccountOnServer } from '../lib/account';
 import {
   subscribeToUserData,
@@ -18,6 +19,7 @@ import {
   deletePantryItemDoc,
   saveKnownSources,
   saveGeminiApiKey,
+  saveTermsAcceptance,
   sendRecipeShare,
   subscribeToIncomingShares,
   acceptShare as firestoreAcceptShare,
@@ -140,6 +142,8 @@ interface Store extends AppState {
 
   // Settings actions
   setGeminiApiKey: (key: string) => Promise<void>;
+  // Records acceptance of the current Terms (lib/legal.ts).
+  acceptTerms: () => void;
 
   // Sharing actions
   sendRecipe: (recipe: Recipe, toEmail: string) => Promise<void>;
@@ -395,6 +399,7 @@ function attachDataListeners(bistroId: string, ownUid: string, set: SetState, ge
       );
     },
     onHasGeminiApiKey: (hasGeminiApiKey) => set({ hasGeminiApiKey }),
+    onTermsAcceptedVersion: (termsAcceptedVersion) => set({ termsAcceptedVersion }),
     onDefaultBistroId: (defaultBistroId) => {
       if (defaultBistroId !== get().defaultBistroId) set({ defaultBistroId });
       // A fresh sign-in only learns the default from here, so apply it now.
@@ -641,6 +646,7 @@ export const useStore = create<Store>()(
       categoryOverrides: {},
       knownSources: [],
       hasGeminiApiKey: false,
+      termsAcceptedVersion: undefined,
       isAuthenticated: false,
       user: null,
       splashDone: false,
@@ -805,6 +811,7 @@ export const useStore = create<Store>()(
           ...(existingUid && existingUid !== firebaseUser.uid && {
             ...EMPTY_SCOPE,
             hasGeminiApiKey: false,
+            termsAcceptedVersion: undefined,
             incomingShares: [],
             activeBistroId: null,
             defaultBistroId: null,
@@ -861,6 +868,7 @@ export const useStore = create<Store>()(
           user: null,
           ...EMPTY_SCOPE,
           hasGeminiApiKey: false,
+          termsAcceptedVersion: undefined,
           incomingShares: [],
           activeBistroId: null,
           defaultBistroId: null,
@@ -891,6 +899,14 @@ export const useStore = create<Store>()(
         }));
         const scope = scopeOf(get());
         if (scope) saveKnownSources(scope, get().knownSources);
+      },
+
+      acceptTerms: () => {
+        const user = get().user;
+        if (!user) return;
+        // Applied locally first and queued for the server, so it works offline.
+        set({ termsAcceptedVersion: LEGAL.termsVersion });
+        saveTermsAcceptance(user.uid, LEGAL.termsVersion);
       },
 
       setGeminiApiKey: async (key) => {
@@ -1083,6 +1099,8 @@ export const useStore = create<Store>()(
         categoryOverrides: s.categoryOverrides,
         knownSources: s.knownSources,
         hasGeminiApiKey: s.hasGeminiApiKey,
+        // So an offline relaunch doesn't wait on the profile to know it's accepted.
+        termsAcceptedVersion: s.termsAcceptedVersion,
         // Which bistro this device is viewing, and whether the account's data
         // has moved to bistros/{uid}/…, so the offline-first boot attaches to
         // the right paths before the network has answered.

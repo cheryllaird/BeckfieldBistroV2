@@ -445,6 +445,12 @@ appears on another without manual refresh. The functional guarantees:
   bistros (what they added there stays), deletes their API key, everything else
   under their account, the shares and invites they sent or received, and finally
   their Google sign-in record. The device's offline copy is then cleared.
+- **Accepting the Terms:** once the legal pages are published (set in
+  `src/lib/legal.ts`), a signed-in user who hasn't accepted the current Terms
+  version sees a one-time screen with links to the Terms and Privacy Policy and
+  must tick to agree before continuing. The accepted version and time are kept
+  on their personal profile; changing the version asks everyone again. It is off
+  until the version and page links are set, and never holds up an offline launch.
 
 ### 12.1 Bistros
 

@@ -17,6 +17,7 @@ export const deletePantryItemDoc = vi.fn();
 export const saveKnownSources = vi.fn();
 export const saveDefaultBistro = vi.fn();
 export const saveGeminiApiKey = vi.fn(async () => {});
+export const saveTermsAcceptance = vi.fn();
 export const sendRecipeShare = vi.fn(async () => {});
 export const acceptShare = vi.fn(async () => {});
 export const dismissShare = vi.fn(async () => {});
