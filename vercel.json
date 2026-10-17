@@ -32,6 +32,9 @@
     },
     "api/migrate-bistro.ts": {
       "maxDuration": 60
+    },
+    "api/delete-account.ts": {
+      "maxDuration": 60
     }
   }
 }
