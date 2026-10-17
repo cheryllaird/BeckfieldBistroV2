@@ -41,3 +41,4 @@ Not needed for: bug fixes, UI tweaks, refactors that keep behaviour and structur
 | [0011](0011-account-deletion.md) | Users can delete their account and all their data | Accepted |
 | [0012](0012-expire-pending-shares-and-invites.md) | Expire unaccepted shares and invites after 90 days | Accepted |
 | [0013](0013-terms-acceptance-gate.md) | Versioned Terms acceptance before using the app | Accepted |
+| [0014](0014-version-stamped-at-build.md) | Stamp the app version at build time | Accepted |

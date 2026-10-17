@@ -8,7 +8,6 @@ description: Conventions for an agent driving its own Beckfield Bistro pull requ
 - **You never merge, approve, enable auto-merge or close-and-reopen.** The human merges.
 - **Merge conflicts:** merge `origin/main` into the branch (no rebase or force-push on shared
   branches). Resolve, then regenerate `package-lock.json` with `npm install`, never by hand.
-  `chore: bump version` conflicts in `package.json`/`package-lock.json`: take `main`'s version.
 - **CI red:** reproduce locally with the same command (`npm run lint`, `typecheck`, `test`,
   `build`), find the root cause, fix and push. "Flaky" is not a root cause. Never skip, delete or
   `.only`/`.skip` a test to get green.

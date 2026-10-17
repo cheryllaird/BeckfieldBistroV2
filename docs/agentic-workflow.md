@@ -18,7 +18,8 @@ The decision behind it is [ADR 0008](adr/0008-agentic-delivery-workflow.md).
    account, so GitHub won't let you "approve" them; **your merge click is the approval**, and
    agents are blocked from merging (see Guardrails). Look hardest at PRs the template marks as
    touching security-sensitive paths.
-5. **Ship.** You merge. Vercel deploys `main`; the version bump runs automatically.
+5. **Ship.** You merge. Vercel deploys `main`, stamping the version at build time
+   ([ADR 0014](adr/0014-version-stamped-at-build.md)).
    `firestore.rules` changes are deployed by you, by hand (see README).
 
 ## The two logs
@@ -68,8 +69,8 @@ ruleset to 1 required approval and add a `CODEOWNERS` file for `firestore.rules`
      authored as you, and you can't approve your own PR; the merge itself is your approval).
    - Require status checks: `check` and `secret-scan`.
    - Block force pushes; restrict deletions.
-   - **Bypass list: add the GitHub Actions app.** `bump-version.yml` pushes the version bump
-     straight to `main` and would fail without the bypass.
+   - Leave the bypass list empty. No workflow pushes to `main` (the version is stamped at
+     build time), so nothing needs to bypass the rules.
 2. **Settings → Code security:** enable secret scanning and push protection, Dependabot alerts.
 3. **Labels:** create `agent:nightly` (the Routines use it; they'll create it if missing).
 4. Optional: install the Claude Code Review GitHub app for an automated reviewer on every PR.

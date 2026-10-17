@@ -7,9 +7,16 @@ import { createRequire } from 'node:module'
 const require = createRequire(import.meta.url)
 const { version } = require('./package.json')
 
+// The version is stamped at build time (ADR 0014): major.minor from
+// package.json, then the UTC build date, e.g. 1.0.20261017. Nothing commits a
+// version bump to main, so main can be fully protected.
+const [major, minor] = version.split('.')
+const buildDate = new Date().toISOString().slice(0, 10).replace(/-/g, '')
+const appVersion = `${major}.${minor}.${buildDate}`
+
 export default defineConfig({
   define: {
-    __APP_VERSION__: JSON.stringify(version),
+    __APP_VERSION__: JSON.stringify(appVersion),
     // Short commit of the build, so the exact build running on a device can be
     // told apart even when the version number hasn't changed. Vercel sets this.
     __APP_BUILD__: JSON.stringify(process.env.VERCEL_GIT_COMMIT_SHA?.slice(0, 7) ?? 'dev'),

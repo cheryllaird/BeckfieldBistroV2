@@ -14,7 +14,7 @@ git fetch origin main && git checkout -B claude/nightly-docs-$(date +%Y%m%d) ori
 git log --since="26 hours ago" --no-merges --format='%h %s' origin/main
 git diff --stat $(git rev-list -1 --before="26 hours ago" origin/main) origin/main
 ```
-Ignore `chore: bump version` commits. No substantive commits → stop.
+No substantive commits → stop.
 
 ## 2. Check each doc against the code
 Documents in scope:
