@@ -23,6 +23,17 @@ Only the triage agent or a human changes a status. Entries are never deleted.
 
 ## Entries
 
+### 2026-10-17: Architectural changes merged while the workflow PR was still open
+- **Who:** agent (refreshing the agentic workflow PR)
+- **Task:** bring the workflow PR up to date with `main` (#154–#161)
+- **Friction:** eight PRs merged before the ADR log existed. Five made architectural choices
+  (ingredient engine, recitation policy, account deletion, 90-day expiry, Terms gate) that had
+  to be reconstructed from commit messages, and `AGENTS.md` had drifted from the code before it
+  even landed.
+- **Suggested fix:** merge the workflow PR before the next feature PR, so `ship-feature` and
+  the nightly docs agent catch this as it happens.
+- **Status:** fixed in this PR (ADRs 0009–0013 back-filled)
+
 ### 2026-10-04: Project rules weren't loaded by Claude Code
 - **Who:** agent (setting up the agentic workflow)
 - **Task:** set up the agent workflow

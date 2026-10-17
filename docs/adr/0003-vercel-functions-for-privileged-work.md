@@ -18,7 +18,8 @@ Each handler:
 - keeps pure decision logic in `api/_utils/*Rules.ts` so it can be unit tested;
 - reads secrets only from Vercel environment variables.
 
-Current endpoints: `extract-recipe`, `share-recipe`, `bistro`, `migrate-bistro`, `save-gemini-key`.
+Current endpoints: `extract-recipe`, `share-recipe`, `bistro`, `migrate-bistro`, `save-gemini-key`,
+`delete-account`.
 
 ## Consequences
 

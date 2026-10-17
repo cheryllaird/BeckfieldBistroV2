@@ -36,3 +36,8 @@ Not needed for: bug fixes, UI tweaks, refactors that keep behaviour and structur
 | [0006](0006-shared-bistros.md) | Shared bistros as the unit of data ownership | Accepted |
 | [0007](0007-bring-your-own-gemini-key.md) | Per-user Gemini keys, encrypted at rest | Accepted |
 | [0008](0008-agentic-delivery-workflow.md) | Ship via agents, with human-approved merges | Accepted |
+| [0009](0009-uk-ingredient-engine.md) | A UK-first ingredient engine in `src/lib/ingredients/` | Accepted |
+| [0010](0010-respect-recitation-blocks.md) | Respect Gemini copyright (recitation) blocks | Accepted |
+| [0011](0011-account-deletion.md) | Users can delete their account and all their data | Accepted |
+| [0012](0012-expire-pending-shares-and-invites.md) | Expire unaccepted shares and invites after 90 days | Accepted |
+| [0013](0013-terms-acceptance-gate.md) | Versioned Terms acceptance before using the app | Accepted |
