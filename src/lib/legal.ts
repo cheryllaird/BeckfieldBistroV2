@@ -1,15 +1,15 @@
 // The app's legal pages and the version of the Terms users must accept.
 //
-// Until the final, solicitor-reviewed text is published, termsVersion is ''
-// and the acceptance step is off. To launch it: publish the pages, fill in
-// their URLs, and set termsVersion (e.g. the effective date, '2026-11-01').
-// Changing termsVersion later asks every user to accept again.
+// The pages are served by the app itself (src/legal/*.md, rendered by
+// pages/Legal). termsVersion is the Terms' effective date: when the Terms
+// change, update src/legal/terms.md and set a new version here, and every
+// user is asked to accept again. An empty termsVersion turns the step off.
 
 export const LEGAL = {
-  termsVersion: '',
-  termsUrl: '',
-  privacyUrl: '',
-  copyrightUrl: '',
+  termsVersion: '2026-10-17',
+  termsUrl: '/terms',
+  privacyUrl: '/privacy',
+  copyrightUrl: '/copyright',
 };
 
 /** True once the Terms and Privacy Policy are published and acceptance is required. */
