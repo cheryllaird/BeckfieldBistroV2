@@ -3,6 +3,7 @@ import { ArrowLeft } from 'lucide-react';
 import { ApiKeyCard } from './ApiKeyCard';
 import { BistroCard } from './BistroCard';
 import { LegalCard } from './LegalCard';
+import { AccountCard } from './AccountCard';
 
 export function SettingsPage() {
   const navigate = useNavigate();
@@ -23,6 +24,7 @@ export function SettingsPage() {
       <BistroCard />
       <ApiKeyCard />
       <LegalCard />
+      <AccountCard />
     </div>
   );
 }
