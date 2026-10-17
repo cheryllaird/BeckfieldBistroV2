@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Navigate, Route, Routes } from 'react-router-dom';
+import { Navigate, Route, Routes, useLocation } from 'react-router-dom';
 import { onAuthStateChanged, getRedirectResult } from 'firebase/auth';
 import { auth, firebaseConfigured } from './lib/firebase';
 import { startConnectivityManager } from './lib/connectivity';
@@ -18,6 +18,8 @@ import { PlanPage } from './pages/Plan/index';
 import { ShoppingListPage } from './pages/ShoppingList/index';
 import { PantryPage } from './pages/Pantry/index';
 import { SettingsPage } from './pages/Settings/index';
+import { LegalPage } from './pages/Legal/index';
+import { legalPathOf } from './legal/pages';
 
 function FirebaseSetupScreen() {
   return (
@@ -128,6 +130,9 @@ function AuthenticatedApp() {
 }
 
 export default function App() {
+  // The legal pages are public: they render before any sign-in or setup gate.
+  const legalPath = legalPathOf(useLocation().pathname);
+  if (legalPath) return <LegalPage path={legalPath} />;
   if (!firebaseConfigured) return <FirebaseSetupScreen />;
   return <AuthenticatedApp />;
 }
