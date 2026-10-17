@@ -26,7 +26,7 @@ You are responsible for what happens under your account. Tell us at cheryl.laird
 - **You promise you are allowed to save it.** Recipes, cookbook pages, photographs and website text may belong to other people. By adding content, you confirm that you have the right to keep a copy for your own personal use, or that the law allows you to.
 - **Personal, non-commercial use only.** Your library is for your own household's use. You must not use the app to republish, sell or distribute other people's recipes, cookbook pages or photographs.
 - **Respect the source.** We encourage you to keep the source name and link on each recipe. The app saves them where it can.
-- **Licence to us.** You give us a non-exclusive, worldwide, royalty-free licence to store, copy, process and display your content only as needed to run the app for you and the people you choose to share with. This licence ends when you delete the content, except for copies in backups, which are deleted on our normal schedule.
+- **Licence to us.** You give us a non-exclusive, worldwide, royalty-free licence to store, copy, process and display your content only as needed to run the app for you and the people you choose to share with. This licence ends when you delete the content, except for copies in backups, which are deleted within 8 weeks.
 
 ### 5. Sharing and shared libraries
 

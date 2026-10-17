@@ -40,9 +40,9 @@ Some of these providers process data outside the UK, including in the United Sta
 - Account data and your content: until you delete it or your account.
 - Recipe shares and bistro invitations that are never accepted: deleted 90 days after they are sent.
 - Server logs: kept by Vercel, our host, for a short period (no more than a few days).
-- Backups: we don't currently keep separate backups of the database.
+- Backups: we keep a weekly backup of the database for 8 weeks, and a 7-day history used only to recover from mistakes.
 
-You can delete your account in Settings → Account → Delete account. This immediately deletes your account, your own bistro and everything in it, your saved API key, and any shares and invitations you sent or received that are still pending. Members of your bistro lose access to it. Recipes you added to someone else's bistro stay there for its members, and a recipe you sent that someone has already saved belongs to them.
+You can delete your account in Settings → Account → Delete account. This immediately deletes your account, your own bistro and everything in it, your saved API key, and any shares and invitations you sent or received that are still pending. Members of your bistro lose access to it. Recipes you added to someone else's bistro stay there for its members, and a recipe you sent that someone has already saved belongs to them. Deleted data is removed from backups as they expire, within 8 weeks.
 
 ### 5. Your rights
 
