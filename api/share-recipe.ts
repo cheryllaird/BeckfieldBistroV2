@@ -2,6 +2,7 @@ import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { getFirestore } from 'firebase-admin/firestore';
 import { getUser } from './_utils/auth.js';
 import { buildShare, checkShareQuota } from './_utils/shareRules.js';
+import { livePending } from './_utils/pendingExpiry.js';
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   const user = await getUser(req);
@@ -36,7 +37,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const snap = await db.collection('sharedRecipes')
         .where('toEmail', '==', user.email)
         .get();
-      const shares = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+      const shares = livePending(snap.docs.map((d) => ({ id: d.id, ...d.data() })), new Date());
       return res.status(200).json({ shares });
     } catch (err) {
       console.error('share-recipe GET error:', err);

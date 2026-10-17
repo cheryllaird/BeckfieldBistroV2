@@ -12,6 +12,7 @@ import {
   type BistroDoc,
   type Rejection,
 } from './_utils/bistroRules.js';
+import { isPendingExpired, livePending, pendingExpiry } from './_utils/pendingExpiry.js';
 
 // Bistro membership. Every membership change goes through here with the admin
 // SDK: firestore.rules deny all client writes to bistros/{id} and give the
@@ -103,10 +104,12 @@ async function handlePost(db: Firestore, user: AuthedUser, body: Record<string, 
         }
       }
       const bistro = await loadBistro(db, user, bistroId);
+      const now = new Date();
+      // An expired invite no longer blocks inviting the same person again.
       const pending = bistro
-        ? (await invitesCol(db).where('bistroId', '==', bistroId).get()).docs.map(
-            (d) => d.data().toEmail as string,
-          )
+        ? (await invitesCol(db).where('bistroId', '==', bistroId).get()).docs
+            .filter((d) => !isPendingExpired(d.data().createdAt, now))
+            .map((d) => d.data().toEmail as string)
         : [];
       reject(checkInvite(bistro, user.uid, user.email, email, pending));
       const ref = await invitesCol(db).add({
@@ -116,7 +119,8 @@ async function handlePost(db: Firestore, user: AuthedUser, body: Record<string, 
         fromName: user.name,
         ...(user.avatar ? { fromAvatar: user.avatar } : {}),
         toEmail: email,
-        createdAt: new Date().toISOString(),
+        createdAt: now.toISOString(),
+        expiresAt: pendingExpiry(now),
       });
       return { id: ref.id };
     }
@@ -127,8 +131,10 @@ async function handlePost(db: Firestore, user: AuthedUser, body: Record<string, 
       // either the invite or its absence, never half a membership.
       const bistroId = await db.runTransaction(async (tx) => {
         const inviteSnap = await tx.get(inviteRef);
-        const invite = inviteSnap.exists ? (inviteSnap.data() as { toEmail: string; bistroId: string }) : null;
-        reject(checkAccept(invite, user.email));
+        const invite = inviteSnap.exists
+          ? (inviteSnap.data() as { toEmail: string; bistroId: string; createdAt?: string })
+          : null;
+        reject(checkAccept(invite, user.email, new Date()));
         const ref = bistroRef(db, invite!.bistroId);
         const bistroSnap = await tx.get(ref);
         if (!bistroSnap.exists) reject({ status: 404, error: 'That bistro no longer exists.' });
@@ -150,7 +156,12 @@ async function handlePost(db: Firestore, user: AuthedUser, body: Record<string, 
     case 'decline': {
       const ref = invitesCol(db).doc(str(body.inviteId));
       const snap = await ref.get();
-      reject(checkAccept(snap.exists ? (snap.data() as { toEmail: string }) : null, user.email));
+      const refused = checkAccept(
+        snap.exists ? (snap.data() as { toEmail: string; createdAt?: string }) : null,
+        user.email,
+        new Date(),
+      );
+      if (refused?.status !== 410) reject(refused); // declining an expired invite just tidies it up
       await ref.delete();
       return { ok: true };
     }
@@ -202,11 +213,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       if (bistroId) {
         reject(checkMember(await loadBistro(db, user, bistroId), user.uid));
         const snap = await invitesCol(db).where('bistroId', '==', bistroId).get();
-        return res.status(200).json({ invites: snap.docs.map((d) => ({ id: d.id, ...d.data() })) });
+        return res.status(200).json({ invites: livePending(snap.docs.map((d) => ({ id: d.id, ...d.data() })), new Date()) });
       }
       if (!user.email) return res.status(200).json({ invites: [] });
       const snap = await invitesCol(db).where('toEmail', '==', user.email).get();
-      return res.status(200).json({ invites: snap.docs.map((d) => ({ id: d.id, ...d.data() })) });
+      return res.status(200).json({ invites: livePending(snap.docs.map((d) => ({ id: d.id, ...d.data() })), new Date()) });
     }
 
     if (req.method === 'POST') {
