@@ -588,7 +588,8 @@ export function subscribeToBistroAccess(
 /**
  * Watches one bistro's doc. Emits null when it doesn't exist (a user's own
  * bistro before it has been named or shared). `onError` fires with
- * permission-denied once the user is no longer a member.
+ * permission-denied once the user is no longer a member (or before sign-in has
+ * finished), so callers confirm a removal against the access list.
  */
 export function subscribeToBistro(
   bistroId: string,

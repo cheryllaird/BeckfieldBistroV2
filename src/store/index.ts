@@ -82,6 +82,11 @@ const _bistroUnsubs = new Map<string, () => void>();
 // Bistros the user is leaving right now, so the access listener dropping them
 // isn't reported as "you were removed".
 const _leaving = new Set<string>();
+// The bistro list the server last confirmed this session (null until it has).
+let _serverAccessIds: Set<string> | null = null;
+// Bistros whose listeners were refused, waiting on the server's access list to
+// say whether that was a real removal.
+const _deniedBistros = new Set<string>();
 let _migrationRunning = false;
 // The legacy catch-up sync runs at most once per app session.
 let _legacySyncStarted = false;
@@ -406,9 +411,9 @@ function attachDataListeners(bistroId: string, ownUid: string, set: SetState, ge
       openLaunchBistro(set, get);
     },
     onError: (err) => {
-      // Lost access to someone else's bistro (removed by another member).
-      if (bistroId !== ownUid && (err as { code?: string }).code === 'permission-denied') {
-        loseBistro(bistroId, set, get);
+      // Possibly lost access to someone else's bistro; the access list decides.
+      if ((err as { code?: string }).code === 'permission-denied') {
+        onBistroDenied(bistroId, set, get);
       }
     },
   });
@@ -448,6 +453,8 @@ function detachSessionListeners() {
   _unsubscribeAccess = null;
   _bistroUnsubs.forEach((unsub) => unsub());
   _bistroUnsubs.clear();
+  _serverAccessIds = null;
+  _deniedBistros.clear();
   _legacySyncStarted = false;
   _launchScopeSettled = false;
   // Abandon any switch in flight.
@@ -498,16 +505,33 @@ function onAccess(access: BistroAccess, set: SetState, get: () => Store) {
             loseBistro(id, set, get);
           }
         },
-        () => loseBistro(id, set, get),
+        (err) => {
+          // The listener has ended; drop it so the next access snapshot
+          // re-subscribes. Only a refusal can mean removal, and even that
+          // waits for the access list (an SDK crash or a launch before
+          // sign-in has finished errors here too, for members).
+          _bistroUnsubs.delete(id);
+          if ((err as { code?: string }).code === 'permission-denied') onBistroDenied(id, set, get);
+        },
       ),
     );
   }
   // A cached access list can predate joining a bistro (an invite accepted on
   // another device, or before the cache caught up), so only the server's word
   // counts as losing one. Without this, relaunching into a bistro could bounce
-  // the user back to their own. A genuine removal still arrives from the server
-  // here, and as permission-denied on the bistro's listeners.
+  // the user back to their own. A genuine removal always arrives from the
+  // server here: the member list and the access list change in one transaction.
   if (access.fromCache) return;
+  _serverAccessIds = ids;
+  // Refused listeners for bistros the server says we still belong to were a
+  // false alarm: listen to the open one's data again.
+  for (const id of _deniedBistros) {
+    _deniedBistros.delete(id);
+    if (ids.has(id) && !_switchTarget && scopeOf(get()) === id) {
+      detachDataListeners();
+      attachDataListeners(id, user.uid, set, get);
+    }
+  }
   // Known bistros we've lost, plus a persisted active or default one we no
   // longer have access to — deduped, so each is handled once.
   const lost = new Set(Object.keys(get().bistros));
@@ -515,6 +539,17 @@ function onAccess(access: BistroAccess, set: SetState, get: () => Store) {
   if (active) lost.add(active);
   if (preferred) lost.add(preferred);
   for (const id of lost) if (!ids.has(id)) loseBistro(id, set, get);
+}
+
+// A listener on someone else's bistro was refused. That's what removal looks
+// like, but also what a listener started before sign-in has finished sees, so
+// only drop the bistro once the server's access list agrees; until then keep
+// the user where they are.
+function onBistroDenied(id: string, set: SetState, get: () => Store) {
+  const user = get().user;
+  if (!user || id === user.uid) return;
+  if (_serverAccessIds && !_serverAccessIds.has(id)) loseBistro(id, set, get);
+  else _deniedBistros.add(id);
 }
 
 // Drops a bistro the user can no longer open: removed by another member, or
