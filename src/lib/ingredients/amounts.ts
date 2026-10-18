@@ -3,7 +3,7 @@ import { singularWord } from './words';
 
 // Measures too loose to add up ("a handful", "a pinch"). They lead an
 // ingredient's text as often as a real unit does.
-export const VAGUE_MEASURE_WORDS =
+const VAGUE_MEASURE_WORDS =
   'handful|pinch|dash|splash|knob|drizzle|glug|sprig|bunch|squeeze|few|grating';
 
 // "a handful of coriander", "2 handfuls of spinach", "handful fresh coriander".

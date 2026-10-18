@@ -68,7 +68,7 @@ export const syncLegacyStep = () =>
   );
 
 /** Mirrors defaultBistroName in api/_utils/bistroRules.ts. */
-export function defaultBistroName(displayName: string): string {
+function defaultBistroName(displayName: string): string {
   const first = displayName.trim().split(/\s+/)[0];
   return first && !first.includes('@') ? `${first}'s Bistro` : 'My Bistro';
 }

@@ -18,7 +18,7 @@ import { useRef, type RefObject } from 'react';
  */
 
 /** Duration of the slide-out / slide-in halves of the transition. */
-export const SWIPE_SLIDE_MS = 200;
+const SWIPE_SLIDE_MS = 200;
 /** Movement needed before the gesture commits to scroll-vs-swipe. */
 const DIRECTION_LOCK_PX = 8;
 /** Horizontal distance needed to actually change page. */
