@@ -51,4 +51,5 @@ Only the triage agent or a human changes a status. Entries are never deleted.
 - **Friction:** the cloud container ships Node 22 while `package.json` requires Node 24, so
   `npm` warns on every install and local results may differ from CI.
 - **Suggested fix:** install Node 24 in the cloud environment's setup script.
-- **Status:** open
+- **Seen again:** 2026-10-19, still Node 22.
+- **Status:** issue https://github.com/cheryllaird/BeckfieldBistroV2/issues/167
