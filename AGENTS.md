@@ -95,6 +95,7 @@ sunset condition first.
 ## Agent toolkit
 
 - Skills (`.claude/skills/`): `ship-feature`, `write-adr`, `log-friction`, `nightly-docs`,
-  `nightly-cleanup`, `friction-triage`, `steward`.
-- Subagents (`.claude/agents/`): `frontend-ui`, `security-reviewer`, `test-writer`.
+  `nightly-cleanup`, `friction-triage`, `steward`, `scope-notes`.
+- Subagents (`.claude/agents/`): `frontend-ui`, `security-reviewer`, `test-writer`;
+  for `scope-notes`: `product-scoper`, `tech-scoper`, `scope-critic`, `bug-investigator`.
 - Logs: [`docs/adr/`](docs/adr/README.md), [`docs/friction-log.md`](docs/friction-log.md).
