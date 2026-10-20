@@ -42,3 +42,4 @@ Not needed for: bug fixes, UI tweaks, refactors that keep behaviour and structur
 | [0012](0012-expire-pending-shares-and-invites.md) | Expire unaccepted shares and invites after 90 days | Accepted |
 | [0013](0013-terms-acceptance-gate.md) | Versioned Terms acceptance before using the app | Accepted |
 | [0014](0014-version-stamped-at-build.md) | Stamp the app version at build time | Accepted |
+| [0015](0015-scoping-agent-for-notes.md) | Scope rough notes with an agent, using labelled issues as the inbox | Accepted |
