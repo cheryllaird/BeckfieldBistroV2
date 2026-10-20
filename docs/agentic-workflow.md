@@ -47,6 +47,9 @@ How a note is scoped (the `scope-notes` skill):
 - **Bug:** `bug-investigator` reproduces it (ideally as a failing test) and finds the root
   cause. A confirmed, small fix outside security-sensitive code becomes a PR with a
   regression test; anything else becomes a written diagnosis.
+- **Spotted along the way:** confirmed problems found next to a note (a related bug, a broken
+  `AGENTS.md` rule) are filed as new notes labelled `triage:inbox` and `from:scope-notes`, at
+  most 3 per run, and scoped on the next run.
 
 Run it any time by saying "scope my inbox" (or "scope note #12") in a session; the nightly
 Routine does it otherwise.

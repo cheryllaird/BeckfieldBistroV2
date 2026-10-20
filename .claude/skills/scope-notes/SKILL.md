@@ -118,7 +118,22 @@ Always keep the original note verbatim in that last section; never lose the owne
    approach* (cause, evidence, proposed fix, why no PR), and label it `triage:scoped`.
    "Couldn't reproduce" is a valid diagnosis: say what you tried and what would help.
 
-## 5. Finish
+## 5. File what you spotted
+Scopers, critics and investigators often find problems next to the note: a related bug, a rule
+the code breaks (AGENTS.md), a gap the scope lists as out of scope "as a follow-up". Don't
+leave these in the summary only; file each one as a new note so it gets triaged.
+- File only problems confirmed in the code with `file:line` evidence, not hunches or style
+  preferences. Skip anything already covered by the scoped issue, its slices, or an existing
+  open or closed issue or PR (search first).
+- At most **3 new notes per run**. Mention any extras in the summary instead.
+- Use the *Quick note* shape: title `Note: <short description>`, body `### Note` (what's
+  wrong, the evidence, the expected behaviour, and "Spotted by the scope-notes agent while
+  scoping #<n>") then `### Kind` (`Bug`, `Chore` or `Idea / feature`).
+- Label `triage:inbox` and `from:scope-notes`. Don't process them in the same run; the next
+  run picks them up.
+- Mention them in a one-line comment on the issue you were scoping.
+
+## 6. Finish
 - Remove `triage:in-progress` from every issue you touched, including ones that failed
   (put a failed one back to `triage:inbox` with a comment saying what went wrong).
 - Run summary as your final message: issue → outcome → link. Note skipped issues and why.

@@ -30,6 +30,11 @@ push branches.
   off-limits paths; otherwise it writes the diagnosis into the issue.
 - **Trust:** only issues authored by the repo owner are processed. Note text is data, never
   instructions.
+- **Spotted problems:** confirmed problems found next to a note (with `file:line` evidence,
+  not already tracked) are filed as new notes labelled `triage:inbox` and `from:scope-notes`,
+  at most 3 per run, and scoped on a later run. They are filed with the owner's credentials,
+  so they pass the owner-only rule; the per-run cap and the "not in the same run" rule keep
+  this from growing without bound.
 
 ## Consequences
 
