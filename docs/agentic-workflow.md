@@ -35,6 +35,7 @@ a `status:*` label says where each one is.
 | `status:todo` | Scoped, waiting for your approval | Claude (`scope-issue`), or agents filing issues |
 | `status:ready` | **Approved: an agent may build it.** The human gate | you |
 | `status:in-progress` | An agent is building it | agent |
+| `status:needs-attention` | An agent stopped to ask a question or report a blocker; answer it, then set `status:ready` again | agent |
 | `status:in-review` | A PR is open (`Closes #n`); the issue closes when you merge | agent |
 
 - **Scoping (`scope-issue` skill):** start a session and say "create an issue for …" or "log a
@@ -44,8 +45,8 @@ a `status:*` label says where each one is.
   acceptance criteria, notes for the builder) and files it once you agree, with the issue type set to
   Feature, Bug or Task.
 - **Building (`build-ready` skill):** each ready issue becomes its own PR via `ship-feature`.
-  If the issue turns out ambiguous, the agent asks in a comment and puts it back to
-  `status:todo` instead of guessing.
+  If the issue turns out ambiguous, the agent asks in a comment and labels it
+  `status:needs-attention` instead of guessing.
 
 ## The two logs
 

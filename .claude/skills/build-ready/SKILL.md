@@ -15,6 +15,7 @@ people with write access can set it, so never build an issue without it. You nev
 | `status:todo` | Scoped, waiting for the owner's approval | `scope-issue`, agents filing issues |
 | `status:ready` | Approved: an agent may build it | **owner only** |
 | `status:in-progress` | An agent is building it | you |
+| `status:needs-attention` | An agent stopped and asked a question or hit a blocker; the owner must answer | you |
 | `status:in-review` | A PR is open (`Closes #n`) | you |
 
 Exactly one `status:*` label per issue. The issue closes itself when its PR merges.
@@ -35,12 +36,12 @@ Follow the `ship-feature` skill, with the issue as the request:
 - The acceptance criteria are the definition of done. Each needs a test or a manual check.
 - **Stop instead of guessing.** If the issue is ambiguous in a way that changes what you build,
   or turns out much bigger than described, comment with the specific question (and your
-  recommended answer), set `status:todo`, and move on. That's a good outcome, not a failure.
+  recommended answer), set `status:needs-attention`, and move on. The owner answers in the issue and sets `status:ready` again when it can be built. That's a good outcome, not a failure.
 - PR body from `.github/pull_request_template.md`, starting the Summary with `Closes #<n>`.
 - Swap `status:in-progress` → `status:in-review` and comment the PR link on the issue.
 - Then follow the `steward` skill.
 
-If a build fails for a reason you can't fix, comment what blocked you, set `status:todo`, and
+If a build fails for a reason you can't fix, comment what blocked you, set `status:needs-attention`, and
 add a friction entry in the next PR you open (or mention it in the summary).
 
 ## 3. Finish

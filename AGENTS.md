@@ -99,5 +99,5 @@ sunset condition first.
 - Subagents (`.claude/agents/`): `frontend-ui`, `security-reviewer`, `test-writer`;
   for `scope-issue`: `tech-scoper`, `scope-critic`, `bug-investigator`.
 - Backlog: issues labelled `status:todo` → `status:ready` (owner only) → `status:in-progress`
-  → `status:in-review`. Never build an issue without `status:ready`.
+  → `status:in-review` (`status:needs-attention` when an agent is blocked on the owner). Never build an issue without `status:ready`.
 - Logs: [`docs/adr/`](docs/adr/README.md), [`docs/friction-log.md`](docs/friction-log.md).
