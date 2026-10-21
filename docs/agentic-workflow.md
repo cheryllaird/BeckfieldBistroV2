@@ -27,7 +27,7 @@ The decision behind it is [ADR 0008](adr/0008-agentic-delivery-workflow.md).
 
 ## Backlog
 
-Decision: [ADR 0016](adr/0016-scope-in-conversation-build-when-ready.md). Issues are the backlog;
+Decision: [ADR 0015](adr/0015-scope-in-conversation-build-when-ready.md). Issues are the backlog;
 a `status:*` label says where each one is.
 
 | Label | Meaning | Who sets it |
