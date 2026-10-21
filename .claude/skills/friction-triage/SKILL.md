@@ -15,8 +15,8 @@ You run unattended. Make at most one PR and never merge.
      skill (docs fixes, a missing script, a clearer error, a test helper). Do it. Set the
      status to `fixed in <PR link>`, or `fixed in this PR` before the PR exists.
    - **Issue:** real but bigger, or needs a human decision. Search existing issues first, then
-     open one with the friction text, suggested fix and links, labelled `status:todo` and
-     `type:chore`. Set the status to `issue <link>`.
+     open one with the friction text, suggested fix and links, labelled `status:todo`, with
+     issue type Task. Set the status to `issue <link>`.
    - **Won't fix:** obsolete or not actually a problem. Set the status to `wontfix: <reason>`.
 4. Never delete entries. Only change status lines and add "Seen again" notes.
 5. Run `npm run lint && npm run typecheck && npm test && npm run build` if you changed code.

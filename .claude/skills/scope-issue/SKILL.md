@@ -57,9 +57,9 @@ For a bug, *Why* holds the symptom and *Notes* the cause with `file:line` and th
 direction.
 
 - Title: a short imperative (`Add …`, `Fix …`, `Let users …`).
-- When the owner says it's right, create the issue with labels `status:todo` and one of
-  `type:feature`, `type:bug` or `type:chore`. Add later slices as separate issues, each
-  `status:todo`, linked as sub-issues of the first.
+- When the owner says it's right, create the issue with the label `status:todo` and the
+  issue type set to Feature, Bug or Task (chores are Tasks). Add later slices as separate
+  issues, each `status:todo`, linked as sub-issues of the first.
 - Reply with the issue link and one line: "Label it `status:ready` when you want an agent to
   build it."
 

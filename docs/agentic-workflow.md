@@ -41,8 +41,8 @@ a `status:*` label says where each one is.
   bug …". Claude investigates the code (`tech-scoper`, or `bug-investigator` for bugs), has
   `scope-critic` challenge the idea, then asks you a few questions: a simpler alternative,
   real ambiguities, or splitting something too big. It shows you a short draft (why, what,
-  acceptance criteria, notes for the builder) and files it once you agree. Also labelled
-  `type:feature`, `type:bug` or `type:chore`.
+  acceptance criteria, notes for the builder) and files it once you agree, with the issue type set to
+  Feature, Bug or Task.
 - **Building (`build-ready` skill):** each ready issue becomes its own PR via `ship-feature`.
   If the issue turns out ambiguous, the agent asks in a comment and puts it back to
   `status:todo` instead of guessing.
