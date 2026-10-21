@@ -1,6 +1,5 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { getAuth } from 'firebase-admin/auth';
-import { initFirebaseAdmin } from './_utils/auth.js';
+import { getUser } from './_utils/auth.js';
 import { getFirestore, FieldValue } from 'firebase-admin/firestore';
 import { encryptSecret } from './_utils/crypto.js';
 
@@ -15,14 +14,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(401).json({ error: 'Missing authorization token' });
   }
 
-  let uid: string;
-  try {
-    initFirebaseAdmin();
-    const decoded = await getAuth().verifyIdToken(token);
-    uid = decoded.uid;
-  } catch {
+  const user = await getUser(req);
+  if (!user) {
     return res.status(401).json({ error: 'Invalid or expired token' });
   }
+  const { uid } = user;
 
   const { apiKey } = req.body ?? {};
   const profileRef = getFirestore().collection('users').doc(uid).collection('meta').doc('profile');
