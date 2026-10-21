@@ -19,7 +19,7 @@ issues, labels, sub-issues and PRs, but not GitHub Projects.
   issue for …"). It investigates the code (`tech-scoper`, `bug-investigator`), has
   `scope-critic` challenge the ask, asks the owner one or two rounds of focused questions,
   shows a short draft (why, what, acceptance criteria, notes for the builder), and files it
-  labelled `status:todo` plus a `type:*` label.
+  labelled `status:todo`, with its GitHub issue type set (Feature, Bug or Task).
 - **Human gate:** the owner adds `status:ready`. Only people with write access can label, so
   the label is the approval. Agents never set it.
 - **Build:** the `build-ready` skill builds each `status:ready` issue as its own PR through
