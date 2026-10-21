@@ -72,3 +72,34 @@ export function recipeSourceLabel(recipe: Pick<Recipe, 'source' | 'sourceUrl'>):
   }
   return source || 'Unknown';
 }
+
+const norm = (source: string) => source.trim().toLowerCase();
+
+/**
+ * Orders the bistro's known sources for autocomplete: newest recipe first, then unused
+ * sources newest-added first. 'Unknown' is never suggested.
+ */
+export function sortSourcesByRecentUse(
+  knownSources: string[],
+  recipes: Pick<Recipe, 'source' | 'createdAt'>[],
+): string[] {
+  const lastUsed = new Map<string, string>();
+  for (const r of recipes) {
+    const key = norm(r.source ?? '');
+    if (!key) continue;
+    const created = r.createdAt ?? '';
+    if (created >= (lastUsed.get(key) ?? '')) lastUsed.set(key, created);
+  }
+  // Reverse first so the stable sort keeps newest-added first on ties.
+  return [...knownSources]
+    .reverse()
+    .filter((s) => norm(s) !== '' && norm(s) !== 'unknown')
+    .sort((a, b) => {
+      const ua = lastUsed.get(norm(a));
+      const ub = lastUsed.get(norm(b));
+      if (ua === undefined || ub === undefined) {
+        return ua === ub ? 0 : ua === undefined ? 1 : -1;
+      }
+      return ua < ub ? 1 : ua > ub ? -1 : 0;
+    });
+}
