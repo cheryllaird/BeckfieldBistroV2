@@ -712,9 +712,16 @@ export const useStore = create<Store>()(
       },
 
       updateRecipe: async (recipe) => {
-        set((s) => ({ recipes: s.recipes.map((r) => (r.id === recipe.id ? recipe : r)) }));
+        const sourceIsNew = !get().knownSources.includes(recipe.source);
+        set((s) => ({
+          recipes: s.recipes.map((r) => (r.id === recipe.id ? recipe : r)),
+          knownSources: sourceIsNew ? [...s.knownSources, recipe.source] : s.knownSources,
+        }));
         const scope = scopeOf(get());
-        if (scope) await saveRecipe(scope, recipe);
+        if (scope) {
+          await saveRecipe(scope, recipe);
+          if (sourceIsNew) saveKnownSources(scope, get().knownSources);
+        }
       },
 
       deleteRecipe: (id) => {
