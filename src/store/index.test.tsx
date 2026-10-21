@@ -57,6 +57,20 @@ describe('recipes', () => {
     expect(firestore.deleteRecipeDoc).not.toHaveBeenCalled();
   });
 
+  it('remembers a new source typed while editing a recipe', async () => {
+    signedIn();
+    await useStore.getState().addRecipe(makeRecipe({ id: 'r1', source: 'Nigella' }));
+    vi.mocked(firestore.saveKnownSources).mockClear();
+
+    await useStore.getState().updateRecipe(makeRecipe({ id: 'r1', source: 'Jamie' }));
+    expect(useStore.getState().knownSources).toEqual(['Nigella', 'Jamie']);
+    expect(firestore.saveKnownSources).toHaveBeenCalledWith('user-1', ['Nigella', 'Jamie']);
+
+    await useStore.getState().updateRecipe(makeRecipe({ id: 'r1', source: 'Jamie' }));
+    expect(useStore.getState().knownSources).toEqual(['Nigella', 'Jamie']);
+    expect(firestore.saveKnownSources).toHaveBeenCalledTimes(1);
+  });
+
   it('updates and deletes recipes', async () => {
     signedIn();
     useStore.setState({ recipes: [makeRecipe({ id: 'r1', title: 'Old' })] });
