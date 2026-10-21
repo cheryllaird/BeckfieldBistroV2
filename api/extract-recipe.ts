@@ -1,7 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { GoogleGenerativeAI, type Part } from '@google/generative-ai';
-import { getAuth } from 'firebase-admin/auth';
-import { initFirebaseAdmin } from './_utils/auth.js';
+import { getUser } from './_utils/auth.js';
 import { getFirestore, FieldValue } from 'firebase-admin/firestore';
 import { decryptSecret, type EncryptedValue } from './_utils/crypto.js';
 import { getOcrEngine, preprocessForOcr, assessOcrQuality, type OcrResult } from './_utils/ocr.js';
@@ -418,14 +417,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(401).json({ error: 'Missing authorization token' });
   }
 
-  let uid: string;
-  try {
-    initFirebaseAdmin();
-    const decoded = await getAuth().verifyIdToken(token);
-    uid = decoded.uid;
-  } catch {
+  const user = await getUser(req);
+  if (!user) {
     return res.status(401).json({ error: 'Invalid or expired token' });
   }
+  const { uid } = user;
 
   // Validate request body
   const { base64, mediaType, url } = req.body ?? {};
