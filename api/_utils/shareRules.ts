@@ -21,7 +21,7 @@ interface Ingredient {
   originalText: string;
 }
 
-export interface ShareRecipe {
+interface ShareRecipe {
   title: string;
   source: string;
   sourceUrl?: string;

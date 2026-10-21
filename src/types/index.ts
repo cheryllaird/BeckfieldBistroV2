@@ -28,7 +28,7 @@ export interface Recipe {
   updatedAt: string;
 }
 
-export type MealEntryType = 'recipe' | 'custom' | 'dining-out';
+type MealEntryType = 'recipe' | 'custom' | 'dining-out';
 export type MealTime = 'breakfast' | 'lunch' | 'dinner' | 'side' | 'snack';
 
 export interface MealEntry {
