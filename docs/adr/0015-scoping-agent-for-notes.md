@@ -1,6 +1,6 @@
 # 0015. Scope rough notes with an agent, using labelled issues as the inbox
 
-- **Status:** Accepted
+- **Status:** Superseded by [0016](0016-scope-in-conversation-build-when-ready.md)
 - **Date:** 2026-10-20
 - **Deciders:** Cheryl Laird
 
