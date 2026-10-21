@@ -95,7 +95,9 @@ sunset condition first.
 ## Agent toolkit
 
 - Skills (`.claude/skills/`): `ship-feature`, `write-adr`, `log-friction`, `nightly-docs`,
-  `nightly-cleanup`, `friction-triage`, `steward`, `scope-notes`.
+  `nightly-cleanup`, `friction-triage`, `steward`, `scope-issue`, `build-ready`.
 - Subagents (`.claude/agents/`): `frontend-ui`, `security-reviewer`, `test-writer`;
-  for `scope-notes`: `product-scoper`, `tech-scoper`, `scope-critic`, `bug-investigator`.
+  for `scope-issue`: `tech-scoper`, `scope-critic`, `bug-investigator`.
+- Backlog: issues labelled `status:todo` → `status:ready` (owner only) → `status:in-progress`
+  → `status:in-review`. Never build an issue without `status:ready`.
 - Logs: [`docs/adr/`](docs/adr/README.md), [`docs/friction-log.md`](docs/friction-log.md).
