@@ -1,10 +1,10 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useNavigate, useSearchParams, useParams } from 'react-router-dom';
 import { ArrowLeft, Camera, Upload, Link, Plus, Loader, WifiOff } from 'lucide-react';
 import { useStore } from '../../store';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
-import { generateId } from '../../lib/utils';
+import { generateId, sortSourcesByRecentUse } from '../../lib/utils';
 import { extractRecipeFromImage, extractRecipeFromUrl, resizeImage, ORIGINAL_IMAGE_RESIZE, RecipeExtractionError } from '../../lib/recipeExtraction';
 import type { Recipe } from '../../types';
 import { RecipeForm } from './RecipeForm';
@@ -19,6 +19,11 @@ export function NewRecipePage() {
   const [searchParams] = useSearchParams();
   const { id: editId } = useParams<{ id: string }>();
   const { addRecipe, updateRecipe, knownSources, recipes, hasGeminiApiKey } = useStore();
+
+  const suggestedSources = useMemo(
+    () => sortSourcesByRecentUse(knownSources, recipes),
+    [knownSources, recipes],
+  );
 
   const existingRecipe = editId ? recipes.find((r) => r.id === editId) : undefined;
   const isEditMode = !!existingRecipe;
@@ -300,7 +305,7 @@ export function NewRecipePage() {
         <>
           <RecipeForm
             initial={draft}
-            knownSources={knownSources}
+            knownSources={suggestedSources}
             onSave={handleSave}
             onCancel={() => navigate(-1)}
             isSaving={isSaving}

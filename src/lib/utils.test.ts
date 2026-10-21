@@ -7,8 +7,9 @@ import {
   isoDate,
   recipeSourceLabel,
   scaleIngredient,
+  sortSourcesByRecentUse,
 } from './utils';
-import { makeIngredient } from '../test/factories';
+import { makeIngredient, makeRecipe } from '../test/factories';
 
 describe('formatTime', () => {
   it.each([
@@ -133,5 +134,54 @@ describe('recipeSourceLabel', () => {
   it('survives a malformed URL', () => {
     expect(recipeSourceLabel({ source: 'unknown', sourceUrl: 'not a url' })).toBe('unknown');
     expect(recipeSourceLabel({ source: '', sourceUrl: 'not a url' })).toBe('Unknown');
+  });
+});
+
+describe('sortSourcesByRecentUse', () => {
+  const r = (source: string, createdAt?: string) =>
+    makeRecipe({ source, createdAt: createdAt as string });
+
+  it('orders by the newest recipe using each source', () => {
+    const recipes = [r('A', '2026-01-01'), r('B', '2026-03-01'), r('C', '2026-02-01'), r('A', '2025-12-01')];
+    expect(sortSourcesByRecentUse(['A', 'B', 'C'], recipes)).toEqual(['B', 'C', 'A']);
+  });
+
+  it('ranks a source by its newest recipe', () => {
+    const recipes = [r('A', '2026-01-01'), r('B', '2026-02-01'), r('A', '2026-03-01')];
+    expect(sortSourcesByRecentUse(['A', 'B'], recipes)).toEqual(['A', 'B']);
+  });
+
+  it('puts unused sources last, newest added first', () => {
+    const recipes = [r('C', '2026-01-01')];
+    expect(sortSourcesByRecentUse(['A', 'B', 'C', 'D'], recipes)).toEqual(['C', 'D', 'B', 'A']);
+  });
+
+  it('keeps reverse stored order for ties', () => {
+    const recipes = [r('A', '2026-01-01'), r('B', '2026-01-01')];
+    expect(sortSourcesByRecentUse(['A', 'B'], recipes)).toEqual(['B', 'A']);
+  });
+
+  it('treats a missing createdAt as oldest', () => {
+    const recipes = [r('A', undefined), r('B', '2020-01-01')];
+    expect(sortSourcesByRecentUse(['A', 'B'], recipes)).toEqual(['B', 'A']);
+  });
+
+  it('never suggests Unknown, in any case', () => {
+    const recipes = [r('Unknown', '2026-05-01'), r('A', '2026-01-01')];
+    expect(sortSourcesByRecentUse(['A', 'Unknown', 'unknown', 'UNKNOWN'], recipes)).toEqual(['A']);
+  });
+
+  it('matches case-insensitively and ignoring whitespace', () => {
+    const recipes = [r('bbc good food ', '2026-05-01'), r('A', '2026-01-01')];
+    expect(sortSourcesByRecentUse(['A', 'BBC Good Food'], recipes)).toEqual(['BBC Good Food', 'A']);
+  });
+
+  it('does not mutate its inputs and handles empties', () => {
+    const known = ['A', 'B'];
+    const recipes = [r('A', '2026-01-01')];
+    sortSourcesByRecentUse(known, recipes);
+    expect(known).toEqual(['A', 'B']);
+    expect(recipes).toHaveLength(1);
+    expect(sortSourcesByRecentUse([], [])).toEqual([]);
   });
 });

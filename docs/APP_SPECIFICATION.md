@@ -177,8 +177,9 @@ Extraction runs on **each user's own Google Gemini API key**:
 - **Serving-aware viewing:** on a recipe, a servings control rescales **every
   ingredient quantity live**, rendering results as friendly fractions (½, ¾, ⅓,
   etc.). The scaling ratio is applied from the recipe's base servings.
-- **Source memory & autocomplete:** sources the user has used before are
-  remembered and offered as autocomplete when entering new recipes.
+- **Source memory & autocomplete:** sources used before in this bistro are
+  remembered and offered as autocomplete, most recently used first (by the
+  newest recipe with that source). 'Unknown' is never suggested.
 - **Editing:** any recipe can be edited via the same structured form (sectioned
   ingredients + ordered steps), including multi-section ingredient grouping.
 - **Original preserved:** when a recipe was extracted from a photo, the app retains
