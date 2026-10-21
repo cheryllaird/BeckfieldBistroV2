@@ -25,7 +25,7 @@ issues, labels, sub-issues and PRs, but not GitHub Projects.
 - **Build:** the `build-ready` skill builds each `status:ready` issue as its own PR through
   `ship-feature`. A nightly Routine runs it for up to 3 issues; it also runs on request.
   Labels move `status:in-progress` → `status:in-review`. An issue that turns out ambiguous goes
-  back to `status:todo` with a question.
+  is labelled `status:needs-attention` with a question.
 - **Board:** a GitHub Project is only a view over the issues, grouped by label; agents never
   use the Projects API.
 
