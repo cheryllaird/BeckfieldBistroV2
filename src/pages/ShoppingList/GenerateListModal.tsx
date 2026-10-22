@@ -1,11 +1,11 @@
 import { useState } from 'react';
-import { X, Check, Package } from 'lucide-react';
+import { X, Check } from 'lucide-react';
 import { useStore } from '../../store';
 import { Button } from '../../components/ui/Button';
 import { ModalPortal } from '../../components/ui/ModalPortal';
 import { getRecipeIngredients, isoDate, getWeekDays } from '../../lib/utils';
-import { consolidateIngredients, findPantryMatch, type IngredientGroup } from '../../lib/ingredients';
-import type { ShoppingItem } from '../../types';
+import { consolidateIngredients, splitByPantry, type IngredientGroup, type PantrySkip } from '../../lib/ingredients';
+import { PantrySkipList } from './PantrySkipList';
 
 interface Props {
   onClose: () => void;
@@ -13,7 +13,6 @@ interface Props {
 
 export function GenerateListModal({ onClose }: Props) {
   const { mealEntries, recipes, pantryItems, categoryOverrides, shoppingItems, setShoppingItems } = useStore();
-  const isInCupboard = (item: ShoppingItem) => !!findPantryMatch(item.ingredientKey ?? item.name, pantryItems);
 
   const allWeekDays = [...getWeekDays(0), ...getWeekDays(1)];
   const plannedEntries = mealEntries.filter((e) =>
@@ -28,24 +27,36 @@ export function GenerateListModal({ onClose }: Props) {
     new Set(recipeEntries.map((e) => e.id))
   );
 
-  // The selected meals' ingredients, consolidated, split into what to buy and
-  // what the store cupboard already covers.
-  const groups: IngredientGroup[] = recipeEntries
+  // Cupboard staples the user has switched on for this generate only.
+  const [keepKeys, setKeepKeys] = useState<Set<string>>(new Set());
+
+  // The selected meals' ingredients, split into what to buy and what the store
+  // cupboard covers, then consolidated.
+  const splits = recipeEntries
     .filter((e) => selected.has(e.id))
     .flatMap((e) => {
       const recipe = recipes.find((r) => r.id === e.recipeId);
       if (!recipe) return [];
-      return [{
-        ingredients: getRecipeIngredients(recipe),
-        servings: e.servings,
-        originalServings: recipe.servings,
-        mealEntryId: e.id,
-        recipeTitle: recipe.title,
-      }];
+      return [{ entry: e, recipe, ...splitByPantry(getRecipeIngredients(recipe), pantryItems, keepKeys) }];
     });
-  const consolidated = consolidateIngredients(groups, categoryOverrides);
-  const toBuy = consolidated.filter((item) => !isInCupboard(item));
-  const pantrySkipCount = consolidated.length - toBuy.length;
+  const groups: IngredientGroup[] = splits.map(({ entry, recipe, toBuy }) => ({
+    ingredients: toBuy,
+    servings: entry.servings,
+    originalServings: recipe.servings,
+    mealEntryId: entry.id,
+    recipeTitle: recipe.title,
+  }));
+  const toBuy = consolidateIngredients(groups, categoryOverrides);
+  const skipped: PantrySkip[] = [
+    ...new Map(splits.flatMap((s) => s.skipped).map((skip) => [skip.key, skip])).values(),
+  ];
+
+  const setKept = (key: string, kept: boolean) =>
+    setKeepKeys((prev) => {
+      const next = new Set(prev);
+      if (kept) { next.add(key); } else { next.delete(key); }
+      return next;
+    });
 
   const toggle = (id: string) =>
     setSelected((prev) => {
@@ -127,14 +138,18 @@ export function GenerateListModal({ onClose }: Props) {
               })}
             </div>
           )}
+          {skipped.length > 0 && (
+            <div className="mt-3">
+              <PantrySkipList
+                skipped={skipped}
+                added={keepKeys}
+                onAdd={(skip) => setKept(skip.key, true)}
+                onRemove={(skip) => setKept(skip.key, false)}
+              />
+            </div>
+          )}
         </div>
 
-        {pantrySkipCount > 0 && (
-          <div className="px-4 pb-2 shrink-0 flex items-center gap-1.5 text-xs text-slate-400">
-            <Package size={11} />
-            {pantrySkipCount} ingredient{pantrySkipCount !== 1 ? 's' : ''} in store cupboard — will be skipped
-          </div>
-        )}
         <div className="p-4 border-t border-slate-100 flex gap-2 shrink-0">
           <Button variant="secondary" fullWidth onClick={onClose}>
             Cancel

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { Fragment, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Plus, UtensilsCrossed, MapPin, FileText, Minus, Trash2, ShoppingCart, CalendarDays, CalendarPlus, ChevronDown, Check, Users } from 'lucide-react';
 import { useStore } from '../../store';
@@ -7,6 +7,7 @@ import { categorize, mergeIntoShoppingList } from '../../lib/ingredients';
 import type { MealEntry, MealTime, ShoppingItem } from '../../types';
 import { PlanMealModal } from './PlanMealModal';
 import { ChangeDayModal } from './ChangeDayModal';
+import { MealPantrySkips } from './MealPantrySkips';
 import { ModalPortal } from '../../components/ui/ModalPortal';
 
 interface Props {
@@ -37,6 +38,8 @@ export function DayRow({ date }: Props) {
   const iso = isoDate(date);
   const [modalOpen, setModalOpen] = useState(false);
   const [changeDayEntry, setChangeDayEntry] = useState<MealEntry | null>(null);
+  // Meals added to the list this visit, whose skipped cupboard ingredients are listed.
+  const [skipsShownFor, setSkipsShownFor] = useState<Set<string>>(new Set());
 
   const dayEntries = mealEntries.filter((e) => e.date === iso);
   const sortedEntries = [...dayEntries].sort((a, b) => {
@@ -72,6 +75,7 @@ export function DayRow({ date }: Props) {
       const recipe = recipes.find((r) => r.id === entry.recipeId);
       if (!recipe) return;
       const scale = recipe.servings > 0 ? entry.servings / recipe.servings : 1;
+      setSkipsShownFor((prev) => new Set(prev).add(entry.id));
       setShoppingItems(
         mergeIntoShoppingList(shoppingItems, getRecipeIngredients(recipe), {
           scale,
@@ -129,8 +133,8 @@ export function DayRow({ date }: Props) {
       {sortedEntries.length > 0 && (
         <div className="flex flex-col gap-px">
           {sortedEntries.map((entry) => (
+            <Fragment key={entry.id}>
             <MealChip
-              key={entry.id}
               entry={entry}
               title={getRecipeTitle(entry)}
               coverImage={getRecipeCoverImage(entry)}
@@ -144,6 +148,8 @@ export function DayRow({ date }: Props) {
               onChangeDay={() => setChangeDayEntry(entry)}
               isAddedToList={isInShoppingList(entry.id)}
             />
+            {skipsShownFor.has(entry.id) && <MealPantrySkips entry={entry} />}
+            </Fragment>
           ))}
         </div>
       )}

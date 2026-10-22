@@ -1,4 +1,4 @@
-import type { PantryItem } from '../../types';
+import type { Ingredient, PantryItem } from '../../types';
 import { AMOUNT_UNIT_WORDS } from './amounts';
 import { normalizeIngredientName } from './canonicalName';
 
@@ -83,4 +83,38 @@ export function findPantryMatch(
   pantryItems: readonly PantryItem[]
 ): PantryItem | undefined {
   return pantryItems.find((p) => matchesPantryName(ingredientName, p.normalizedName));
+}
+
+/** A recipe ingredient left off the list because the store cupboard covers it. */
+export interface PantrySkip {
+  /** Identifies the ingredient for "add anyway" — the same key the list line gets. */
+  key: string;
+  ingredient: Ingredient;
+  pantryItem: PantryItem;
+}
+
+/**
+ * Splits a recipe's ingredients into what to buy and what the store cupboard
+ * covers. Both ways of adding a meal go through this, so they always agree.
+ * Ingredients whose key is in `keepKeys` are bought anyway; they still appear in
+ * `skipped` so the caller can show them as switched on.
+ */
+export function splitByPantry(
+  ingredients: readonly Ingredient[],
+  pantryItems: readonly PantryItem[],
+  keepKeys: ReadonlySet<string> = new Set(),
+): { toBuy: Ingredient[]; skipped: PantrySkip[] } {
+  const toBuy: Ingredient[] = [];
+  const skipped: PantrySkip[] = [];
+  for (const ingredient of ingredients) {
+    const pantryItem = findPantryMatch(ingredient.name, pantryItems);
+    if (!pantryItem) {
+      toBuy.push(ingredient);
+      continue;
+    }
+    const key = normalizeIngredientName(ingredient.name);
+    skipped.push({ key, ingredient, pantryItem });
+    if (keepKeys.has(key)) toBuy.push(ingredient);
+  }
+  return { toBuy, skipped };
 }
