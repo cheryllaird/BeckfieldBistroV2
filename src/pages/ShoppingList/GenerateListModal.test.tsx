@@ -1,6 +1,7 @@
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { MemoryRouter } from 'react-router-dom';
 import { GenerateListModal } from './GenerateListModal';
 import { useStore } from '../../store';
 import { makeIngredient, makeMealEntry, makePantryItem, makeRecipe, makeShoppingItem } from '../../test/factories';
@@ -35,7 +36,7 @@ const TODAY = new Date(2026, 2, 18, 12);
 
 function renderModal() {
   const onClose = vi.fn();
-  render(<GenerateListModal onClose={onClose} />);
+  render(<MemoryRouter><GenerateListModal onClose={onClose} /></MemoryRouter>);
   return { onClose };
 }
 
@@ -108,11 +109,30 @@ describe('GenerateListModal', () => {
     useStore.setState({ pantryItems: [makePantryItem({ name: 'salt', normalizedName: 'salt' })] });
     renderModal();
 
-    expect(screen.getByText(/1 ingredient in store cupboard/)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /1 ingredient in store cupboard — skipped/ })).toBeInTheDocument();
 
     await userEvent.click(screen.getByRole('button', { name: 'Generate (2)' }));
 
     expect(listNames()).not.toContain('10 g salt');
+  });
+
+  it('lists the skipped ingredients and adds the ones switched on to Immediate', async () => {
+    useStore.setState({ pantryItems: [makePantryItem({ name: 'sea salt', normalizedName: 'sea salt' })] });
+    renderModal();
+
+    await userEvent.click(screen.getByRole('button', { name: /in store cupboard — skipped/ }));
+    expect(screen.getByText('salt (cupboard: sea salt)')).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Add anyway: salt' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Generate (2)' }));
+
+    const salt = useStore.getState().shoppingItems.find((i) => i.name.endsWith('salt'));
+    expect(salt).toMatchObject({ name: '10 g salt', listType: 'immediate' });
+  });
+
+  it('shows no cupboard line when nothing matches', () => {
+    renderModal();
+
+    expect(screen.queryByText(/store cupboard/)).not.toBeInTheDocument();
   });
 
   it('replaces the Immediate list but leaves Stock up untouched', async () => {
