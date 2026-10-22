@@ -135,6 +135,7 @@ export interface PantryItem {
   normalizedName: string; // normalizeIngredientName(name) for matching
   category: ShoppingCategory;
   order?: number;
+  inStock?: boolean; // false = run out, so no longer skipped when meals are added; missing = in stock
   createdAt: string;
   updatedAt?: number; // epoch ms of last change; reconciles snapshots by recency
 }

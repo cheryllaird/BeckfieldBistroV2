@@ -243,3 +243,22 @@ describe('sources', () => {
     expect(firestore.saveKnownSources).toHaveBeenLastCalledWith('user-1', ['BBC Good Food']);
   });
 });
+
+describe('setPantryItemStock', () => {
+  it('stamps the item, keeps it in the cupboard and saves it', () => {
+    signedIn();
+    const salt = makePantryItem({ id: 'p1', updatedAt: 1 });
+    useStore.setState({ pantryItems: [salt] });
+
+    useStore.getState().setPantryItemStock('p1', false);
+
+    expect(useStore.getState().pantryItems[0]).toMatchObject({ id: 'p1', inStock: false, updatedAt: NOW });
+    expect(firestore.savePantryItem).toHaveBeenCalledWith('user-1', expect.objectContaining({ id: 'p1', inStock: false }));
+  });
+
+  it('ignores unknown items', () => {
+    signedIn();
+    useStore.getState().setPantryItemStock('nope', false);
+    expect(firestore.savePantryItem).not.toHaveBeenCalled();
+  });
+});
