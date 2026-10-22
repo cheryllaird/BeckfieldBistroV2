@@ -168,6 +168,62 @@ describe('shopping list', () => {
     expect(useStore.getState().shoppingItems.find((i) => i.id === 'c')?.orderAt).toBe(100);
   });
 
+  describe('moveShoppingItem', () => {
+    const inList = (id: string, order: number, listType: 'immediate' | 'stock-up', overrides = {}) =>
+      item(id, order, { listType, ...overrides });
+
+    it('moves a ticked recipe item to the end of the other list as a plain unticked manual item', () => {
+      signedIn();
+      useStore.setState({
+        shoppingItems: [
+          inList('flour', 0, 'immediate', {
+            checked: true,
+            ingredientKey: 'flour',
+            mealSources: [{ mealEntryId: 'm1', recipeTitle: 'Cake', scaledQuantity: 200, unit: 'g', ingredientName: 'flour' }],
+          }),
+          inList('salt', 1, 'stock-up'),
+          inList('rice', 2, 'stock-up', { checked: true }),
+        ],
+      });
+
+      useStore.getState().moveShoppingItem('flour', 'stock-up');
+
+      const items = useStore.getState().shoppingItems;
+      expect(items.map((i) => i.id)).toEqual(['salt', 'flour', 'rice']);
+      const moved = items[1];
+      expect(moved).toMatchObject({ name: 'flour', category: 'Dairy & Eggs', listType: 'stock-up', checked: false, manual: true });
+      expect(moved.mealSources).toBeUndefined();
+      expect(moved.ingredientKey).toBeUndefined();
+      expect(firestore.patchShoppingItems).toHaveBeenCalledOnce();
+    });
+
+    it('moves the other way, and keeps a matching item on the destination list', () => {
+      signedIn();
+      useStore.setState({
+        shoppingItems: [inList('milk', 0, 'stock-up'), inList('milk2', 1, 'immediate', { name: 'milk' })],
+      });
+
+      useStore.getState().moveShoppingItem('milk', 'immediate');
+
+      const items = useStore.getState().shoppingItems;
+      expect(items.map((i) => [i.id, i.listType])).toEqual([
+        ['milk2', 'immediate'],
+        ['milk', 'immediate'],
+      ]);
+    });
+
+    it('lands first when the destination list is empty, and ignores unknown ids', () => {
+      signedIn();
+      useStore.setState({ shoppingItems: [inList('a', 0, 'immediate')] });
+
+      useStore.getState().moveShoppingItem('nope', 'stock-up');
+      expect(firestore.patchShoppingItems).not.toHaveBeenCalled();
+
+      useStore.getState().moveShoppingItem('a', 'stock-up');
+      expect(useStore.getState().shoppingItems[0]).toMatchObject({ id: 'a', listType: 'stock-up' });
+    });
+  });
+
   it('clears all checked items in one batch', () => {
     signedIn();
     useStore.setState({
