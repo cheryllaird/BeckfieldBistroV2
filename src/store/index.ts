@@ -131,6 +131,7 @@ interface Store extends AppState {
   addPantryItem: (item: PantryItem) => void;
   updatePantryItem: (item: PantryItem) => void;
   removePantryItem: (id: string) => void;
+  setPantryItemStock: (id: string, inStock: boolean) => void;
   reorderPantryItems: (items: PantryItem[]) => void;
 
   // Auth actions
@@ -268,7 +269,10 @@ function stampChanged<T extends { id: string; updatedAt?: number }>(
 }
 
 const pantryContentEqual = (a: PantryItem, b: PantryItem) =>
-  a.name === b.name && a.normalizedName === b.normalizedName && a.category === b.category;
+  a.name === b.name &&
+  a.normalizedName === b.normalizedName &&
+  a.category === b.category &&
+  (a.inStock !== false) === (b.inStock !== false);
 
 // Tombstone docs already hard-deleted this session, so each is only purged
 // once no matter how many snapshots report it. Cleared on sign-in/out.
@@ -806,6 +810,15 @@ export const useStore = create<Store>()(
         set((s) => ({ pantryItems: s.pantryItems.filter((i) => i.id !== id) }));
         const scope = scopeOf(get());
         if (scope) deletePantryItemDoc(scope, id);
+      },
+
+      setPantryItemStock: (id, inStock) => {
+        const item = get().pantryItems.find((p) => p.id === id);
+        if (!item) return;
+        const stamped: PantryItem = { ...item, inStock, updatedAt: Date.now() };
+        set((s) => ({ pantryItems: s.pantryItems.map((p) => (p.id === id ? stamped : p)) }));
+        const scope = scopeOf(get());
+        if (scope) savePantryItem(scope, stamped);
       },
 
       reorderPantryItems: (items) => {

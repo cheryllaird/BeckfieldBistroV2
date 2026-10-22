@@ -43,3 +43,4 @@ Not needed for: bug fixes, UI tweaks, refactors that keep behaviour and structur
 | [0013](0013-terms-acceptance-gate.md) | Versioned Terms acceptance before using the app | Accepted |
 | [0014](0014-version-stamped-at-build.md) | Stamp the app version at build time | Accepted |
 | [0015](0015-scope-in-conversation-build-when-ready.md) | Scope issues in conversation, build them once the owner marks them ready | Accepted |
+| [0016](0016-pantry-in-stock-flag.md) | Track whether a store cupboard item is in stock | Accepted |
