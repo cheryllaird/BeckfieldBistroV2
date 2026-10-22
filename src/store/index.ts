@@ -64,6 +64,7 @@ import type {
   Recipe,
   MealEntry,
   ShoppingItem,
+  ShoppingListType,
   PantryItem,
   AppState,
   SharedRecipe,
@@ -124,6 +125,7 @@ interface Store extends AppState {
   toggleShoppingItem: (id: string) => void;
   addShoppingItem: (item: ShoppingItem) => void;
   removeShoppingItem: (id: string) => void;
+  moveShoppingItem: (id: string, to: ShoppingListType) => void;
   reorderShoppingItems: (items: ShoppingItem[]) => void;
   clearCheckedItems: () => void;
 
@@ -778,6 +780,31 @@ export const useStore = create<Store>()(
           set,
           get,
         ),
+
+      // Moves an item to the other list as a plain, unticked manual item,
+      // placed after the destination's unticked items (order is the array
+      // index, so position in the array is the order).
+      moveShoppingItem: (id, to) => {
+        const all = get().shoppingItems;
+        const item = all.find((i) => i.id === id);
+        if (!item) return;
+        const moved: ShoppingItem = {
+          ...item,
+          listType: to,
+          checked: false,
+          manual: true,
+          mealSources: undefined,
+          ingredientKey: undefined,
+        };
+        const rest = all.filter((i) => i.id !== id);
+        const inDest = (i: ShoppingItem) => (i.listType ?? 'immediate') === to;
+        let at = rest.findLastIndex((i) => inDest(i) && !i.checked) + 1;
+        if (at === 0) {
+          const firstDest = rest.findIndex(inDest);
+          at = firstDest === -1 ? rest.length : firstDest;
+        }
+        applyShoppingListUpdate([...rest.slice(0, at), moved, ...rest.slice(at)], set, get);
+      },
 
       reorderShoppingItems: (items) => applyShoppingListUpdate(items, set, get),
 
