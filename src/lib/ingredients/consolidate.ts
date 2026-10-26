@@ -127,8 +127,10 @@ export interface MergeOptions {
 
 /**
  * Adds one meal's ingredients to an existing list, folding each into the item
- * already there for it. Adding the same meal twice changes nothing, and store
- * cupboard staples are never added.
+ * already there for it. A meal merges only into unticked Immediate items; a
+ * ticked or Stock up match is left alone and a new line is added instead.
+ * Adding the same meal twice changes nothing, and store cupboard staples are
+ * never added.
  */
 export function mergeIntoShoppingList(
   existing: ShoppingItem[],
@@ -146,15 +148,21 @@ export function mergeIntoShoppingList(
   for (const [key, keyed] of groupByKey(lines)) {
     // Lists generated before consolidation went unit-agnostic carry keys of the
     // form "name__unit"; those items are still the same ingredient.
-    const index = result.findIndex(
-      (item) => item.ingredientKey === key || item.ingredientKey?.startsWith(`${key}__`)
-    );
+    const sameIngredient = (item: ShoppingItem) =>
+      item.ingredientKey === key || item.ingredientKey?.startsWith(`${key}__`);
     const newSources = mealEntryId ? keyed.map((line) => line.source) : [];
+
+    // Skip if this meal entry is already tracked as a source, even on a ticked
+    // or Stock up item.
+    if (mealEntryId && result.some((item) => sameIngredient(item) && item.mealSources?.some((s) => s.mealEntryId === mealEntryId))) continue;
+
+    // Ticked and Stock up items are never merged into: new quantity there would
+    // sit hidden under "In basket" or on the wrong list.
+    const canMerge = (item: ShoppingItem) => !item.checked && (item.listType ?? 'immediate') === 'immediate';
+    const index = result.findIndex((item) => sameIngredient(item) && canMerge(item));
 
     if (index >= 0) {
       const item = result[index];
-      // Skip if this meal entry is already tracked as a source
-      if (mealEntryId && item.mealSources?.some((s) => s.mealEntryId === mealEntryId)) continue;
       const sources = [...(item.mealSources ?? []), ...newSources];
       result[index] = {
         ...item,
@@ -166,8 +174,8 @@ export function mergeIntoShoppingList(
     }
 
     const name = labelFor(keyed);
-    // Fall back to text match for manually-added items without an ingredientKey
-    if (result.some((item) => !item.ingredientKey && item.name.toLowerCase() === name.toLowerCase())) continue;
+    // Fall back to text match for unticked manually-added items without an ingredientKey
+    if (result.some((item) => !item.ingredientKey && canMerge(item) && item.name.toLowerCase() === name.toLowerCase())) continue;
     result.push({
       id: generateId(),
       name,

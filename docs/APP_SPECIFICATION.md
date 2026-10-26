@@ -326,7 +326,9 @@ explicit list) belong to **Immediate**, so existing lists carry over unchanged.
 ### 7.2 Incremental building
 - Individual planned meals can be added to an existing list one at a time; their
   ingredients merge into what's already there (deduping by the same key logic, and
-  refusing to add the same meal twice).
+  refusing to add the same meal twice). A meal merges only into unticked Immediate
+  items; a matching ticked or Stock up item is left alone and a new unticked
+  Immediate line is added instead.
 - Items can also be **added manually** by typing; manual items are auto-categorised
   from their text and land on the list currently in view (Immediate or Stock up).
 - **Pantry exclusion applies to every recipe-derived add** (§8), not just

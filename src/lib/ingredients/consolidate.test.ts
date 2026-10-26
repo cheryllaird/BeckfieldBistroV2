@@ -195,6 +195,67 @@ describe('mergeIntoShoppingList', () => {
     mergeIntoShoppingList(existing, [makeIngredient()], { scale: 1 });
     expect(existing).toEqual([]);
   });
+
+  describe('ticked and Stock up matches', () => {
+    const flour = (overrides: Partial<ShoppingItem> = {}) =>
+      makeShoppingItem({
+        id: 'flour',
+        name: '200 g flour',
+        ingredientKey: 'flour',
+        mealSources: [{ mealEntryId: 'm1', recipeTitle: 'Cake', scaledQuantity: 200, unit: 'g', ingredientName: 'flour' }],
+        ...overrides,
+      });
+    const add = (existing: ShoppingItem[], mealEntryId = 'm2') =>
+      mergeIntoShoppingList(existing, [makeIngredient({ name: 'flour', quantity: 300 })], { scale: 1, mealEntryId, recipeTitle: 'Bread' });
+
+    it('adds a new line when the only match is ticked', () => {
+      const ticked = flour({ checked: true });
+      const result = add([ticked]);
+      expect(result).toHaveLength(2);
+      expect(result[0]).toEqual(ticked);
+      expect(result[1]).toMatchObject({ name: '300 g flour', checked: false, ingredientKey: 'flour' });
+      expect(result[1].mealSources).toHaveLength(1);
+    });
+
+    it('adds a new line when the only match is a ticked legacy name__unit item', () => {
+      const ticked = flour({ ingredientKey: 'flour__g', checked: true });
+      const result = add([ticked]);
+      expect(result).toHaveLength(2);
+      expect(result[0]).toEqual(ticked);
+      expect(result[1]).toMatchObject({ name: '300 g flour', checked: false });
+    });
+
+    it('merges into the unticked match when a ticked one also exists', () => {
+      const ticked = flour({ id: 'ticked', checked: true });
+      const open = flour({ id: 'open', mealSources: [{ mealEntryId: 'm0', recipeTitle: 'Pie', scaledQuantity: 100, unit: 'g', ingredientName: 'flour' }] });
+      const result = add([ticked, open]);
+      expect(result).toHaveLength(2);
+      expect(result[0]).toEqual(ticked);
+      expect(result[1]).toMatchObject({ id: 'open', name: '400 g flour' });
+    });
+
+    it('never merges into a Stock up item', () => {
+      const stock = flour({ listType: 'stock-up' });
+      const result = add([stock]);
+      expect(result).toHaveLength(2);
+      expect(result[0]).toEqual(stock);
+      expect(result[1]).toMatchObject({ name: '300 g flour', checked: false });
+      expect(result[1].listType ?? 'immediate').toBe('immediate');
+    });
+
+    it('is not swallowed by a ticked manual item with the same text', () => {
+      const manual = makeShoppingItem({ id: 'manual', name: '300 g flour', manual: true, checked: true });
+      const result = add([manual]);
+      expect(result).toHaveLength(2);
+      expect(result[0]).toEqual(manual);
+      expect(result[1]).toMatchObject({ name: '300 g flour', checked: false });
+    });
+
+    it('changes nothing when the same meal entry is added again, even if its line is ticked', () => {
+      const ticked = flour({ checked: true });
+      expect(add([ticked], 'm1')).toEqual([ticked]);
+    });
+  });
 });
 
 describe('consolidation of real recipe lines', () => {
