@@ -359,6 +359,10 @@ explicit list) belong to **Immediate**, so existing lists carry over unchanged.
   in the cupboard, shown dimmed. **Out-of-stock items are not skipped** when meals
   are added or a list is generated; switching back on makes them skipped again.
   Ticking the item off the shopping list does not restock it.
+- Each row shows a drag handle (reorder, plus **auto-sort by category**), the name
+  and category, the in-stock switch and a "more" button. Tapping the name or "more"
+  opens an **item sheet** to recategorise (one tap; remembered for that ingredient —
+  see §6.4) or **remove** the item.
 - Its main functional purpose: **recipe ingredients matching an in-stock pantry item are
   excluded from the shopping list** — whether the list is generated wholesale or a
   single meal is added to it (matched via the same normalised-name logic as §6, so

@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { PantryItemRow } from './PantryItemRow';
@@ -12,7 +12,13 @@ const initialState = useStore.getState();
 const salt = makePantryItem({ id: 'p1', name: 'salt', normalizedName: 'salt', category: 'Pantry' });
 
 // Reads the item from the store, as the page does, so the row sees stock changes.
-function Row() {
+function Row({
+  onCategoryChange = vi.fn(),
+  onRemove = vi.fn(),
+}: {
+  onCategoryChange?: (category: string) => void;
+  onRemove?: () => void;
+}) {
   const item = useStore((s) => s.pantryItems.find((p) => p.id === 'p1')!);
   const noop = vi.fn();
   return (
@@ -20,8 +26,8 @@ function Row() {
       item={item}
       dragIndex={0}
       isBeingDragged={false}
-      onCategoryChange={noop}
-      onRemove={noop}
+      onCategoryChange={onCategoryChange}
+      onRemove={onRemove}
       onDragStart={noop}
       onDragEnter={noop}
       onDragEnd={noop}
@@ -108,5 +114,40 @@ describe('PantryItemRow stock switch', () => {
 
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
     expect(stockOf()).toBe(true);
+  });
+});
+
+describe('PantryItemRow item sheet', () => {
+  it('opens from the item name and changes category with one tap, staying open', async () => {
+    const user = userEvent.setup();
+    const onCategoryChange = vi.fn();
+    render(<Row onCategoryChange={onCategoryChange} />);
+
+    await user.click(screen.getByRole('button', { name: 'Edit salt' }));
+    const sheet = within(screen.getByRole('dialog', { name: 'Edit store cupboard item' }));
+    expect(sheet.getByRole('button', { name: 'Pantry' })).toHaveAttribute('aria-pressed', 'true');
+
+    await user.click(sheet.getByRole('button', { name: 'Herbs & Spices' }));
+
+    expect(onCategoryChange).toHaveBeenCalledWith('Herbs & Spices');
+    expect(screen.getByRole('dialog')).toBeInTheDocument();
+  });
+
+  it('removes the item from the sheet opened by the more button, and closes it', async () => {
+    const user = userEvent.setup();
+    const onRemove = vi.fn();
+    render(<Row onRemove={onRemove} />);
+
+    await user.click(screen.getByRole('button', { name: 'More options for salt' }));
+    await user.click(screen.getByRole('button', { name: 'Remove from store cupboard' }));
+
+    expect(onRemove).toHaveBeenCalledOnce();
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+  });
+
+  it('keeps the stock switch on the row, outside the sheet', () => {
+    renderRow();
+    expect(switchEl()).toBeInTheDocument();
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
   });
 });
