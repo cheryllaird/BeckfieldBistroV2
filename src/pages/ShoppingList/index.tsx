@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useLayoutEffect } from 'react';
+import { useState, useRef, useEffect, useLayoutEffect, useCallback } from 'react';
 import { useSwipeNavigate } from '../../hooks/useSwipeNavigate';
 import { useNavigate } from 'react-router-dom';
 import {
@@ -22,6 +22,8 @@ import { categorize, formatQuantity, itemCategoryKey } from '../../lib/ingredien
 import type { MealSource, ShoppingCategory, ShoppingItem, ShoppingListType } from '../../types';
 import { GenerateListModal } from './GenerateListModal';
 import { EditItem } from './EditItem';
+import { ItemSheet } from './ItemSheet';
+import { UndoToast } from './UndoToast';
 import { CATEGORY_ORDER } from './categoryOrder';
 import { ModalPortal } from '../../components/ui/ModalPortal';
 
@@ -52,8 +54,10 @@ export function ShoppingListPage() {
   const [generateOpen, setGenerateOpen] = useState(false);
   const [manualItem, setManualItem] = useState('');
   const [history, setHistory] = useState<ShoppingItem[][]>([]);
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [editingValue, setEditingValue] = useState('');
+  const [sheetItemId, setSheetItemId] = useState<string | null>(null);
+  const [toast, setToast] = useState<{ id: number; message: string } | null>(null);
+  const clearToast = useCallback(() => setToast(null), []);
+  const showToast = (message: string) => setToast({ id: Date.now(), message });
   const [draggingItemId, setDraggingItemId] = useState<string | null>(null);
   const [dropTargetIndex, setDropTargetIndex] = useState<number | null>(null);
   const draggingItemIdRef = useRef<string | null>(null);
@@ -86,11 +90,22 @@ export function ShoppingListPage() {
     removeShoppingItem(id);
   };
 
-  const handleMove = (id: string) => {
+  // The item leaves the list in view, so close the sheet and say where it went.
+  const handleMove = (id: string, to: ShoppingListType) => {
+    const item = shoppingItems.find((i) => i.id === id);
+    if (!item || listTypeOf(item) === to) return;
+    pushHistory();
+    moveShoppingItem(id, to);
+    setSheetItemId(null);
+    showToast(`Moved to ${to === 'stock-up' ? 'Stock up' : 'Immediate'}`);
+  };
+
+  const handleSheetRemove = (id: string) => {
     const item = shoppingItems.find((i) => i.id === id);
     if (!item) return;
-    pushHistory();
-    moveShoppingItem(id, listTypeOf(item) === 'immediate' ? 'stock-up' : 'immediate');
+    handleRemove(id);
+    setSheetItemId(null);
+    showToast(`Removed ${item.name}`);
   };
 
   const handleUndo = () => {
@@ -126,27 +141,9 @@ export function ShoppingListPage() {
     setShoppingItems([newItem, ...shoppingItems]);
   };
 
-  const handleEditStart = (item: ShoppingItem) => {
-    setEditingId(item.id);
-    setEditingValue(item.name);
-  };
-
-  const handleEditSave = (id: string) => {
-    if (editingValue.trim()) {
-      pushHistory();
-      setShoppingItems(
-        shoppingItems.map((item) =>
-          item.id === id ? { ...item, name: editingValue.trim() } : item
-        )
-      );
-    }
-    setEditingId(null);
-    setEditingValue('');
-  };
-
-  const handleEditCancel = () => {
-    setEditingId(null);
-    setEditingValue('');
+  const handleRename = (id: string, name: string) => {
+    pushHistory();
+    setShoppingItems(shoppingItems.map((item) => (item.id === id ? { ...item, name } : item)));
   };
 
   const handleCategoryChange = (id: string, category: ShoppingCategory) => {
@@ -226,6 +223,9 @@ export function ShoppingListPage() {
     items.splice(dropTargetIndex, 0, moved);
     return items;
   })();
+
+  const sheetItem = sheetItemId ? shoppingItems.find((i) => i.id === sheetItemId) : undefined;
+  const closeSheet = useCallback(() => setSheetItemId(null), []);
 
   const activeIndex = LIST_TABS.findIndex((t) => t.id === activeList);
 
@@ -405,15 +405,7 @@ export function ShoppingListPage() {
               isDraggable={true}
               dragIndex={index}
               isBeingDragged={item.id === draggingItemId}
-              isEditing={editingId === item.id}
-              editingValue={editingValue}
-              onEditStart={() => handleEditStart(item)}
-              onEditChange={setEditingValue}
-              onEditSave={() => handleEditSave(item.id)}
-              onEditCancel={handleEditCancel}
-              onRemove={() => handleRemove(item.id)}
-              onMove={() => handleMove(item.id)}
-              onCategoryChange={(cat) => handleCategoryChange(item.id, cat)}
+              onOpen={() => setSheetItemId(item.id)}
               onDragStart={() => handleDragStart(item.id)}
               onDragEnter={() => handleDragEnter(index)}
               onDragEnd={handleDragEnd}
@@ -459,15 +451,7 @@ export function ShoppingListPage() {
                 item={item}
                 isDraggable={false}
                 isBeingDragged={false}
-                isEditing={editingId === item.id}
-                editingValue={editingValue}
-                onEditStart={() => handleEditStart(item)}
-                onEditChange={setEditingValue}
-                onEditSave={() => handleEditSave(item.id)}
-                onEditCancel={handleEditCancel}
-                onRemove={() => handleRemove(item.id)}
-              onMove={() => handleMove(item.id)}
-                onCategoryChange={(cat) => handleCategoryChange(item.id, cat)}
+                onOpen={() => setSheetItemId(item.id)}
                 onDragStart={() => {}}
                 onDragEnter={() => {}}
                 onDragEnd={() => {}}
@@ -485,6 +469,20 @@ export function ShoppingListPage() {
       </div>
 
       {generateOpen && <GenerateListModal onClose={() => setGenerateOpen(false)} />}
+      {sheetItem && (
+        <ItemSheet
+          key={sheetItem.id}
+          item={sheetItem}
+          onRename={(name) => handleRename(sheetItem.id, name)}
+          onCategoryChange={(cat) => handleCategoryChange(sheetItem.id, cat)}
+          onMove={(to) => handleMove(sheetItem.id, to)}
+          onRemove={() => handleSheetRemove(sheetItem.id)}
+          onClose={closeSheet}
+        />
+      )}
+      {toast && (
+        <UndoToast key={toast.id} message={toast.message} onUndo={handleUndo} onDismiss={clearToast} />
+      )}
     </div>
   );
 }

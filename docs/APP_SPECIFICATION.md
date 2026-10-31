@@ -307,8 +307,8 @@ with tabs (or a left/right swipe on the list, with a sliding transition)**: an
 top up later. Each list keeps its own items, progress, and
 "In basket" group, and every shopping action — adding, checking off, reordering,
 auto-sorting, and clearing — acts only on the list currently in view; the other
-list is left untouched — the one exception is **moving an item** (edit mode,
-"Move to Stock up" / "Move to Immediate"), which takes it to the other list as an
+list is left untouched — the one exception is **moving an item** (the List
+switch in the item sheet), which takes it to the other list as an
 unticked manual item (no recipe link) at the bottom of that list's unticked items;
 a matching item already there is kept alongside it, not merged. Items that predate this split (and any item without an
 explicit list) belong to **Immediate**, so existing lists carry over unchanged.
@@ -340,9 +340,11 @@ explicit list) belong to **Immediate**, so existing lists carry over unchanged.
 ### 7.3 Shopping & curating
 - **Check-off** with running progress (checked/total); checked items collect in an
   "In basket" group.
-- **Curate:** rename items, recategorise them (remembered for that ingredient
-  from then on — see §6.4), reorder them
-  (including one-tap **auto-sort by category**), and remove them.
+- **Curate:** in edit mode each row has only a drag handle (reorder, including
+  one-tap **auto-sort by category**); tapping the item opens an **item sheet**
+  where changes apply instantly: rename, recategorise (remembered for that
+  ingredient from then on — see §6.4), switch list (Immediate / Stock up), and
+  remove. Moving or removing shows a short "Moved to … / Removed … · Undo" toast.
 - **Undo:** list-changing actions (check, remove, edit, sort, reorder, move to the
   other list) are revertible.
 - **Meal-source insight:** any generated item can reveal the recipes and scaled
