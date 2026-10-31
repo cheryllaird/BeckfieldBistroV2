@@ -150,9 +150,9 @@ export function PantryItemRow({
         <Trash2 size={14} />
       </button>
     </div>
-      {!inStock && !askingWhere && (
+      {!inStock && !askingWhere && alreadyOnList && (
         <p role="status" className="px-3 pt-1 text-xs text-slate-400">
-          Out of stock{alreadyOnList ? ' — Already on your list' : ''}
+          Already on your list
         </p>
       )}
       {askingWhere && (
