@@ -29,7 +29,7 @@ All of lint, typecheck, test and build must pass before you open or update a PR.
 | Legal pages | `src/legal/*.md`, `src/pages/Legal/` | Terms, Privacy, Copyright; version in `src/lib/legal.ts` (ADR 0013) |
 | UI primitives | `src/components/ui/` | Reuse `Button`, `Card`, `Badge`, `Input` |
 | Layout | `src/components/layout/` | `AppLayout`, `Header`, `BottomNav` |
-| Client services | `src/lib/` | `firestore.ts` (all Firestore reads/writes + listeners), `bistro.ts`, `account.ts`, `recipeExtraction.ts`, `shoppingSync.ts`, `networkStatus.ts`, `idbStorage.ts` |
+| Client services | `src/lib/` | `firestore.ts` (all Firestore reads/writes + listeners), `apiClient.ts` (`authedFetch` for every `api/` call; readable network errors), `bistro.ts`, `account.ts`, `recipeExtraction.ts`, `shoppingSync.ts`, `networkStatus.ts`, `idbStorage.ts` |
 | Ingredient engine | `src/lib/ingredients/` | UK names, merge keys, amounts, categories, consolidation (ADR 0009) |
 | State | `src/store/index.ts` | Zustand, persisted to IndexedDB |
 | Types | `src/types/index.ts` | Shared domain types |

@@ -4,6 +4,7 @@ import { useStore } from '../../store';
 import { Card } from '../../components/ui/Card';
 import { Input } from '../../components/ui/Input';
 import { Button } from '../../components/ui/Button';
+import { NetworkError } from '../../lib/apiClient';
 
 export function ApiKeyCard() {
   const { hasGeminiApiKey, setGeminiApiKey } = useStore();
@@ -20,8 +21,10 @@ export function ApiKeyCard() {
       await setGeminiApiKey(keyInput.trim());
       setKeyInput('');
       setSaved(true);
-    } catch {
-      setError("Your key wasn't saved. Check it's copied in full and try again.");
+    } catch (e) {
+      setError(
+        e instanceof NetworkError ? e.message : "Your key wasn't saved. Check it's copied in full and try again.",
+      );
     } finally {
       setIsSaving(false);
     }

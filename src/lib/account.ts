@@ -2,6 +2,7 @@ import { reauthenticateWithPopup } from 'firebase/auth';
 import { clearIndexedDbPersistence, terminate } from 'firebase/firestore';
 import { auth, db, googleProvider } from './firebase';
 import { authErrorMessage } from './authErrors';
+import { authedFetch } from './apiClient';
 
 // Client for /api/delete-account. The server only deletes an account whose
 // token shows a sign-in in the last few minutes, so this re-authenticates
@@ -37,11 +38,7 @@ export async function deleteAccountOnServer(): Promise<void> {
     throw new Error(authErrorMessage(code));
   }
 
-  const token = await user.getIdToken(true);
-  const res = await fetch('/api/delete-account', {
-    method: 'POST',
-    headers: { Authorization: `Bearer ${token}` },
-  });
+  const res = await authedFetch(user, '/api/delete-account', { method: 'POST' }, true);
   const body = (await res.json().catch(() => ({}))) as { error?: string };
   if (!res.ok) throw new Error(body.error ?? "Your account wasn't deleted. Check your connection and try again.");
 }

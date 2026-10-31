@@ -13,6 +13,8 @@ import {
 import { db, auth } from './firebase';
 import type { Recipe, MealEntry, ShoppingItem, PantryItem, SharedRecipe, CategoryOverride, CategoryOverrideLog, Bistro } from '../types';
 import type { ShoppingItemPatch } from './shoppingSync';
+import type { User } from 'firebase/auth';
+import { authedFetch } from './apiClient';
 
 // ── helpers ──────────────────────────────────────────────────────────────────
 
@@ -458,10 +460,9 @@ export function saveDefaultBistro(uid: string, bistroId: string | null): void {
 
 export async function saveGeminiApiKey(apiKey: string): Promise<boolean> {
   if (!auth?.currentUser) throw new Error('Not authenticated');
-  const token = await auth.currentUser.getIdToken();
-  const res = await fetch('/api/save-gemini-key', {
+  const res = await authedFetch(auth.currentUser, '/api/save-gemini-key', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ apiKey }),
   });
   if (!res.ok) {
@@ -476,16 +477,15 @@ export async function saveGeminiApiKey(apiKey: string): Promise<boolean> {
 // that the feature works without having to deploy Firestore security rules for
 // the top-level sharedRecipes collection.
 
-async function sharingToken(): Promise<string> {
+function sharingUser(): User {
   if (!auth?.currentUser) throw new Error('Not authenticated');
-  return auth.currentUser.getIdToken();
+  return auth.currentUser;
 }
 
 export async function sendRecipeShare(share: Omit<SharedRecipe, 'id'>): Promise<string> {
-  const token = await sharingToken();
-  const res = await fetch('/api/share-recipe', {
+  const res = await authedFetch(sharingUser(), '/api/share-recipe', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(share),
   });
   if (!res.ok) {
@@ -501,8 +501,7 @@ export function subscribeToIncomingShares(
 ): () => void {
   if (!auth?.currentUser) return () => {};
   let cancelled = false;
-  auth.currentUser.getIdToken()
-    .then((token) => fetch('/api/share-recipe', { headers: { Authorization: `Bearer ${token}` } }))
+  authedFetch(auth.currentUser, '/api/share-recipe')
     .then((r) => (r.ok ? r.json() : { shares: [] }) as Promise<{ shares: SharedRecipe[] }>)
     .then((data) => { if (!cancelled) callback(data.shares ?? []); })
     .catch(() => { if (!cancelled) callback([]); });
@@ -510,10 +509,8 @@ export function subscribeToIncomingShares(
 }
 
 async function deleteShare(shareId: string): Promise<void> {
-  const token = await sharingToken();
-  await fetch(`/api/share-recipe?id=${encodeURIComponent(shareId)}`, {
+  await authedFetch(sharingUser(), `/api/share-recipe?id=${encodeURIComponent(shareId)}`, {
     method: 'DELETE',
-    headers: { Authorization: `Bearer ${token}` },
   });
 }
 

@@ -1,4 +1,5 @@
 import { auth } from './firebase';
+import { authedFetch } from './apiClient';
 import type { Recipe } from '../types';
 
 export class RecipeExtractionError extends Error {
@@ -67,19 +68,14 @@ export async function extractRecipeFromImage(
     throw new RecipeExtractionError('Add your Gemini API key in Settings to extract recipes.');
   }
 
-  const token = await auth.currentUser.getIdToken();
-
   // Resize before sending — big enough for server-side OCR accuracy, small
   // enough (≲2.7 MB as base64) to stay under the endpoint's 8mb body limit
   const resized = await resizeImage(dataUrl, { maxDimension: 2048, quality: 0.9 });
   const { base64, mediaType } = parseDataUrl(resized);
 
-  const response = await fetch('/api/extract-recipe', {
+  const response = await authedFetch(auth.currentUser, '/api/extract-recipe', {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${token}`,
-    },
+    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ base64, mediaType }),
   });
 
@@ -104,14 +100,9 @@ export async function extractRecipeFromUrl(
     throw new RecipeExtractionError('Add your Gemini API key in Settings to extract recipes.');
   }
 
-  const token = await auth.currentUser.getIdToken();
-
-  const response = await fetch('/api/extract-recipe', {
+  const response = await authedFetch(auth.currentUser, '/api/extract-recipe', {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${token}`,
-    },
+    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ url }),
   });
 

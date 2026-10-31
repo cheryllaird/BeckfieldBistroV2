@@ -5,6 +5,7 @@ import { useStore } from '../../store';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
 import { generateId, sortSourcesByRecentUse } from '../../lib/utils';
+import { NetworkError } from '../../lib/apiClient';
 import { extractRecipeFromImage, extractRecipeFromUrl, resizeImage, ORIGINAL_IMAGE_RESIZE, RecipeExtractionError } from '../../lib/recipeExtraction';
 import type { Recipe } from '../../types';
 import { RecipeForm } from './RecipeForm';
@@ -65,7 +66,7 @@ export function NewRecipePage() {
       setMode('manual');
     } catch (err) {
       setExtractError(
-        err instanceof RecipeExtractionError
+        err instanceof RecipeExtractionError || err instanceof NetworkError
           ? err.message
           : "Couldn't read a recipe from that link. Check it opens in your browser, or add the recipe manually."
       );
@@ -99,7 +100,7 @@ export function NewRecipePage() {
       setMode('manual');
     } catch (err) {
       setExtractError(
-        err instanceof RecipeExtractionError
+        err instanceof RecipeExtractionError || err instanceof NetworkError
           ? err.message
           : "Couldn't read a recipe from that photo. Check your API key in Settings, or try a clearer photo."
       );
