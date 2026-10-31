@@ -264,6 +264,22 @@ describe('diffShoppingLists', () => {
     ]);
   });
 
+  it('keeps a move to the other list and a tick made on another device', () => {
+    const server = base({ checked: true, checkedAt: 300 }); // ticked elsewhere
+    const original = base();
+    const { patches } = diffShoppingLists(
+      [original],
+      [{ ...original, listType: 'stock-up', manual: true }],
+      CLOCK,
+      {},
+    );
+
+    const { merged } = mergeItem(server, applyPatch(original, patches[0]));
+
+    expect(merged).toMatchObject({ listType: 'stock-up', manual: true, checked: true });
+    expect(patches[0]).not.toHaveProperty('checked');
+  });
+
   it('only bumps orderAt for items whose position actually moved', () => {
     const a = base({ id: 'a', order: 0 });
     const b = base({ id: 'b', order: 1 });

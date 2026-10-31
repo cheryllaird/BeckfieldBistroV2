@@ -307,7 +307,10 @@ with tabs (or a left/right swipe on the list, with a sliding transition)**: an
 top up later. Each list keeps its own items, progress, and
 "In basket" group, and every shopping action — adding, checking off, reordering,
 auto-sorting, and clearing — acts only on the list currently in view; the other
-list is left untouched. Items that predate this split (and any item without an
+list is left untouched — the one exception is **moving an item** (the List
+switch in the item sheet), which takes it to the other list as an
+unticked manual item (no recipe link) at the bottom of that list's unticked items;
+a matching item already there is kept alongside it, not merged. Items that predate this split (and any item without an
 explicit list) belong to **Immediate**, so existing lists carry over unchanged.
 
 ### 7.1 Generation from the plan
@@ -330,12 +333,14 @@ explicit list) belong to **Immediate**, so existing lists carry over unchanged.
 ### 7.2 Incremental building
 - Individual planned meals can be added to an existing list one at a time; their
   ingredients merge into what's already there (deduping by the same key logic, and
-  refusing to add the same meal twice).
+  refusing to add the same meal twice). A meal merges only into unticked Immediate
+  items; a matching ticked or Stock up item is left alone and a new unticked
+  Immediate line is added instead.
 - Items can also be **added manually** by typing; manual items are auto-categorised
   from their text and land on the list currently in view (Immediate or Stock up).
 - **Pantry exclusion applies to every recipe-derived add** (§8), not just
-  generation: adding a single planned meal still takes one tap and skips its store
-  cupboard ingredients, but the same "N ingredients in store cupboard — skipped"
+  generation: adding a single planned meal still takes one tap and skips its in-stock
+  store cupboard ingredients, but the same "N ingredients in store cupboard — skipped"
   line then appears under the meal (nothing shows when nothing matched, and it
   still shows if every ingredient was skipped). **Add anyway** puts just that
   ingredient on the Immediate list with the meal as its source, without duplicating
@@ -346,11 +351,13 @@ explicit list) belong to **Immediate**, so existing lists carry over unchanged.
 ### 7.3 Shopping & curating
 - **Check-off** with running progress (checked/total); checked items collect in an
   "In basket" group.
-- **Curate:** rename items, recategorise them (remembered for that ingredient
-  from then on — see §6.4), reorder them
-  (including one-tap **auto-sort by category**), and remove them.
-- **Undo:** list-changing actions (check, remove, edit, sort, reorder) are
-  revertible.
+- **Curate:** in edit mode each row has only a drag handle (reorder, including
+  one-tap **auto-sort by category**); tapping the item opens an **item sheet**
+  where changes apply instantly: rename, recategorise (remembered for that
+  ingredient from then on — see §6.4), switch list (Immediate / Stock up), and
+  remove. Moving or removing shows a short "Moved to … / Removed … · Undo" toast.
+- **Undo:** list-changing actions (check, remove, edit, sort, reorder, move to the
+  other list) are revertible.
 - **Meal-source insight:** any generated item can reveal the recipes and scaled
   quantities behind it.
 
@@ -360,7 +367,19 @@ explicit list) belong to **Immediate**, so existing lists carry over unchanged.
 
 - A user-maintained list of **staples always in stock** (oils, spices, flour,
   etc.), each auto-categorised.
-- Its sole functional purpose: **recipe ingredients matching a pantry item are
+- Each item has an **in stock** switch (default on; items from before the switch
+  count as in stock). Switching an item **off** asks whether to **Add to Stock up**,
+  **Add to Immediate** or **Skip**: the first two put an unticked item with the same
+  name and category at the top of that list (or say "Already on your list" and add
+  nothing if an unticked match is on either list); Skip adds nothing. The item stays
+  in the cupboard, shown dimmed. **Out-of-stock items are not skipped** when meals
+  are added or a list is generated; switching back on makes them skipped again.
+  Ticking the item off the shopping list does not restock it.
+- Each row shows a drag handle (reorder, plus **auto-sort by category**), the name
+  and category, the in-stock switch and a "more" button. Tapping the name or "more"
+  opens an **item sheet** to recategorise (one tap; remembered for that ingredient —
+  see §6.4) or **remove** the item.
+- Its main functional purpose: **recipe ingredients matching an in-stock pantry item are
   excluded from the shopping list** — whether the list is generated wholesale or a
   single meal is added to it (matched via the same normalised-name logic as §6, so
   "olive oil" in the pantry suppresses "extra-virgin olive oil" from the list).
@@ -513,8 +532,8 @@ appears on another without manual refresh. The functional guarantees:
 | Ingredient engine | Unit + name normalisation, synonym folding, quantity consolidation |
 | Category detection | Auto-sorts every ingredient into 10 grocery aisles |
 | Shopping generation | Scales + consolidates planned meals into one list |
-| Dual shopping lists | Separate Immediate and Stock up lists, switchable by tab and managed independently |
-| Pantry exclusion | Omits staples the user already owns, lists what was skipped, and lets the user add any back |
+| Dual shopping lists | Separate Immediate and Stock up lists, switchable by tab and managed independently; items can be moved between them in edit mode |
+| Pantry exclusion | Omits staples the user already owns, lists what was skipped, and lets the user add any back; items marked out of stock are bought again and can be added to either list in one step |
 | Meal-source tracking | Shows which meals drove each shopping item; idempotent adds |
 | Recipe sharing | Single/bulk copy-share to another user by email, with an inbox |
 | Shared bistros | Multi-member libraries; invite by email, switch from the menu, own bistro always kept |

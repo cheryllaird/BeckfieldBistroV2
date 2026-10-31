@@ -5,4 +5,11 @@ export { normalizeIngredientName } from './canonicalName';
 export { categorize, defaultCategory } from './categorize';
 export { categoryKey, itemCategoryKey } from './categoryOverrides';
 export { consolidateIngredients, mergeIntoShoppingList, type IngredientGroup } from './consolidate';
-export { splitByPantry, type PantrySkip } from './pantry';
+export {
+  findPantryMatch,
+  isInStock,
+  isOnShoppingList,
+  shoppingItemFromPantry,
+  splitByPantry,
+  type PantrySkip,
+} from './pantry';

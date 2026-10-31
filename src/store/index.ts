@@ -64,6 +64,7 @@ import type {
   Recipe,
   MealEntry,
   ShoppingItem,
+  ShoppingListType,
   PantryItem,
   AppState,
   SharedRecipe,
@@ -124,6 +125,7 @@ interface Store extends AppState {
   toggleShoppingItem: (id: string) => void;
   addShoppingItem: (item: ShoppingItem) => void;
   removeShoppingItem: (id: string) => void;
+  moveShoppingItem: (id: string, to: ShoppingListType) => void;
   reorderShoppingItems: (items: ShoppingItem[]) => void;
   clearCheckedItems: () => void;
 
@@ -131,6 +133,7 @@ interface Store extends AppState {
   addPantryItem: (item: PantryItem) => void;
   updatePantryItem: (item: PantryItem) => void;
   removePantryItem: (id: string) => void;
+  setPantryItemStock: (id: string, inStock: boolean) => void;
   reorderPantryItems: (items: PantryItem[]) => void;
 
   // Auth actions
@@ -268,7 +271,10 @@ function stampChanged<T extends { id: string; updatedAt?: number }>(
 }
 
 const pantryContentEqual = (a: PantryItem, b: PantryItem) =>
-  a.name === b.name && a.normalizedName === b.normalizedName && a.category === b.category;
+  a.name === b.name &&
+  a.normalizedName === b.normalizedName &&
+  a.category === b.category &&
+  (a.inStock !== false) === (b.inStock !== false);
 
 // Tombstone docs already hard-deleted this session, so each is only purged
 // once no matter how many snapshots report it. Cleared on sign-in/out.
@@ -779,6 +785,31 @@ export const useStore = create<Store>()(
           get,
         ),
 
+      // Moves an item to the other list as a plain, unticked manual item,
+      // placed after the destination's unticked items (order is the array
+      // index, so position in the array is the order).
+      moveShoppingItem: (id, to) => {
+        const all = get().shoppingItems;
+        const item = all.find((i) => i.id === id);
+        if (!item) return;
+        const moved: ShoppingItem = {
+          ...item,
+          listType: to,
+          checked: false,
+          manual: true,
+          mealSources: undefined,
+          ingredientKey: undefined,
+        };
+        const rest = all.filter((i) => i.id !== id);
+        const inDest = (i: ShoppingItem) => (i.listType ?? 'immediate') === to;
+        let at = rest.findLastIndex((i) => inDest(i) && !i.checked) + 1;
+        if (at === 0) {
+          const firstDest = rest.findIndex(inDest);
+          at = firstDest === -1 ? rest.length : firstDest;
+        }
+        applyShoppingListUpdate([...rest.slice(0, at), moved, ...rest.slice(at)], set, get);
+      },
+
       reorderShoppingItems: (items) => applyShoppingListUpdate(items, set, get),
 
       clearCheckedItems: () =>
@@ -806,6 +837,15 @@ export const useStore = create<Store>()(
         set((s) => ({ pantryItems: s.pantryItems.filter((i) => i.id !== id) }));
         const scope = scopeOf(get());
         if (scope) deletePantryItemDoc(scope, id);
+      },
+
+      setPantryItemStock: (id, inStock) => {
+        const item = get().pantryItems.find((p) => p.id === id);
+        if (!item) return;
+        const stamped: PantryItem = { ...item, inStock, updatedAt: Date.now() };
+        set((s) => ({ pantryItems: s.pantryItems.map((p) => (p.id === id ? stamped : p)) }));
+        const scope = scopeOf(get());
+        if (scope) savePantryItem(scope, stamped);
       },
 
       reorderPantryItems: (items) => {
