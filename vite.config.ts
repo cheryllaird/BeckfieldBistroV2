@@ -40,7 +40,7 @@ export default defineConfig({
       manifest: {
         name: 'BeckfieldBistro',
         short_name: 'BeckfieldBistro',
-        description: 'Your AI-powered culinary companion',
+        description: 'From plan to plate. Yes, chef.',
         theme_color: '#111111',
         background_color: '#ffffff',
         display: 'standalone',

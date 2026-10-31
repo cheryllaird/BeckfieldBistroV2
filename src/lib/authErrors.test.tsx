@@ -9,7 +9,7 @@ describe('authErrorMessage', () => {
 
   it.each([
     ['auth/operation-not-allowed', /not enabled/],
-    ['auth/network-request-failed', /Network error/],
+    ['auth/network-request-failed', /Couldn't connect/],
     ['auth/too-many-requests', /Too many/],
   ])('%s has a friendly message', (code, pattern) => {
     expect(authErrorMessage(code)).toMatch(pattern);

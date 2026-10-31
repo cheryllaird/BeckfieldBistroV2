@@ -157,7 +157,7 @@ export function RecipeForm({ initial, knownSources, onSave, onCancel, isSaving }
       {/* Basic info */}
       <section className="flex flex-col gap-3">
         <Input
-          label="Recipe Title *"
+          label="Recipe title *"
           placeholder="e.g. Spaghetti Carbonara"
           value={title}
           onChange={(e) => setTitle(e.target.value)}
@@ -169,7 +169,7 @@ export function RecipeForm({ initial, knownSources, onSave, onCancel, isSaving }
 
         {/* Optional link to go with the source — e.g. a book plus its listing */}
         <Input
-          label="Source Link"
+          label="Source link"
           type="url"
           inputMode="url"
           placeholder="https://cooking.nytimes.com/recipes/…"
@@ -189,14 +189,14 @@ export function RecipeForm({ initial, knownSources, onSave, onCancel, isSaving }
             error={errors.servings}
           />
           <Input
-            label="Prep Time"
+            label="Prep time"
             type="text"
             placeholder="e.g. 15 mins"
             value={prepTime}
             onChange={(e) => setPrepTime(e.target.value)}
           />
           <Input
-            label="Total Time"
+            label="Total time"
             type="text"
             placeholder="e.g. 45 mins"
             value={totalTime}
@@ -206,7 +206,7 @@ export function RecipeForm({ initial, knownSources, onSave, onCancel, isSaving }
 
         {/* Cover Image */}
         <div className="flex flex-col gap-2">
-          <span className="text-xs font-medium text-slate-600 uppercase tracking-wide">Cover Image</span>
+          <span className="text-xs font-medium text-slate-600 uppercase tracking-wide">Cover image</span>
 
           {coverImage && (
             <div className="relative">
@@ -249,7 +249,7 @@ export function RecipeForm({ initial, knownSources, onSave, onCancel, isSaving }
               {coverPhotoLoading ? (
                 <><Loader size={13} className="animate-spin" /> Processing…</>
               ) : (
-                coverImage ? 'Replace Photo / URL' : 'Add Cover Photo / URL'
+                coverImage ? 'Replace photo / URL' : 'Add cover photo / URL'
               )}
             </Button>
           )}
@@ -267,7 +267,7 @@ export function RecipeForm({ initial, knownSources, onSave, onCancel, isSaving }
                   setShowCoverCamera(true);
                 }}
               >
-                <Camera size={13} /> Take Photo
+                <Camera size={13} /> Take photo
               </Button>
               <Button
                 type="button"
@@ -390,13 +390,13 @@ export function RecipeForm({ initial, knownSources, onSave, onCancel, isSaving }
                 </div>
               ))}
               <Button variant="ghost" size="sm" onClick={() => addIngredient(sIdx)}>
-                <Plus size={13} /> Add Ingredient
+                <Plus size={13} /> Add ingredient
               </Button>
             </div>
           </div>
         ))}
         <Button variant="ghost" size="sm" onClick={addSection}>
-          <Plus size={13} /> Add Section
+          <Plus size={13} /> Add section
         </Button>
       </section>
 
@@ -425,7 +425,7 @@ export function RecipeForm({ initial, knownSources, onSave, onCancel, isSaving }
           </div>
         ))}
         <Button variant="ghost" size="sm" onClick={addStep}>
-          <Plus size={13} /> Add Step
+          <Plus size={13} /> Add step
         </Button>
       </section>
 
@@ -438,7 +438,7 @@ export function RecipeForm({ initial, knownSources, onSave, onCancel, isSaving }
           {isSaving ? (
             <><Loader size={14} className="animate-spin" /> Saving…</>
           ) : (
-            'Save Recipe'
+            'Save recipe'
           )}
         </Button>
       </div>

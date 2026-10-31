@@ -32,7 +32,7 @@ export function CameraCapture({ onCapture, onCancel }: Props) {
         if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
           setError('Camera permission denied. Please allow camera access in your browser settings.');
         } else {
-          setError('Could not access camera. Try uploading a photo from your gallery instead.');
+          setError("Can't open the camera. Choose a photo from your gallery instead.");
         }
       });
 
@@ -62,7 +62,7 @@ export function CameraCapture({ onCapture, onCancel }: Props) {
         onClick={onCancel}
         className="px-6 py-2.5 bg-white text-black rounded-full text-sm font-medium"
       >
-        Go Back
+        Go back
       </button>
     </div>
   ) : (

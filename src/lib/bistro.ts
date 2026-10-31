@@ -1,4 +1,5 @@
 import { auth } from './firebase';
+import { authedFetch } from './apiClient';
 import type { Bistro, BistroInvite } from '../types';
 
 // Client for /api/bistro and /api/migrate-bistro. Membership lives server-side
@@ -7,17 +8,13 @@ import type { Bistro, BistroInvite } from '../types';
 
 async function call<T>(path: string, init?: { method: 'POST'; body: unknown }): Promise<T> {
   if (!auth?.currentUser) throw new Error('Not signed in');
-  const token = await auth.currentUser.getIdToken();
-  const res = await fetch(path, {
+  const res = await authedFetch(auth.currentUser, path, {
     method: init?.method ?? 'GET',
-    headers: {
-      Authorization: `Bearer ${token}`,
-      ...(init ? { 'Content-Type': 'application/json' } : {}),
-    },
+    headers: init ? { 'Content-Type': 'application/json' } : {},
     ...(init ? { body: JSON.stringify(init.body) } : {}),
   });
   const body = (await res.json().catch(() => ({}))) as T & { error?: string };
-  if (!res.ok) throw new Error(body.error ?? 'Something went wrong. Please try again.');
+  if (!res.ok) throw new Error(body.error ?? "That didn't go through. Check your connection and try again.");
   return body;
 }
 

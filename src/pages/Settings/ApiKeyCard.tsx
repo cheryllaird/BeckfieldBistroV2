@@ -4,6 +4,7 @@ import { useStore } from '../../store';
 import { Card } from '../../components/ui/Card';
 import { Input } from '../../components/ui/Input';
 import { Button } from '../../components/ui/Button';
+import { NetworkError } from '../../lib/apiClient';
 
 export function ApiKeyCard() {
   const { hasGeminiApiKey, setGeminiApiKey } = useStore();
@@ -20,8 +21,10 @@ export function ApiKeyCard() {
       await setGeminiApiKey(keyInput.trim());
       setKeyInput('');
       setSaved(true);
-    } catch {
-      setError('Failed to save API key. Please try again.');
+    } catch (e) {
+      setError(
+        e instanceof NetworkError ? e.message : "Your key wasn't saved. Check it's copied in full and try again.",
+      );
     } finally {
       setIsSaving(false);
     }
@@ -34,7 +37,7 @@ export function ApiKeyCard() {
     try {
       await setGeminiApiKey('');
     } catch {
-      setError('Failed to remove API key. Please try again.');
+      setError("Your key wasn't removed. Check your connection and try again.");
     } finally {
       setIsSaving(false);
     }
@@ -43,7 +46,7 @@ export function ApiKeyCard() {
   return (
     <Card className="flex flex-col gap-3">
       <div>
-        <h3 className="text-sm font-semibold text-slate-800">Gemini API Key</h3>
+        <h3 className="text-sm font-semibold text-slate-800">Gemini API key</h3>
         <p className="text-xs text-slate-500 mt-1">
           Recipe extraction from photos and URLs runs on your own Gemini API key, so usage
           is billed to you, not shared with other users — even in a shared bistro, each member
@@ -70,7 +73,7 @@ export function ApiKeyCard() {
       )}
 
       <Input
-        label={hasGeminiApiKey ? 'Replace API Key' : 'API Key'}
+        label={hasGeminiApiKey ? 'Replace API key' : 'API key'}
         type="password"
         placeholder="AIza…"
         value={keyInput}

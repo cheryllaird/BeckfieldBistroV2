@@ -42,7 +42,7 @@ export function BulkShareModal({ recipes, onClose, onDone }: Props) {
       }
       setSent(true);
     } catch {
-      setError('Failed to send. Please try again.');
+      setError('Recipes not sent. Check your connection and try again.');
     } finally {
       setSending(false);
     }

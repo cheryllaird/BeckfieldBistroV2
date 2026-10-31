@@ -21,9 +21,9 @@ export function WeekView({ weekOffset, setWeekOffset }: WeekViewProps) {
   });
 
   const weekLabel = () => {
-    if (weekOffset === 0) return 'This Week';
-    if (weekOffset === 1) return 'Next Week';
-    if (weekOffset === -1) return 'Last Week';
+    if (weekOffset === 0) return 'This week';
+    if (weekOffset === 1) return 'Next week';
+    if (weekOffset === -1) return 'Last week';
     const start = days[0];
     return start.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
   };

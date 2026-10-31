@@ -60,7 +60,7 @@ export function BistroCard() {
     try {
       await fn();
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Something went wrong. Please try again.');
+      setError(e instanceof Error ? e.message : "That change didn't go through. Check your connection and try again.");
     } finally {
       setBusy(false);
     }

@@ -38,7 +38,7 @@ export function InviteMemberModal({ bistroId, bistroName, onClose, onSent }: Pro
       setSent(true);
       onSent();
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to send. Please try again.');
+      setError(e instanceof Error ? e.message : 'Invite not sent. Check your connection and try again.');
     } finally {
       setSending(false);
     }

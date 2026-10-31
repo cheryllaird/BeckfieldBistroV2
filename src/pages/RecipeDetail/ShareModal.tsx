@@ -36,7 +36,7 @@ export function ShareModal({ recipe, onClose }: Props) {
       await sendRecipe(recipe, email.trim().toLowerCase());
       setSent(true);
     } catch {
-      setError('Failed to send. Please try again.');
+      setError('Recipe not sent. Check your connection and try again.');
     } finally {
       setSending(false);
     }

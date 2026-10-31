@@ -69,7 +69,7 @@ export function RecipeDetailPage() {
       <div className="flex flex-col items-center gap-4 py-20 text-center">
         <p className="text-slate-500">Recipe not found.</p>
         <Button variant="ghost" onClick={() => navigate('/recipes')}>
-          <ArrowLeft size={15} /> Back to Library
+          <ArrowLeft size={15} /> Back to library
         </Button>
       </div>
     );
@@ -301,7 +301,7 @@ export function RecipeDetailPage() {
       {/* Back button */}
       <div className="mt-8">
         <Button variant="ghost" fullWidth onClick={() => navigate('/recipes')}>
-          <ArrowLeft size={15} /> Back to Library
+          <ArrowLeft size={15} /> Back to library
         </Button>
       </div>
 
