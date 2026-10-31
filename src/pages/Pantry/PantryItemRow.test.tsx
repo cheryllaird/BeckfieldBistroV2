@@ -115,6 +115,15 @@ describe('PantryItemRow stock switch', () => {
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
     expect(stockOf()).toBe(true);
   });
+
+  it('shows no "Out of stock" text under an out-of-stock item; the dimmed row and switch say it', () => {
+    useStore.setState({ pantryItems: [{ ...salt, inStock: false }] });
+    renderRow();
+
+    expect(switchEl()).not.toBeChecked();
+    expect(screen.queryByText(/Out of stock/)).not.toBeInTheDocument();
+    expect(screen.queryByRole('status')).not.toBeInTheDocument();
+  });
 });
 
 describe('PantryItemRow item sheet', () => {

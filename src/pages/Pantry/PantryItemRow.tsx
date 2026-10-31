@@ -149,9 +149,9 @@ export function PantryItemRow({
         <MoreHorizontal size={18} />
       </button>
     </div>
-      {!inStock && !askingWhere && (
+      {!inStock && !askingWhere && alreadyOnList && (
         <p role="status" className="px-3 pt-1 text-xs text-slate-400">
-          Out of stock{alreadyOnList ? ' — Already on your list' : ''}
+          Already on your list
         </p>
       )}
       {sheetOpen && (
