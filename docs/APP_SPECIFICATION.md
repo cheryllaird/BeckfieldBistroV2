@@ -335,7 +335,7 @@ explicit list) belong to **Immediate**, so existing lists carry over unchanged.
 - Items can also be **added manually** by typing; manual items are auto-categorised
   from their text and land on the list currently in view (Immediate or Stock up).
 - **Pantry exclusion applies to every recipe-derived add** (§8), not just
-  generation: adding a single planned meal silently skips its store cupboard
+  generation: adding a single planned meal silently skips its in-stock store cupboard
   ingredients. **Manually typed items are always added** — typing is an explicit
   request to buy something, so the cupboard never blocks it.
 
@@ -358,7 +358,15 @@ explicit list) belong to **Immediate**, so existing lists carry over unchanged.
 
 - A user-maintained list of **staples always in stock** (oils, spices, flour,
   etc.), each auto-categorised.
-- Its sole functional purpose: **recipe ingredients matching a pantry item are
+- Each item has an **in stock** switch (default on; items from before the switch
+  count as in stock). Switching an item **off** asks whether to **Add to Stock up**,
+  **Add to Immediate** or **Skip**: the first two put an unticked item with the same
+  name and category at the top of that list (or say "Already on your list" and add
+  nothing if an unticked match is on either list); Skip adds nothing. The item stays
+  in the cupboard, shown dimmed. **Out-of-stock items are not skipped** when meals
+  are added or a list is generated; switching back on makes them skipped again.
+  Ticking the item off the shopping list does not restock it.
+- Its main functional purpose: **recipe ingredients matching an in-stock pantry item are
   excluded from the shopping list** — whether the list is generated wholesale or a
   single meal is added to it (matched via the same normalised-name logic as §6, so
   "olive oil" in the pantry suppresses "extra-virgin olive oil" from the list).
@@ -510,7 +518,7 @@ appears on another without manual refresh. The functional guarantees:
 | Category detection | Auto-sorts every ingredient into 10 grocery aisles |
 | Shopping generation | Scales + consolidates planned meals into one list |
 | Dual shopping lists | Separate Immediate and Stock up lists, switchable by tab and managed independently; items can be moved between them in edit mode |
-| Pantry exclusion | Omits staples the user already owns |
+| Pantry exclusion | Omits staples the user already owns; items marked out of stock are bought again and can be added to either list in one step |
 | Meal-source tracking | Shows which meals drove each shopping item; idempotent adds |
 | Recipe sharing | Single/bulk copy-share to another user by email, with an inbox |
 | Shared bistros | Multi-member libraries; invite by email, switch from the menu, own bistro always kept |

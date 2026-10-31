@@ -1,25 +1,13 @@
 import { useState, useRef, useEffect, useLayoutEffect } from 'react';
-import { useTouchDrag } from '../../hooks/useTouchDrag';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, Plus, Trash2, ChevronDown, Archive, GripVertical, ArrowUpDown } from 'lucide-react';
+import { ArrowLeft, Plus, Archive, ArrowUpDown } from 'lucide-react';
 import { useStore } from '../../store';
 import { Button } from '../../components/ui/Button';
 import { generateId } from '../../lib/utils';
 import { categorize, categoryKey, normalizeIngredientName } from '../../lib/ingredients';
-import type { PantryItem, ShoppingCategory } from '../../types';
-
-const CATEGORY_ORDER: ShoppingCategory[] = [
-  'Vegetables',
-  'Fruit',
-  'Herbs & Spices',
-  'Bakery',
-  'Meat & Seafood',
-  'Dairy & Eggs',
-  'Pantry',
-  'Frozen',
-  'Beverages',
-  'Other',
-];
+import type { ShoppingCategory } from '../../types';
+import { PantryItemRow } from './PantryItemRow';
+import { CATEGORY_ORDER } from './categoryOrder';
 
 export function PantryPage() {
   const navigate = useNavigate();
@@ -149,7 +137,7 @@ export function PantryPage() {
       </div>
 
       <p className="text-sm text-slate-400">
-        Ingredients you always have in stock. These are skipped when generating your shopping list.
+        Ingredients you always have in stock. These are skipped when adding meals to your shopping list. Switch one off when you run out.
       </p>
 
       {/* Add item */}
@@ -207,106 +195,6 @@ export function PantryPage() {
           ))}
         </div>
       )}
-    </div>
-  );
-}
-
-function PantryItemRow({
-  item,
-  dragIndex,
-  isBeingDragged,
-  onCategoryChange,
-  onRemove,
-  onDragStart,
-  onDragEnter,
-  onDragEnd,
-  onGripPointerDown,
-  onDragEnterAt,
-  onTouchDragEnd,
-}: {
-  item: PantryItem;
-  dragIndex: number;
-  isBeingDragged: boolean;
-  onCategoryChange: (category: ShoppingCategory) => void;
-  onRemove: () => void;
-  onDragStart: () => void;
-  onDragEnter: () => void;
-  onDragEnd: () => void;
-  onGripPointerDown: () => void;
-  onDragEnterAt: (idx: number) => void;
-  onTouchDragEnd: () => void;
-}) {
-  const fromGrip = useRef(false);
-  const gripRef = useRef<HTMLSpanElement>(null);
-
-  const { isTouchDragging } = useTouchDrag({
-    gripRef,
-    enabled: true,
-    onStart: onGripPointerDown,
-    onMoveOver: onDragEnterAt,
-    onEnd: onTouchDragEnd,
-  });
-
-  return (
-    <div
-      data-drag-index={dragIndex}
-      draggable={!isTouchDragging}
-      onDragStart={(e) => {
-        if (!fromGrip.current) { e.preventDefault(); return; }
-        onDragStart();
-      }}
-      onDragEnter={(e) => {
-        if (!e.currentTarget.contains(e.relatedTarget as Node)) onDragEnter();
-      }}
-      onDragEnd={() => {
-        fromGrip.current = false;
-        onDragEnd();
-      }}
-      onDragOver={(e) => e.preventDefault()}
-      className={[
-        'flex items-center gap-3 px-3 py-2.5 rounded-xl bg-white border transition-all duration-150',
-        isBeingDragged
-          ? 'opacity-40 border-dashed border-amber-400 bg-amber-50/40 scale-[0.99]'
-          : 'border-slate-100',
-      ].join(' ')}
-    >
-      <span
-        ref={gripRef}
-        className="shrink-0 touch-none select-none cursor-grab active:cursor-grabbing"
-        onMouseDown={() => { fromGrip.current = true; }}
-        onMouseUp={() => { fromGrip.current = false; }}
-      >
-        <GripVertical size={16} className="text-slate-300 pointer-events-none" />
-      </span>
-
-      <span className="text-sm text-slate-700 capitalize flex-1 min-w-0 truncate">
-        {item.name}
-      </span>
-
-      <div className="relative inline-flex items-center shrink-0">
-        <div className="flex items-center gap-1 pl-2.5 pr-2 py-1 rounded-full text-[10px] font-semibold pointer-events-none bg-slate-100 text-slate-500">
-          {item.category}
-          <ChevronDown size={9} />
-        </div>
-        <select
-          value={item.category}
-          onChange={(e) => onCategoryChange(e.target.value as ShoppingCategory)}
-          className="absolute inset-0 opacity-0 w-full h-full cursor-pointer"
-          aria-label="Item category"
-        >
-          {CATEGORY_ORDER.map((cat) => (
-            <option key={cat} value={cat}>{cat}</option>
-          ))}
-        </select>
-      </div>
-
-      <button
-        onClick={onRemove}
-        className="text-slate-300 hover:text-red-400 transition-colors shrink-0"
-        aria-label={`Remove ${item.name}`}
-      >
-        <Trash2 size={14} />
-      </button>
     </div>
   );
 }

@@ -1,4 +1,5 @@
-import type { PantryItem } from '../../types';
+import type { PantryItem, ShoppingItem, ShoppingListType } from '../../types';
+import { generateId } from '../utils';
 import { AMOUNT_UNIT_WORDS } from './amounts';
 import { normalizeIngredientName } from './canonicalName';
 
@@ -77,10 +78,30 @@ export function matchesPantryName(ingredientName: string, pantryNormalizedName: 
   );
 }
 
-/** Returns the store cupboard staple covering this ingredient, if any. */
+/** A cupboard item counts as in stock unless it has been explicitly switched off. */
+export const isInStock = (p: PantryItem): boolean => p.inStock !== false;
+
+/**
+ * Returns the store cupboard staple covering this ingredient, if any. Items
+ * marked out of stock cover nothing, so their ingredients are bought again.
+ */
 export function findPantryMatch(
   ingredientName: string,
   pantryItems: readonly PantryItem[]
 ): PantryItem | undefined {
-  return pantryItems.find((p) => matchesPantryName(ingredientName, p.normalizedName));
+  return pantryItems.find(
+    (p) => isInStock(p) && matchesPantryName(ingredientName, p.normalizedName)
+  );
+}
+
+/** A plain, unticked manual shopping item for a cupboard item that has run out. */
+export function shoppingItemFromPantry(p: PantryItem, listType: ShoppingListType): ShoppingItem {
+  return { id: generateId(), name: p.name, category: p.category, listType, checked: false, manual: true };
+}
+
+/** Whether an unticked item for this cupboard item is already on either shopping list. */
+export function isOnShoppingList(p: PantryItem, items: readonly ShoppingItem[]): boolean {
+  return items.some(
+    (i) => !i.checked && normalizeIngredientName(stripLeadingAmount(i.name)) === p.normalizedName
+  );
 }
