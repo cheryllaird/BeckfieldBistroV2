@@ -53,3 +53,15 @@ Only the triage agent or a human changes a status. Entries are never deleted.
 - **Suggested fix:** install Node 24 in the cloud environment's setup script.
 - **Seen again:** 2026-10-19, still Node 22.
 - **Status:** issue https://github.com/cheryllaird/BeckfieldBistroV2/issues/167
+
+### 2026-10-26: Unused devDependency can't be removed by the nightly cleanup agent
+- **Who:** agent (nightly cleanup)
+- **Task:** nightly cleanup
+- **Friction:** `npm run knip` reports `@tesseract.js-data/eng` (package.json:36) as unused. Nothing
+  imports it; OCR loads the committed `api/_tessdata/eng.traineddata.gz` and `vercel.json`
+  `includeFiles` doesn't reference the package. Removing it needs a `package.json` +
+  `package-lock.json` edit, which the unattended agent can't get approved.
+- **Suggested fix:** a human runs `npm uninstall @tesseract.js-data/eng`. Also noted, not touched
+  (off limits): `initFirebaseAdmin` in `api/_utils/auth.ts` is an unused export, and the root
+  `test-*.ts` smoke scripts show as unused files to knip (consider adding them as knip entries).
+- **Status:** open
