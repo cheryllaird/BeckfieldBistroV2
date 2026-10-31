@@ -406,7 +406,6 @@ export function ShoppingListPage() {
               dragIndex={index}
               isBeingDragged={item.id === draggingItemId}
               onOpen={() => setSheetItemId(item.id)}
-              onCategoryChange={(cat) => handleCategoryChange(item.id, cat)}
               onDragStart={() => handleDragStart(item.id)}
               onDragEnter={() => handleDragEnter(index)}
               onDragEnd={handleDragEnd}
@@ -453,7 +452,6 @@ export function ShoppingListPage() {
                 isDraggable={false}
                 isBeingDragged={false}
                 onOpen={() => setSheetItemId(item.id)}
-                onCategoryChange={(cat) => handleCategoryChange(item.id, cat)}
                 onDragStart={() => {}}
                 onDragEnter={() => {}}
                 onDragEnd={() => {}}

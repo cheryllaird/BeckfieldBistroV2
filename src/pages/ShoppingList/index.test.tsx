@@ -82,17 +82,6 @@ describe('ShoppingListPage — item sheet in edit mode', () => {
     expect(sheet.getByRole('button', { name: 'Frozen' })).toHaveAttribute('aria-pressed', 'true');
   });
 
-  it('changes category straight from the row chip without opening the sheet', async () => {
-    const user = userEvent.setup();
-    renderPage();
-    await user.click(screen.getByRole('button', { name: /Edit$/ }));
-
-    await user.selectOptions(screen.getByRole('combobox', { name: 'Category for milk' }), 'Frozen');
-
-    expect(itemById('milk')?.category).toBe('Frozen');
-    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
-  });
-
   it('removes an item from the sheet with an undo toast', async () => {
     const user = userEvent.setup();
     renderPage();

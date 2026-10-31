@@ -1,18 +1,15 @@
 import { useRef } from 'react';
-import { ChevronDown, GripVertical, MoreHorizontal } from 'lucide-react';
+import { GripVertical, MoreHorizontal } from 'lucide-react';
 import { useTouchDrag } from '../../hooks/useTouchDrag';
-import type { ShoppingCategory, ShoppingItem } from '../../types';
-import { CATEGORY_ORDER } from './categoryOrder';
+import type { ShoppingItem } from '../../types';
 
-// Edit-mode row: drag to reorder, tap the category chip to change it in place,
-// tap the name or the more button to open the item sheet for everything else.
+// Edit-mode row: drag to reorder, tap anywhere else to open the item sheet.
 export function EditItem({
   item,
   isDraggable,
   dragIndex,
   isBeingDragged,
   onOpen,
-  onCategoryChange,
   onDragStart,
   onDragEnter,
   onDragEnd,
@@ -25,7 +22,6 @@ export function EditItem({
   dragIndex?: number;
   isBeingDragged: boolean;
   onOpen: () => void;
-  onCategoryChange: (category: ShoppingCategory) => void;
   onDragStart: () => void;
   onDragEnter: () => void;
   onDragEnd: () => void;
@@ -82,38 +78,22 @@ export function EditItem({
       <button
         onClick={onOpen}
         aria-label={`Edit ${item.name}`}
-        className={[
-          'flex-1 min-w-0 min-h-11 text-left truncate text-sm',
-          item.checked ? 'line-through text-slate-400' : 'text-slate-700',
-        ].join(' ')}
+        className="flex-1 min-w-0 min-h-11 flex items-center gap-2 pr-1 text-left active:bg-slate-50 rounded-r-xl"
       >
-        {item.name}
-      </button>
-
-      {/* Quick category change: the native picker sits invisibly over the chip. */}
-      <div className="relative shrink-0 min-h-11 flex items-center pl-2">
-        <span className="flex items-center gap-1 pl-2.5 pr-2 py-1 rounded-full text-[10px] font-semibold bg-slate-100 text-slate-500 pointer-events-none">
-          {item.category}
-          <ChevronDown size={10} />
-        </span>
-        <select
-          value={item.category}
-          onChange={(e) => onCategoryChange(e.target.value as ShoppingCategory)}
-          aria-label={`Category for ${item.name}`}
-          className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+        <span
+          className={[
+            'flex-1 min-w-0 truncate text-sm',
+            item.checked ? 'line-through text-slate-400' : 'text-slate-700',
+          ].join(' ')}
         >
-          {CATEGORY_ORDER.map((cat) => (
-            <option key={cat} value={cat}>{cat}</option>
-          ))}
-        </select>
-      </div>
-
-      <button
-        onClick={onOpen}
-        aria-label={`More options for ${item.name}`}
-        className="shrink-0 w-11 h-11 flex items-center justify-center text-slate-400 rounded-r-xl active:bg-slate-50"
-      >
-        <MoreHorizontal size={18} />
+          {item.name}
+        </span>
+        <span className="shrink-0 px-2.5 py-1 rounded-full text-[10px] font-semibold bg-slate-100 text-slate-500">
+          {item.category}
+        </span>
+        <span className="shrink-0 w-9 h-11 flex items-center justify-center text-slate-400">
+          <MoreHorizontal size={18} />
+        </span>
       </button>
     </div>
   );

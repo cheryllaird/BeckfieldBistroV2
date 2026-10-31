@@ -340,12 +340,11 @@ explicit list) belong to **Immediate**, so existing lists carry over unchanged.
 ### 7.3 Shopping & curating
 - **Check-off** with running progress (checked/total); checked items collect in an
   "In basket" group.
-- **Curate:** in edit mode each row has a drag handle (reorder, including
-  one-tap **auto-sort by category**) and a category chip that changes the
-  category in place (remembered for that ingredient from then on — see §6.4).
-  Tapping the item's name or its "more" button opens an **item sheet** where
-  changes apply instantly: rename, recategorise, switch list (Immediate /
-  Stock up), and remove. Moving or removing shows a short "Moved to … / Removed … · Undo" toast.
+- **Curate:** in edit mode each row has only a drag handle (reorder, including
+  one-tap **auto-sort by category**); tapping the item opens an **item sheet**
+  where changes apply instantly: rename, recategorise (remembered for that
+  ingredient from then on — see §6.4), switch list (Immediate / Stock up), and
+  remove. Moving or removing shows a short "Moved to … / Removed … · Undo" toast.
 - **Undo:** list-changing actions (check, remove, edit, sort, reorder, move to the
   other list) are revertible.
 - **Meal-source insight:** any generated item can reveal the recipes and scaled
