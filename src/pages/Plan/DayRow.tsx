@@ -50,7 +50,7 @@ export function DayRow({ date }: Props) {
 
   const getRecipeTitle = (entry: MealEntry) => {
     if (entry.type === 'recipe' && entry.recipeId) {
-      return recipes.find((r) => r.id === entry.recipeId)?.title ?? 'Unknown Recipe';
+      return recipes.find((r) => r.id === entry.recipeId)?.title ?? 'Unknown recipe';
     }
     return entry.customTitle ?? '';
   };

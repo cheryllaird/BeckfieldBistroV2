@@ -1,6 +1,6 @@
 # Beckfield Bistro
 
-An AI-powered culinary companion built with React, TypeScript, Vite, Firebase, and Vercel.
+Run your kitchen like a bistro. Recipes, meal plans and shopping lists, shared with your household. Built with React, TypeScript, Vite, Firebase, and Vercel.
 
 ## Setup
 

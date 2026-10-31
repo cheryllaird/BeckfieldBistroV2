@@ -133,7 +133,7 @@ export function PantryPage() {
         >
           <ArrowLeft size={20} />
         </button>
-        <h2 className="text-xl font-bold text-slate-800">Store Cupboard</h2>
+        <h2 className="text-xl font-bold text-slate-800">Store cupboard</h2>
       </div>
 
       <p className="text-sm text-slate-400">

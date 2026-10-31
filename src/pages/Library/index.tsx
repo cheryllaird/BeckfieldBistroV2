@@ -95,10 +95,10 @@ export function LibraryPage() {
     <div className="flex flex-col gap-5">
       {/* Page header */}
       <div className="flex items-center justify-between">
-        <h2 className="text-xl font-bold text-slate-800">My Recipes</h2>
+        <h2 className="text-xl font-bold text-slate-800">My recipes</h2>
         <Button size="sm" onClick={() => navigate('/recipes/new')}>
           <Plus size={14} />
-          Add Recipe
+          Add recipe
         </Button>
       </div>
 
@@ -125,7 +125,7 @@ export function LibraryPage() {
       {incomingShares.length > 0 && (
         <div className="flex flex-col gap-2">
           <div className="flex items-center gap-2">
-            <h3 className="text-sm font-semibold text-slate-700">Shared with You</h3>
+            <h3 className="text-sm font-semibold text-slate-700">Shared with you</h3>
             <span className="text-xs font-semibold bg-amber-500 text-white rounded-full px-1.5 py-0.5 leading-none">
               {incomingShares.length}
             </span>
@@ -139,7 +139,7 @@ export function LibraryPage() {
                 }}
                 disabled={savingAll || dismissingAll}
               >
-                {dismissingAll ? 'Dismissing…' : 'Dismiss All'}
+                {dismissingAll ? 'Dismissing…' : 'Dismiss all'}
               </Button>
               <Button
                 size="sm"
@@ -149,7 +149,7 @@ export function LibraryPage() {
                 }}
                 disabled={savingAll || dismissingAll}
               >
-                {savingAll ? 'Saving…' : 'Save All'}
+                {savingAll ? 'Saving…' : 'Save all'}
               </Button>
             </div>
           </div>
@@ -190,7 +190,6 @@ export function LibraryPage() {
         </div>
       ) : (
         <div className="flex flex-col items-center gap-4 py-16 text-center animate-fade">
-          <span className="text-5xl">🍳</span>
           <div>
             <p className="text-base font-semibold text-slate-700">
               {query ? 'No recipes found' : 'Your library is empty'}

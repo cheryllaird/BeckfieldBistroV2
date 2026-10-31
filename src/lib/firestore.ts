@@ -466,7 +466,7 @@ export async function saveGeminiApiKey(apiKey: string): Promise<boolean> {
   });
   if (!res.ok) {
     const body = await res.json().catch(() => ({})) as { error?: string };
-    throw new Error(body.error ?? 'Failed to save API key');
+    throw new Error(body.error ?? "Your key wasn't saved");
   }
   return ((await res.json()) as { hasKey: boolean }).hasKey;
 }
@@ -490,7 +490,7 @@ export async function sendRecipeShare(share: Omit<SharedRecipe, 'id'>): Promise<
   });
   if (!res.ok) {
     const body = await res.json().catch(() => ({})) as { error?: string };
-    throw new Error(body.error ?? 'Failed to send');
+    throw new Error(body.error ?? 'Not sent');
   }
   return ((await res.json()) as { id: string }).id;
 }

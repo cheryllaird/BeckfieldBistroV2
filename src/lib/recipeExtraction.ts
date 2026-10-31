@@ -86,7 +86,7 @@ export async function extractRecipeFromImage(
   if (!response.ok) {
     const body = await response.json().catch(() => ({}));
     throw new RecipeExtractionError(
-      body.error ?? 'Failed to extract recipe. Please try again.'
+      body.error ?? "Couldn't read a recipe. Try again, or add it manually."
     );
   }
 
@@ -118,7 +118,7 @@ export async function extractRecipeFromUrl(
   if (!response.ok) {
     const body = await response.json().catch(() => ({}));
     throw new RecipeExtractionError(
-      body.error ?? 'Failed to extract recipe. Please try again.'
+      body.error ?? "Couldn't read a recipe. Try again, or add it manually."
     );
   }
 

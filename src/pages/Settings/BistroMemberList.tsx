@@ -39,7 +39,7 @@ export function BistroMemberList({ bistro, outgoing, onRevoked, canManage }: Pro
       await fn();
       setConfirming(null);
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Something went wrong. Please try again.');
+      setError(e instanceof Error ? e.message : "Members weren't updated. Check your connection and try again.");
     } finally {
       setBusy(false);
     }

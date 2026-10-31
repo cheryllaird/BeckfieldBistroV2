@@ -24,7 +24,6 @@ import { legalPathOf } from './legal/pages';
 function FirebaseSetupScreen() {
   return (
     <div className="fixed inset-0 bg-slate-50 flex flex-col items-center justify-center px-6 text-center gap-4">
-      <div className="text-4xl">🔥</div>
       <h1 className="text-xl font-bold text-slate-800">Firebase not configured</h1>
       <p className="text-sm text-slate-500 max-w-sm">
         Copy <code className="bg-slate-100 px-1 rounded">.env.example</code> to{' '}

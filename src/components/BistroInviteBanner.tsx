@@ -26,7 +26,13 @@ function InviteRow({ invite, onJoined }: { invite: BistroInvite; onJoined: (j: J
       if (kind === 'join') onJoined({ bistroId: await acceptInvite(invite), name: invite.bistroName });
       else await declineInvite(invite.id);
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Something went wrong.');
+      setError(
+        e instanceof Error
+          ? e.message
+          : kind === 'join'
+            ? "Couldn't join the bistro. Check your connection and try again."
+            : "Couldn't decline the invite. Check your connection and try again.",
+      );
     } finally {
       setBusy(null);
     }

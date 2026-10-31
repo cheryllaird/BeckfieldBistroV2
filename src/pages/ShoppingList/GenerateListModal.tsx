@@ -82,7 +82,7 @@ export function GenerateListModal({ onClose }: Props) {
       <div className="absolute inset-0 bg-black/30 backdrop-blur-sm" onClick={onClose} />
       <div className="relative z-10 w-full max-w-sm bg-white rounded-2xl shadow-xl flex flex-col max-h-[90dvh] animate-slide-up">
         <div className="flex items-center justify-between p-4 border-b border-slate-100 shrink-0">
-          <h3 className="text-base font-semibold text-slate-800">Generate Shopping List</h3>
+          <h3 className="text-base font-semibold text-slate-800">Generate shopping list</h3>
           <button onClick={onClose} className="text-slate-400 hover:text-slate-600">
             <X size={18} />
           </button>

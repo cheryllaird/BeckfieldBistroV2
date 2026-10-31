@@ -67,7 +67,7 @@ export function NewRecipePage() {
       setExtractError(
         err instanceof RecipeExtractionError
           ? err.message
-          : 'Could not extract recipe. Please check the URL and try again.'
+          : "Couldn't read a recipe from that link. Check it opens in your browser, or add the recipe manually."
       );
     } finally {
       setIsExtracting(false);
@@ -101,7 +101,7 @@ export function NewRecipePage() {
       setExtractError(
         err instanceof RecipeExtractionError
           ? err.message
-          : 'Failed to extract recipe. Please check your API key and try again.'
+          : "Couldn't read a recipe from that photo. Check your API key in Settings, or try a clearer photo."
       );
     } finally {
       setIsExtracting(false);
@@ -131,7 +131,7 @@ export function NewRecipePage() {
             ? 'Your session has expired. Please sign in again to save recipes.'
             : code === 'invalid-argument' || code === 'resource-exhausted'
             ? 'This recipe is too large to save (likely the photo). Try a smaller image.'
-            : 'Failed to save recipe. Please try again.'
+            : "Recipe not saved. Try again in a moment."
         );
       }
     } finally {
@@ -150,7 +150,7 @@ export function NewRecipePage() {
           <ArrowLeft size={20} />
         </button>
         <h2 className="text-xl font-bold text-slate-800">
-          {isEditMode ? 'Edit Recipe' : prefillTitle ? 'Digitise Recipe' : 'Add Recipe'}
+          {isEditMode ? 'Edit recipe' : prefillTitle ? 'Digitise recipe' : 'Add recipe'}
         </h2>
       </div>
 
@@ -221,7 +221,7 @@ export function NewRecipePage() {
               </>
             ) : (
               <>
-                <Link size={14} /> Extract Recipe
+                <Link size={14} /> Extract recipe
               </>
             )}
           </Button>
@@ -272,7 +272,7 @@ export function NewRecipePage() {
                   <Camera size={32} className="text-slate-400" />
                   <div className="text-center">
                     <p className="text-sm font-medium text-slate-700">Add a recipe photo</p>
-                    <p className="text-xs text-slate-400 mt-0.5">AI will extract the recipe details</p>
+                    <p className="text-xs text-slate-400 mt-0.5">We'll fill in the ingredients and method</p>
                   </div>
                   <div className="flex gap-2 w-full">
                     <button
@@ -280,10 +280,10 @@ export function NewRecipePage() {
                       className="flex-1 flex items-center justify-center gap-1.5 py-2.5 text-sm font-medium bg-amber-50 hover:bg-amber-100 text-amber-700 rounded-xl border border-amber-200 transition-colors"
                       onClick={() => setShowCamera(true)}
                     >
-                      <Camera size={14} /> Take Photo
+                      <Camera size={14} /> Take photo
                     </button>
                     <label className="flex-1 flex items-center justify-center gap-1.5 py-2.5 text-sm font-medium bg-slate-50 hover:bg-slate-100 text-slate-600 rounded-xl border border-slate-200 transition-colors cursor-pointer">
-                      <Upload size={14} /> From Gallery
+                      <Upload size={14} /> From gallery
                       <input
                         type="file"
                         accept="image/*"

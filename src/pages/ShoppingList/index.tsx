@@ -245,7 +245,7 @@ export function ShoppingListPage() {
       {/* Header */}
       <div className="flex flex-col gap-1">
         <div className="flex items-center justify-between gap-2">
-          <h2 className="text-xl font-bold text-slate-800 shrink-0">Shopping List</h2>
+          <h2 className="text-xl font-bold text-slate-800 shrink-0">Shopping list</h2>
           <div className="flex items-center gap-1.5">
           {history.length > 0 && (
             <Button variant="ghost" size="sm" onClick={handleUndo} aria-label="Undo">
@@ -331,7 +331,7 @@ export function ShoppingListPage() {
             </div>
             {activeList === 'immediate' && (
               <Button onClick={() => setGenerateOpen(true)}>
-                <Zap size={14} /> Generate from Plan
+                <Zap size={14} /> Generate from plan
               </Button>
             )}
           </div>

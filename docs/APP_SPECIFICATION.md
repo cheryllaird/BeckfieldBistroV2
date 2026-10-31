@@ -1,9 +1,9 @@
 # Beckfield Bistro — Functional Specification
 
-Beckfield Bistro is an AI-powered cooking companion. Its job is to take recipes
+Beckfield Bistro helps a household run its kitchen like a bistro. Its job is to take recipes
 from wherever they live — a website, a cookbook photo, a handwritten card, or the
 user's own head — and turn them into a connected workflow: a searchable recipe
-library, a weekly meal plan, and a smart shopping list that knows what you already
+library, a weekly meal plan, and a shopping list that knows what you already
 have.
 
 This document specifies **what the app does** — its capabilities, the logic behind
@@ -59,7 +59,7 @@ people can open — and live-sync across every member's devices (see §12).
   belongs to (**Immediate** or **Stock up**), a checked/in-basket flag, a sort
   order, an optional link back to the **meal sources** that contributed it, and
   (for generated items) a normalised dedup key.
-- **Pantry ("Store Cupboard") item** — a staple the user always keeps in stock,
+- **Pantry ("Store cupboard") item** — a staple the user always keeps in stock,
   with a category; used to *exclude* ingredients from generated shopping lists.
 - **Recipe share** — a full copy of a recipe addressed to a recipient's email, so
   it appears in their library.
@@ -406,7 +406,7 @@ explicit list) belong to **Immediate**, so existing lists carry over unchanged.
 - **Guardrails:** the recipient email must be well-formed, and a user can't share
   with themselves.
 - **Receiving:** shares addressed to the signed-in user's email appear in a
-  "Shared with You" inbox. Each can be **saved** (copied into the bistro the
+  "Shared with you" inbox. Each can be **saved** (copied into the bistro the
   recipient is currently viewing) or **dismissed**, individually or all at once.
 - Sharing is for people outside your bistros; members of a bistro already see all
   its recipes.

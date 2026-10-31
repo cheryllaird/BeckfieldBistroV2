@@ -31,7 +31,7 @@ export function PlanPage() {
     // rows are taller than the viewport, so it keeps min-height:auto.
     <div className={['flex-1 flex flex-col gap-5', view === 'history' ? 'min-h-0' : ''].join(' ')}>
       <div className="flex items-center justify-between">
-        <h2 className="text-xl font-bold text-slate-800">Meal Plan</h2>
+        <h2 className="text-xl font-bold text-slate-800">Meal plan</h2>
         <div className="flex items-center gap-2">
           {showToday && (
             <button

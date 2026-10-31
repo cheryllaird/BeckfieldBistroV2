@@ -65,7 +65,7 @@ export function PlanMealModal({ date, onClose }: Props) {
       id: generateId(),
       date,
       type: 'dining-out',
-      customTitle: location.trim() || 'Dining Out',
+      customTitle: location.trim() || 'Dining out',
       location: location.trim(),
       servings: 1,
     });
@@ -79,7 +79,7 @@ export function PlanMealModal({ date, onClose }: Props) {
       <div className="relative z-10 w-full max-w-sm bg-white rounded-2xl shadow-xl flex flex-col h-[90dvh] animate-slide-up">
         {/* Header */}
         <div className="flex items-center justify-between p-4 border-b border-slate-100 shrink-0">
-          <h3 className="text-base font-semibold text-slate-800">Plan a Meal</h3>
+          <h3 className="text-base font-semibold text-slate-800">Plan a meal</h3>
           <button onClick={onClose} className="text-slate-400 hover:text-slate-600">
             <X size={18} />
           </button>
@@ -88,8 +88,8 @@ export function PlanMealModal({ date, onClose }: Props) {
         {/* Tabs */}
         <div className="flex border-b border-slate-100 shrink-0">
           {[
-            { key: 'recipe', label: 'From Library', icon: UtensilsCrossed },
-            { key: 'dining-out', label: 'Dining Out', icon: MapPin },
+            { key: 'recipe', label: 'From library', icon: UtensilsCrossed },
+            { key: 'dining-out', label: 'Dining out', icon: MapPin },
           ].map(({ key, label, icon: Icon }) => (
             <button
               key={key}
@@ -154,7 +154,7 @@ export function PlanMealModal({ date, onClose }: Props) {
                 icon={<MapPin size={14} />}
               />
               <Button fullWidth onClick={addDiningOut}>
-                <MapPin size={14} /> Mark as Dining Out
+                <MapPin size={14} /> Mark as dining out
               </Button>
             </div>
           )}

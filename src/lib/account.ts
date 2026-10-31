@@ -43,7 +43,7 @@ export async function deleteAccountOnServer(): Promise<void> {
     headers: { Authorization: `Bearer ${token}` },
   });
   const body = (await res.json().catch(() => ({}))) as { error?: string };
-  if (!res.ok) throw new Error(body.error ?? 'Could not delete your account. Please try again.');
+  if (!res.ok) throw new Error(body.error ?? "Your account wasn't deleted. Check your connection and try again.");
 }
 
 /**

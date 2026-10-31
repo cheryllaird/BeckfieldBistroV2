@@ -29,7 +29,7 @@ export function DeleteAccountModal({ onClose }: { onClose: () => void }) {
       await deleteAccount(); // reloads the app on success
     } catch (e) {
       if (!(e instanceof ReauthCancelled)) {
-        setError(e instanceof Error ? e.message : 'Could not delete your account. Please try again.');
+        setError(e instanceof Error ? e.message : "Your account wasn't deleted. Check your connection and try again.");
       }
       setWorking(false);
     }
