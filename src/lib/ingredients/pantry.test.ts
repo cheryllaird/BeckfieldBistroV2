@@ -4,9 +4,10 @@ import {
   isOnShoppingList,
   matchesPantryName,
   shoppingItemFromPantry,
+  splitByPantry,
   stripLeadingAmount,
 } from './pantry';
-import { makePantryItem, makeShoppingItem } from '../../test/factories';
+import { makeIngredient, makePantryItem, makeShoppingItem } from '../../test/factories';
 
 describe('stripLeadingAmount', () => {
   it.each([
@@ -66,6 +67,31 @@ describe('findPantryMatch', () => {
 
   it('returns undefined when nothing covers the ingredient', () => {
     expect(findPantryMatch('chicken', pantry)).toBeUndefined();
+  });
+});
+
+describe('splitByPantry', () => {
+  const salt = makePantryItem({ name: 'salt', normalizedName: 'salt' });
+  const flakes = makeIngredient({ name: 'sea salt flakes' });
+  const flour = makeIngredient({ name: 'flour' });
+
+  it('separates what the cupboard covers, naming the cupboard item that covered it', () => {
+    const { toBuy, skipped } = splitByPantry([flakes, flour], [salt]);
+
+    expect(toBuy).toEqual([flour]);
+    expect(skipped).toEqual([{ key: expect.any(String), ingredient: flakes, pantryItem: salt }]);
+  });
+
+  it('buys a kept ingredient anyway but still reports it as skipped', () => {
+    const { skipped } = splitByPantry([flakes], [salt]);
+    const { toBuy, skipped: again } = splitByPantry([flakes], [salt], new Set([skipped[0].key]));
+
+    expect(toBuy).toEqual([flakes]);
+    expect(again).toHaveLength(1);
+  });
+
+  it('skips nothing when the cupboard is empty', () => {
+    expect(splitByPantry([flakes, flour], [])).toEqual({ toBuy: [flakes, flour], skipped: [] });
   });
 });
 

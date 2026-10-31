@@ -4,7 +4,7 @@ import { formatItemName, ingredientUnit, leadingCount, readsAsPlural, round2, ty
 import { canonicalizeIngredientName, normalizeIngredientName } from './canonicalName';
 import { categorize } from './categorize';
 import type { CategoryOverrides } from './categoryOverrides';
-import { findPantryMatch } from './pantry';
+import { splitByPantry } from './pantry';
 import { isPluralWord, lastWord } from './words';
 
 // Building the shopping list from planned meals. Every recipe line becomes a
@@ -119,8 +119,10 @@ export interface MergeOptions {
   /** The planned meal, recorded as each item's source and used to skip re-adds. */
   mealEntryId?: string;
   recipeTitle?: string;
-  /** Store cupboard staples, which are never added. */
+  /** Store cupboard staples, which are not added unless kept. */
   pantryItems?: readonly PantryItem[];
+  /** Keys (see `splitByPantry`) of cupboard ingredients to add anyway. */
+  keepPantryKeys?: ReadonlySet<string>;
   /** The household's remembered aisles, which win over the keyword tables. */
   categoryOverrides?: CategoryOverrides;
 }
@@ -130,17 +132,17 @@ export interface MergeOptions {
  * already there for it. A meal merges only into unticked Immediate items; a
  * ticked or Stock up match is left alone and a new line is added instead.
  * Adding the same meal twice changes nothing, and store cupboard staples are
- * never added.
+ * left off unless `keepPantryKeys` names them.
  */
 export function mergeIntoShoppingList(
   existing: ShoppingItem[],
   ingredients: Ingredient[],
-  { scale = 1, mealEntryId, recipeTitle, pantryItems = [], categoryOverrides = {} }: MergeOptions = {},
+  { scale = 1, mealEntryId, recipeTitle, pantryItems = [], keepPantryKeys, categoryOverrides = {} }: MergeOptions = {},
 ): ShoppingItem[] {
   const result = [...existing];
-  const lines = ingredients
-    // Never add what the user already keeps in their store cupboard.
-    .filter((ingredient) => !findPantryMatch(ingredient.name, pantryItems))
+  // Don't add what the user already keeps in their store cupboard, unless asked to.
+  const { toBuy } = splitByPantry(ingredients, pantryItems, keepPantryKeys);
+  const lines = toBuy
     .map((ingredient) => toListLine(ingredient, scale, mealEntryId ?? '', recipeTitle ?? ''));
 
   // A recipe can name one ingredient on several lines ("1 lemon", "juice of 1

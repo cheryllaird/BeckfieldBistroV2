@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { consolidateIngredients, mergeIntoShoppingList } from './consolidate';
+import { splitByPantry } from './pantry';
 import { makeIngredient, makePantryItem, makeShoppingItem } from '../../test/factories';
 import type { ShoppingItem } from '../../types';
 
@@ -146,6 +147,20 @@ describe('mergeIntoShoppingList', () => {
       [],
       [makeIngredient({ name: 'extra virgin olive oil' }), makeIngredient({ name: 'garlic', unit: '' })], { scale: 1, mealEntryId: 'm1', recipeTitle: 'Pasta', pantryItems: pantry });
     expect(result.map((i) => i.name)).toEqual(['100 garlic']);
+  });
+
+  it('adds a cupboard ingredient anyway when its key is kept, with the meal as source', () => {
+    const pantry = [makePantryItem({ normalizedName: 'olive oil' })];
+    const oil = makeIngredient({ name: 'extra virgin olive oil', quantity: 2, unit: 'tbsp' });
+    const options = { mealEntryId: 'm1', recipeTitle: 'Pasta', pantryItems: pantry };
+    const keep = new Set([splitByPantry([oil], pantry).skipped[0].key]);
+
+    const result = mergeIntoShoppingList([], [oil], { ...options, keepPantryKeys: keep });
+
+    expect(result).toHaveLength(1);
+    expect(result[0].mealSources).toEqual([expect.objectContaining({ mealEntryId: 'm1', recipeTitle: 'Pasta' })]);
+    // Adding it again doesn't duplicate it.
+    expect(mergeIntoShoppingList(result, [oil], { ...options, keepPantryKeys: keep })).toHaveLength(1);
   });
 
   it('adds a second meal to an existing item and re-totals it', () => {

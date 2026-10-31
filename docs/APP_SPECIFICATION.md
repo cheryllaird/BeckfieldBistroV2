@@ -320,8 +320,12 @@ explicit list) belong to **Immediate**, so existing lists carry over unchanged.
   duplicate ingredients across all selected meals, categorises them, and produces
   the list.
 - **Pantry exclusion:** any ingredient the user keeps in their **Store Cupboard**
-  (§8) is omitted, and the count of skipped staples is shown up front. This is the
-  key "don't buy what you already have" behaviour.
+  (§8) is omitted. The skipped staples are shown up front as **"N ingredients in
+  store cupboard — skipped"**; opening it lists each ingredient as written in the
+  recipe with the cupboard item that covered it (e.g. "sea salt flakes (cupboard:
+  salt)") and an **Add anyway** switch. Switched-on items are included when the
+  list is generated (and only for that generate — choices aren't remembered). This
+  is the key "don't buy what you already have" behaviour.
 - **Targets the Immediate list:** generated items always populate the **Immediate**
   list (replacing its previous contents); the **Stock up** list is never altered by
   generation.
@@ -335,8 +339,13 @@ explicit list) belong to **Immediate**, so existing lists carry over unchanged.
 - Items can also be **added manually** by typing; manual items are auto-categorised
   from their text and land on the list currently in view (Immediate or Stock up).
 - **Pantry exclusion applies to every recipe-derived add** (§8), not just
-  generation: adding a single planned meal silently skips its in-stock store cupboard
-  ingredients. **Manually typed items are always added** — typing is an explicit
+  generation: adding a single planned meal still takes one tap and skips its in-stock
+  store cupboard ingredients, but the same "N ingredients in store cupboard — skipped"
+  line then appears under the meal (nothing shows when nothing matched, and it
+  still shows if every ingredient was skipped). **Add anyway** puts just that
+  ingredient on the Immediate list with the meal as its source, without duplicating
+  an item already there. Both places match the cupboard the same way, so they list
+  the same ingredients. **Manually typed items are always added** — typing is an explicit
   request to buy something, so the cupboard never blocks it.
 
 ### 7.3 Shopping & curating
@@ -383,6 +392,8 @@ explicit list) belong to **Immediate**, so existing lists carry over unchanged.
   peas, corn, squash — match by full name only, so cupboard "pepper" never
   suppresses bell peppers.
 - Duplicate staples (by normalised name) are silently prevented.
+- Skipped staples are never hidden: wherever a meal is added (§7.1, §7.2) they are
+  listed with **Add anyway**. To always buy something, take it out of the cupboard.
 
 ---
 
@@ -522,7 +533,7 @@ appears on another without manual refresh. The functional guarantees:
 | Category detection | Auto-sorts every ingredient into 10 grocery aisles |
 | Shopping generation | Scales + consolidates planned meals into one list |
 | Dual shopping lists | Separate Immediate and Stock up lists, switchable by tab and managed independently; items can be moved between them in edit mode |
-| Pantry exclusion | Omits staples the user already owns; items marked out of stock are bought again and can be added to either list in one step |
+| Pantry exclusion | Omits staples the user already owns, lists what was skipped, and lets the user add any back; items marked out of stock are bought again and can be added to either list in one step |
 | Meal-source tracking | Shows which meals drove each shopping item; idempotent adds |
 | Recipe sharing | Single/bulk copy-share to another user by email, with an inbox |
 | Shared bistros | Multi-member libraries; invite by email, switch from the menu, own bistro always kept |
