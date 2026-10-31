@@ -307,7 +307,10 @@ with tabs (or a left/right swipe on the list, with a sliding transition)**: an
 top up later. Each list keeps its own items, progress, and
 "In basket" group, and every shopping action — adding, checking off, reordering,
 auto-sorting, and clearing — acts only on the list currently in view; the other
-list is left untouched. Items that predate this split (and any item without an
+list is left untouched — the one exception is **moving an item** (the List
+switch in the item sheet), which takes it to the other list as an
+unticked manual item (no recipe link) at the bottom of that list's unticked items;
+a matching item already there is kept alongside it, not merged. Items that predate this split (and any item without an
 explicit list) belong to **Immediate**, so existing lists carry over unchanged.
 
 ### 7.1 Generation from the plan
@@ -339,11 +342,13 @@ explicit list) belong to **Immediate**, so existing lists carry over unchanged.
 ### 7.3 Shopping & curating
 - **Check-off** with running progress (checked/total); checked items collect in an
   "In basket" group.
-- **Curate:** rename items, recategorise them (remembered for that ingredient
-  from then on — see §6.4), reorder them
-  (including one-tap **auto-sort by category**), and remove them.
-- **Undo:** list-changing actions (check, remove, edit, sort, reorder) are
-  revertible.
+- **Curate:** in edit mode each row has only a drag handle (reorder, including
+  one-tap **auto-sort by category**); tapping the item opens an **item sheet**
+  where changes apply instantly: rename, recategorise (remembered for that
+  ingredient from then on — see §6.4), switch list (Immediate / Stock up), and
+  remove. Moving or removing shows a short "Moved to … / Removed … · Undo" toast.
+- **Undo:** list-changing actions (check, remove, edit, sort, reorder, move to the
+  other list) are revertible.
 - **Meal-source insight:** any generated item can reveal the recipes and scaled
   quantities behind it.
 
@@ -504,7 +509,7 @@ appears on another without manual refresh. The functional guarantees:
 | Ingredient engine | Unit + name normalisation, synonym folding, quantity consolidation |
 | Category detection | Auto-sorts every ingredient into 10 grocery aisles |
 | Shopping generation | Scales + consolidates planned meals into one list |
-| Dual shopping lists | Separate Immediate and Stock up lists, switchable by tab and managed independently |
+| Dual shopping lists | Separate Immediate and Stock up lists, switchable by tab and managed independently; items can be moved between them in edit mode |
 | Pantry exclusion | Omits staples the user already owns |
 | Meal-source tracking | Shows which meals drove each shopping item; idempotent adds |
 | Recipe sharing | Single/bulk copy-share to another user by email, with an inbox |
