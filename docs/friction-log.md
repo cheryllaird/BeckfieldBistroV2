@@ -23,6 +23,15 @@ Only the triage agent or a human changes a status. Entries are never deleted.
 
 ## Entries
 
+### 2026-10-31: `npm run lint` fails after running the dev server
+- **Who:** agent (shopping item sheet prototype, PR #195)
+- **Task:** screenshot the shopping list in a browser via `vite` dev server
+- **Friction:** the PWA plugin writes `dev-dist/` (gitignored) when the dev server runs, but
+  `eslint.config.js` only ignores `dist`, so lint then reports 9 errors in generated Workbox
+  code. Cost one confused lint run.
+- **Suggested fix:** add `'dev-dist'` to `globalIgnores` in `eslint.config.js`.
+- **Status:** open
+
 ### 2026-10-17: Architectural changes merged while the workflow PR was still open
 - **Who:** agent (refreshing the agentic workflow PR)
 - **Task:** bring the workflow PR up to date with `main` (#154–#161)
