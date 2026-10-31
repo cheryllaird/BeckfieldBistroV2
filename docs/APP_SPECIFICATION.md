@@ -1,6 +1,6 @@
 # Beckfield Bistro — Functional Specification
 
-Beckfield Bistro helps a household run its kitchen like a bistro. Its job is to take recipes
+Beckfield Bistro takes the tedious work out of home cooking. Its job is to take recipes
 from wherever they live — a website, a cookbook photo, a handwritten card, or the
 user's own head — and turn them into a connected workflow: a searchable recipe
 library, a weekly meal plan, and a shopping list that knows what you already

@@ -1,6 +1,6 @@
 # Beckfield Bistro
 
-Run your kitchen like a bistro. Recipes, meal plans and shopping lists, shared with your household. Built with React, TypeScript, Vite, Firebase, and Vercel.
+From plan to plate. Yes, chef. Recipes, meal plans and shopping lists, shared with your household. Built with React, TypeScript, Vite, Firebase, and Vercel.
 
 ## Setup
 
