@@ -126,6 +126,14 @@ describe('PantryItemRow stock switch', () => {
   });
 });
 
+describe('PantryItemRow display', () => {
+  it('shows only the name on the row, with no category chip', () => {
+    renderRow();
+    expect(screen.getByRole('button', { name: 'Edit salt' })).toHaveTextContent(/^salt$/);
+    expect(screen.queryByText('Pantry')).not.toBeInTheDocument();
+  });
+});
+
 describe('PantryItemRow item sheet', () => {
   it('opens from the item name and changes category with one tap, staying open', async () => {
     const user = userEvent.setup();

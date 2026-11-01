@@ -104,7 +104,7 @@ export function PantryItemRow({
       <button
         onClick={() => setSheetOpen(true)}
         aria-label={`Edit ${item.name}`}
-        className="flex-1 min-w-0 min-h-11 flex items-center gap-2 text-left"
+        className="flex-1 min-w-0 min-h-11 flex items-center text-left"
       >
         <span
           className={[
@@ -113,9 +113,6 @@ export function PantryItemRow({
           ].join(' ')}
         >
           {item.name}
-        </span>
-        <span className="shrink-0 px-2.5 py-1 rounded-full text-[10px] font-semibold bg-slate-100 text-slate-500">
-          {item.category}
         </span>
       </button>
 
