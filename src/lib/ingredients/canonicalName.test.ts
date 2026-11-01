@@ -115,6 +115,10 @@ describe('normalizeIngredientName', () => {
     ['tomato puree', 'tomato paste'],
     ['crème fraîche', 'creme fraiche'],
     ['almonds, ground', 'ground almonds'],
+    // Prep written after the name without a comma
+    ['sweet potatoes grated', 'sweet potatoes'],
+    ['carrots finely chopped', 'carrots'],
+    ['potatoes peeled and roughly chopped', 'potatoes'],
   ])('gives %j the same key as %j', (us, uk) => {
     expect(normalizeIngredientName(us)).toBe(normalizeIngredientName(uk));
   });
@@ -131,6 +135,10 @@ describe('normalizeIngredientName', () => {
     ['bay leaves', 'bay leaf'],
     ['lime leaves', 'lime leaf'],
     ['jalapeños', 'jalapeno'],
+    ['sweet potatoes grated', 'sweet potato'],
+    ['beef minced', 'beef minced'],
+    // A hyphenated product name is not trailing prep
+    ['tomatoes sun-dried', 'tomatoes sun-dried'],
   ])('%j → %j', (input, expected) => {
     expect(normalizeIngredientName(input)).toBe(expected);
   });

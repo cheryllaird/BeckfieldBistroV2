@@ -185,6 +185,25 @@ function resolveClauses(name: string): string {
   return [[...folded, head].join(' '), ...trailing].filter(Boolean).join(', ');
 }
 
+// Prep a recipe writes after the name with no comma ("sweet potatoes grated",
+// "carrots peeled and finely chopped"). The same instruction after a comma is
+// already a note clause; without the comma it would otherwise stay glued to the
+// name and split one item across two lines of the list. Needs a space before
+// the verb so "sun-dried" still names the product, and a word before it so a
+// name is always left.
+const PREP_VERB_PHRASE = `(?:(?:${PREP_ADVERBS})\\s+)*(?:${PREP_VERBS})`;
+const TRAILING_PREP = new RegExp(
+  `(\\S)\\s+${PREP_VERB_PHRASE}(?:\\s+(?:and|&)\\s+${PREP_VERB_PHRASE})*$`
+);
+
+/** Drops trailing prep from the name itself, leaving any comma clauses alone. */
+function stripTrailingPrep(name: string): string {
+  const comma = name.indexOf(',');
+  const head = comma >= 0 ? name.slice(0, comma) : name;
+  const tail = comma >= 0 ? name.slice(comma) : '';
+  return head.replace(TRAILING_PREP, '$1') + tail;
+}
+
 // "[zest/juice] of [N] ingredient" → "ingredient", so it consolidates with the
 // whole fruit.
 const PART_OF_PATTERN = new RegExp(
@@ -275,6 +294,7 @@ export function canonicalizeIngredientName(name: string): string {
   s = toUkNames(s);
   s = stripNoteParentheses(s);
   s = resolveClauses(s);
+  s = stripTrailingPrep(s);
   s = s.replace(PART_OF_PATTERN, (_, ingredient: string) => {
     const words = ingredient.trim().split(/\s+/);
     words[words.length - 1] = singularWord(words[words.length - 1]);
