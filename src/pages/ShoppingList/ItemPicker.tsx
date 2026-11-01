@@ -1,6 +1,6 @@
 import { useId } from 'react';
 import { Link, useInRouterContext } from 'react-router-dom';
-import { Check, Package } from 'lucide-react';
+import { Check } from 'lucide-react';
 import type { PickRow } from './useItemTicks';
 
 interface Props {
@@ -34,10 +34,7 @@ export function ItemPicker({ rows, isTicked, onToggle }: Props) {
       )}
       {cupboard.length > 0 && (
         <section>
-          <p className="flex items-center gap-1.5 text-xs font-medium text-slate-500">
-            <Package size={12} />
-            In store cupboard — skipped unless ticked
-          </p>
+          <p className="text-xs font-medium text-slate-500 mb-1">In store cupboard</p>
           {list(cupboard)}
           {inRouter && (
             <Link to="/pantry" className="text-xs text-amber-600 hover:underline">

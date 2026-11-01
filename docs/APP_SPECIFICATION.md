@@ -323,8 +323,7 @@ explicit list) belong to **Immediate**, so existing lists carry over unchanged.
   **Will add**, ticked; unticking one leaves it off (Generate is disabled when
   nothing is ticked).
 - **Pantry exclusion:** any ingredient the user keeps in their **Store Cupboard**
-  (§8) is omitted. The skipped staples are listed under **"In store cupboard —
-  skipped unless ticked"**, each unticked with the cupboard item that covered it
+  (§8) is omitted. The skipped staples are listed under **In store cupboard**, each unticked with the cupboard item that covered it
   (e.g. "sea salt flakes", "Cupboard: salt"); ticking one adds it anyway. Bare herb and root names mean the fresh
   thing ("coriander" is fresh coriander, "ginger" is root ginger), so a dried or
   ground cupboard item such as ground coriander never covers them, nor the
