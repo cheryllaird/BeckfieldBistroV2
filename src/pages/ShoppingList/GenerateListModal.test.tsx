@@ -105,11 +105,41 @@ describe('GenerateListModal', () => {
     expect(screen.getByRole('button', { name: 'Generate (0)' })).toBeDisabled();
   });
 
-  it('skips store cupboard staples and says how many', async () => {
+  it('lists every item to add, ticked', () => {
+    renderModal();
+
+    for (const name of ['2 eggs', '500 g flour', '10 g salt']) {
+      expect(screen.getByRole('checkbox', { name })).toBeChecked();
+    }
+  });
+
+  it('leaves off the items unticked', async () => {
+    renderModal();
+
+    await userEvent.click(screen.getByRole('checkbox', { name: '2 eggs' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Generate (2)' }));
+
+    expect(listNames()).toEqual(['500 g flour', '10 g salt']);
+  });
+
+  it('cannot generate with every item unticked', async () => {
+    renderModal();
+
+    for (const name of ['2 eggs', '500 g flour', '10 g salt']) {
+      await userEvent.click(screen.getByRole('checkbox', { name }));
+    }
+
+    expect(screen.getByRole('button', { name: 'Generate (2)' })).toBeDisabled();
+  });
+
+  it('skips store cupboard staples, listing them unticked', async () => {
     useStore.setState({ pantryItems: [makePantryItem({ name: 'salt', normalizedName: 'salt' })] });
     renderModal();
 
-    expect(screen.getByRole('button', { name: /1 ingredient in store cupboard — skipped/ })).toBeInTheDocument();
+    expect(screen.getByText(/In store cupboard/)).toBeInTheDocument();
+    const salt = screen.getByRole('checkbox', { name: 'salt' });
+    expect(salt).not.toBeChecked();
+    expect(salt).toHaveAccessibleDescription('Cupboard: salt');
 
     await userEvent.click(screen.getByRole('button', { name: 'Generate (2)' }));
 
@@ -120,9 +150,9 @@ describe('GenerateListModal', () => {
     useStore.setState({ pantryItems: [makePantryItem({ name: 'sea salt', normalizedName: 'sea salt' })] });
     renderModal();
 
-    await userEvent.click(screen.getByRole('button', { name: /in store cupboard — skipped/ }));
-    expect(screen.getByText('salt (cupboard: sea salt)')).toBeInTheDocument();
-    await userEvent.click(screen.getByRole('button', { name: 'Add anyway: salt' }));
+    await userEvent.click(screen.getByRole('checkbox', { name: 'salt' }));
+    // Ticked, it shows the amount it will add, still under the cupboard heading.
+    expect(screen.getByRole('checkbox', { name: '10 g salt' })).toHaveAccessibleDescription('Cupboard: sea salt');
     await userEvent.click(screen.getByRole('button', { name: 'Generate (2)' }));
 
     const salt = useStore.getState().shoppingItems.find((i) => i.name.endsWith('salt'));
@@ -132,7 +162,7 @@ describe('GenerateListModal', () => {
   it('shows no cupboard line when nothing matches', () => {
     renderModal();
 
-    expect(screen.queryByText(/store cupboard/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/In store cupboard/)).not.toBeInTheDocument();
   });
 
   it('replaces the Immediate list but leaves Stock up untouched', async () => {

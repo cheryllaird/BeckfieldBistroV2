@@ -123,6 +123,8 @@ export interface MergeOptions {
   pantryItems?: readonly PantryItem[];
   /** Keys (see `splitByPantry`) of cupboard ingredients to add anyway. */
   keepPantryKeys?: ReadonlySet<string>;
+  /** Keys (see `normalizeIngredientName`) of ingredients the user chose not to add. */
+  excludeKeys?: ReadonlySet<string>;
   /** The household's remembered aisles, which win over the keyword tables. */
   categoryOverrides?: CategoryOverrides;
 }
@@ -137,12 +139,13 @@ export interface MergeOptions {
 export function mergeIntoShoppingList(
   existing: ShoppingItem[],
   ingredients: Ingredient[],
-  { scale = 1, mealEntryId, recipeTitle, pantryItems = [], keepPantryKeys, categoryOverrides = {} }: MergeOptions = {},
+  { scale = 1, mealEntryId, recipeTitle, pantryItems = [], keepPantryKeys, excludeKeys, categoryOverrides = {} }: MergeOptions = {},
 ): ShoppingItem[] {
   const result = [...existing];
   // Don't add what the user already keeps in their store cupboard, unless asked to.
   const { toBuy } = splitByPantry(ingredients, pantryItems, keepPantryKeys);
   const lines = toBuy
+    .filter((ingredient) => !excludeKeys?.has(normalizeIngredientName(ingredient.name)))
     .map((ingredient) => toListLine(ingredient, scale, mealEntryId ?? '', recipeTitle ?? ''));
 
   // A recipe can name one ingredient on several lines ("1 lemon", "juice of 1
@@ -189,4 +192,39 @@ export function mergeIntoShoppingList(
   }
 
   return result;
+}
+
+/** One item a meal would add or change, as shown before the user confirms. */
+export interface MealAddRow {
+  /** The ingredient key; tick or untick by this. */
+  key: string;
+  /** The item's label once added, e.g. "500 g flour". */
+  name: string;
+  /** The label of the item it folds into, when one is already on the list. */
+  previousName?: string;
+  /** The store cupboard item covering it; such rows are skipped unless kept. */
+  cupboardItem?: string;
+}
+
+/**
+ * What adding a meal would put on the list, worked out by running the real
+ * merge (store cupboard staples included) and comparing with the list as it
+ * is. Rows for staples carry `cupboardItem`; the rest are added by default.
+ */
+export function previewMealAdd(
+  existing: ShoppingItem[],
+  ingredients: Ingredient[],
+  options: Omit<MergeOptions, 'keepPantryKeys' | 'excludeKeys'> = {},
+): MealAddRow[] {
+  const { skipped } = splitByPantry(ingredients, options.pantryItems ?? []);
+  const cupboard = new Map(skipped.map((skip) => [skip.key, skip.pantryItem.name]));
+  const merged = mergeIntoShoppingList(existing, ingredients, { ...options, keepPantryKeys: new Set(cupboard.keys()) });
+  const before = new Map(existing.map((item) => [item.id, item]));
+  // The merge keeps untouched items as they are, so anything new or replaced changed.
+  return merged
+    .filter((item) => before.get(item.id) !== item)
+    .map((item) => {
+      const key = item.ingredientKey ?? normalizeIngredientName(item.name);
+      return { key, name: item.name, previousName: before.get(item.id)?.name, cupboardItem: cupboard.get(key) };
+    });
 }

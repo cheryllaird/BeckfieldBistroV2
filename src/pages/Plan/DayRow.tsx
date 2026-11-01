@@ -1,13 +1,13 @@
-import { Fragment, useState } from 'react';
+import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Plus, UtensilsCrossed, MapPin, FileText, Minus, Trash2, ShoppingCart, CalendarDays, CalendarPlus, ChevronDown, Check, Users } from 'lucide-react';
 import { useStore } from '../../store';
-import { formatDayLabel, isoDate, getRecipeIngredients, generateId } from '../../lib/utils';
-import { categorize, mergeIntoShoppingList } from '../../lib/ingredients';
-import type { MealEntry, MealTime, ShoppingItem } from '../../types';
+import { formatDayLabel, isoDate, generateId } from '../../lib/utils';
+import { categorize } from '../../lib/ingredients';
+import type { MealEntry, MealTime, Recipe, ShoppingItem } from '../../types';
 import { PlanMealModal } from './PlanMealModal';
 import { ChangeDayModal } from './ChangeDayModal';
-import { MealPantrySkips } from './MealPantrySkips';
+import { AddMealPreviewModal } from './AddMealPreviewModal';
 import { ModalPortal } from '../../components/ui/ModalPortal';
 
 interface Props {
@@ -31,15 +31,14 @@ function ordinal(n: number) {
 
 export function DayRow({ date }: Props) {
   const navigate = useNavigate();
-  const { mealEntries, recipes, shoppingItems, pantryItems, categoryOverrides, deleteMealEntry, updateMealEntry, setShoppingItems } = useStore();
+  const { mealEntries, recipes, shoppingItems, categoryOverrides, deleteMealEntry, updateMealEntry, setShoppingItems } = useStore();
   const { isToday } = formatDayLabel(date);
   const fullWeekday = date.toLocaleDateString('en-GB', { weekday: 'long' });
   const dateLabel = `${ordinal(date.getDate())} ${date.toLocaleDateString('en-GB', { month: 'short' })}`;
   const iso = isoDate(date);
   const [modalOpen, setModalOpen] = useState(false);
   const [changeDayEntry, setChangeDayEntry] = useState<MealEntry | null>(null);
-  // Meals added to the list this visit, whose skipped cupboard ingredients are listed.
-  const [skipsShownFor, setSkipsShownFor] = useState<Set<string>>(new Set());
+  const [preview, setPreview] = useState<{ entry: MealEntry; recipe: Recipe } | null>(null);
 
   const dayEntries = mealEntries.filter((e) => e.date === iso);
   const sortedEntries = [...dayEntries].sort((a, b) => {
@@ -73,18 +72,8 @@ export function DayRow({ date }: Props) {
   const handleAddToShoppingList = (entry: MealEntry) => {
     if (entry.type === 'recipe' && entry.recipeId) {
       const recipe = recipes.find((r) => r.id === entry.recipeId);
-      if (!recipe) return;
-      const scale = recipe.servings > 0 ? entry.servings / recipe.servings : 1;
-      setSkipsShownFor((prev) => new Set(prev).add(entry.id));
-      setShoppingItems(
-        mergeIntoShoppingList(shoppingItems, getRecipeIngredients(recipe), {
-          scale,
-          mealEntryId: entry.id,
-          recipeTitle: recipe.title,
-          pantryItems,
-          categoryOverrides,
-        })
-      );
+      // Recipe meals open a preview, where items can be left off first.
+      if (recipe) setPreview({ entry, recipe });
       return;
     }
     if (entry.type === 'custom') {
@@ -133,8 +122,8 @@ export function DayRow({ date }: Props) {
       {sortedEntries.length > 0 && (
         <div className="flex flex-col gap-px">
           {sortedEntries.map((entry) => (
-            <Fragment key={entry.id}>
             <MealChip
+              key={entry.id}
               entry={entry}
               title={getRecipeTitle(entry)}
               coverImage={getRecipeCoverImage(entry)}
@@ -148,14 +137,15 @@ export function DayRow({ date }: Props) {
               onChangeDay={() => setChangeDayEntry(entry)}
               isAddedToList={isInShoppingList(entry.id)}
             />
-            {skipsShownFor.has(entry.id) && <MealPantrySkips entry={entry} />}
-            </Fragment>
           ))}
         </div>
       )}
 
       {modalOpen && (
         <PlanMealModal date={iso} onClose={() => setModalOpen(false)} />
+      )}
+      {preview && (
+        <AddMealPreviewModal entry={preview.entry} recipe={preview.recipe} onClose={() => setPreview(null)} />
       )}
       {changeDayEntry && (
         <ChangeDayModal

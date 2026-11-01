@@ -23,6 +23,17 @@ Only the triage agent or a human changes a status. Entries are never deleted.
 
 ## Entries
 
+### 2026-11-01: Merging a meal into a manual item drops the manual amount
+- **Who:** agent (ship-feature)
+- **Task:** shopping list preview, issue https://github.com/cheryllaird/BeckfieldBistroV2/issues/209
+- **Friction:** `mergeIntoShoppingList` (`src/lib/ingredients/consolidate.ts`) relabels a matched
+  item from its `mealSources` only, so a typed "100 g flour" with no sources plus a meal's 200 g
+  becomes "200 g flour". A preview test assumed the total and failed; it took a while to see this
+  is existing behaviour, not the new code. The preview now shows the same label truthfully.
+- **Suggested fix:** decide whether a manual item's own amount should count, and if so fold
+  `leadingCount`/amount parsing of the existing name into `labelFor`; file as a bug if it's wrong.
+- **Status:** open
+
 ### 2026-10-31: `npm run lint` fails after running the dev server
 - **Who:** agent (shopping item sheet prototype, PR #195)
 - **Task:** screenshot the shopping list in a browser via `vite` dev server
