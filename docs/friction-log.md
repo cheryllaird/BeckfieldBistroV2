@@ -74,3 +74,4 @@ Only the triage agent or a human changes a status. Entries are never deleted.
   (off limits): `initFirebaseAdmin` in `api/_utils/auth.ts` is an unused export, and the root
   `test-*.ts` smoke scripts show as unused files to knip (consider adding them as knip entries).
 - **Status:** open
+- **Seen again:** 2026-11-01, same three items still reported by knip.
