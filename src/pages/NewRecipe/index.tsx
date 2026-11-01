@@ -88,6 +88,7 @@ export function NewRecipePage() {
     setCropSrc(null);
     setIsExtracting(true);
     setExtractError('');
+    const startedAt = performance.now();
     try {
       const [extracted, resizedDataUrl, originalDataUrl] = await Promise.all([
         extractRecipeFromImage(croppedDataUrl, hasGeminiApiKey),
@@ -97,6 +98,7 @@ export function NewRecipePage() {
         resizeImage(croppedDataUrl, ORIGINAL_IMAGE_RESIZE),
       ]);
       setDraft({ ...extracted, coverImage: resizedDataUrl, originalImage: originalDataUrl });
+      console.debug(`extract timing: total=${Math.round(performance.now() - startedAt)}ms (crop confirmed to draft set)`);
       setMode('manual');
     } catch (err) {
       setExtractError(

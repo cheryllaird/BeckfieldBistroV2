@@ -16,6 +16,8 @@ export interface OcrResult {
   confidence: number;
   /** True when a two-column layout was detected and text was re-threaded. */
   columnsReflowed: boolean;
+  /** True when this call had to start the OCR worker (cold instance). */
+  coldWorker?: boolean;
 }
 
 export interface OcrEngine {
@@ -60,6 +62,7 @@ class TesseractEngine implements OcrEngine {
 
   recognize(image: Buffer): Promise<OcrResult> {
     const run = async (): Promise<OcrResult> => {
+      const coldWorker = !workerPromise;
       const worker = await getWorker();
       try {
         // Request the block/line/word hierarchy so we can reconstruct reading
@@ -71,6 +74,7 @@ class TesseractEngine implements OcrEngine {
           text: reflowed ?? data.text ?? '',
           confidence: data.confidence ?? 0,
           columnsReflowed: reflowed !== null,
+          coldWorker,
         };
       } catch (err) {
         // The worker thread may be wedged — drop it and re-init next call
