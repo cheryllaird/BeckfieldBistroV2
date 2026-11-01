@@ -11,6 +11,13 @@ import {
   parseIsoDuration,
 } from './_utils/recipeParsers.js';
 import { safeFetchText } from './_utils/safeFetch.js';
+import {
+  createTimer,
+  durationBucket,
+  formatTimingLine,
+  type GeminiCallInfo,
+  type Timer,
+} from './_utils/extractionTiming.js';
 
 export const config = {
   api: {
@@ -218,6 +225,7 @@ async function callGeminiWithRetry(
   genAI: GoogleGenerativeAI,
   parts: (string | Part)[],
   systemInstruction: string = SYSTEM_PROMPT,
+  onInfo?: (info: GeminiCallInfo) => void,
 ): Promise<string> {
   const PRIMARY = 'gemini-3.1-flash-lite';
   const FALLBACK = 'gemini-3.5-flash';
@@ -230,6 +238,7 @@ async function callGeminiWithRetry(
   for (let attempt = 0; attempt < backoffsMs.length; attempt++) {
     if (backoffsMs[attempt] > 0) await sleep(backoffsMs[attempt]);
     console.log(`${PRIMARY} attempt ${attempt + 1}/${backoffsMs.length}`);
+    onInfo?.({ model: PRIMARY, attempts: attempt + 1 });
     try {
       return await generateWithModel(genAI, PRIMARY, parts, systemInstruction);
     } catch (err) {
@@ -246,6 +255,7 @@ async function callGeminiWithRetry(
 
   // Quota/overload — try the fallback model on its separate quota bucket.
   console.log(`${PRIMARY} unavailable, falling back to ${FALLBACK}`);
+  onInfo?.({ model: FALLBACK, attempts: backoffsMs.length + 1 });
   return generateWithModel(genAI, FALLBACK, parts, systemInstruction);
 }
 
@@ -293,7 +303,20 @@ function coerceIngredientSections(data: Record<string, unknown>) {
 // the recipe, as `<step>-<reason>` (e.g. 'vision-recitation',
 // 'ocrGemini-bad-json', 'urlGemini-overload'). Each is counted under
 // `fallbackReasons` beside `counts`, so `counts` is unchanged by it.
-async function recordExtractionMethod(method: string, fallbackReasons: string[] = []): Promise<void> {
+//
+// `timing` adds aggregate duration buckets (`durations.<method>.<bucket>`, from
+// the request start to just before this write) and, for photo requests where
+// OCR ran, an `ocrCold` or `ocrWarm` count. Counters only: no ids or content.
+interface RecordTiming {
+  durationMs: number;
+  ocrCold?: boolean;
+}
+
+async function recordExtractionMethod(
+  method: string,
+  fallbackReasons: string[] = [],
+  timing?: RecordTiming,
+): Promise<void> {
   const reasonsLog = fallbackReasons.length ? ` fallbackReasons=${fallbackReasons.join(',')}` : '';
   console.log(`extract-recipe: extractionMethod=${method}${reasonsLog}`);
   try {
@@ -303,13 +326,18 @@ async function recordExtractionMethod(method: string, fallbackReasons: string[] 
     const reasons = fallbackReasons.length
       ? { fallbackReasons: Object.fromEntries(fallbackReasons.map((r) => [r, inc])) }
       : {};
+    const durations = timing
+      ? { durations: { [method]: { [durationBucket(timing.durationMs)]: inc } } }
+      : {};
+    const ocrWorker =
+      timing?.ocrCold === undefined ? {} : timing.ocrCold ? { ocrCold: inc } : { ocrWarm: inc };
     await Promise.all([
       db.collection('analytics').doc('extractionStats').set(
-        { counts: { [method]: inc }, ...reasons, total: inc, updatedAt: FieldValue.serverTimestamp() },
+        { counts: { [method]: inc }, ...reasons, ...durations, ...ocrWorker, total: inc, updatedAt: FieldValue.serverTimestamp() },
         { merge: true },
       ),
       db.collection('analytics').doc(`extractionStats-${day}`).set(
-        { counts: { [method]: inc }, ...reasons, total: inc, date: day },
+        { counts: { [method]: inc }, ...reasons, ...durations, ...ocrWorker, total: inc, date: day },
         { merge: true },
       ),
     ]);
@@ -406,6 +434,7 @@ function sendGeminiError(res: VercelResponse, err: unknown): VercelResponse {
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
+  const timer: Timer = createTimer();
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
   }
@@ -417,7 +446,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(401).json({ error: 'Missing authorization token' });
   }
 
-  const user = await getUser(req);
+  const user = await timer.stage('auth', () => getUser(req));
   if (!user) {
     return res.status(401).json({ error: 'Invalid or expired token' });
   }
@@ -436,8 +465,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   // not a single shared key — there is no server-wide fallback. The key is
   // looked up and decrypted here rather than accepted from the client, so it
   // never has to cross the wire on every extraction request.
-  const profileSnap = await getFirestore()
-    .collection('users').doc(uid).collection('meta').doc('profile').get();
+  const profileSnap = await timer.stage('profile', () =>
+    getFirestore().collection('users').doc(uid).collection('meta').doc('profile').get(),
+  );
   const encrypted = profileSnap.data()?.geminiApiKeyEncrypted as EncryptedValue | undefined;
   if (!encrypted) {
     return res.status(400).json({ error: 'Add your Gemini API key in Settings to extract recipes.' });
@@ -452,6 +482,18 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   const genAI = new GoogleGenerativeAI(apiKey);
+
+  // Every request that gets past this point ends at exactly one finish() call:
+  // it counts the method (with duration bucket) and logs the one timing line.
+  // The duration is measured up to the analytics write; the line also shows
+  // how long that write took.
+  const kind = hasImage ? 'photo' : 'url';
+  const finish = async (method: string, reasons: string[] = []) => {
+    const durationMs = timer.elapsed();
+    const ocrCold = kind === 'photo' ? timer.snapshot(kind, method).ocrCold : undefined;
+    await timer.stage('analytics', () => recordExtractionMethod(method, reasons, { durationMs, ocrCold }));
+    console.log(formatTimingLine(timer.snapshot(kind, method)));
+  };
 
   if (hasImage) {
     const resolvedMediaType: SupportedMediaType = SUPPORTED_MEDIA_TYPES.includes(mediaType)
@@ -474,10 +516,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       fallbackReasons.push('vision-forced');
     } else {
       try {
-        const raw = await callGeminiWithRetry(genAI, imageParts, SYSTEM_PROMPT);
+        const raw = await timer.stage('vision', () =>
+          callGeminiWithRetry(genAI, imageParts, SYSTEM_PROMPT, (i) => timer.gemini('vision', i)),
+        );
         const data = parseRecipeJson(raw);
         if (data) {
-          await recordExtractionMethod('gemini-vision');
+          await finish('gemini-vision');
           return res.status(200).json({ ...buildRecipePayload(data, 'Photo Upload'), extractionMethod: 'gemini-vision' });
         }
         console.error('vision: JSON parse failure — falling back to OCR. Raw:', raw.slice(0, 500));
@@ -492,7 +536,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // 2. OCR FALLBACK — transcribe deterministically, then structure the text.
     let ocr: OcrResult | null = null;
     try {
-      ocr = await getOcrEngine().recognize(await preprocessForOcr(Buffer.from(base64, 'base64')));
+      const prepared = await timer.stage('ocrPreprocess', () => preprocessForOcr(Buffer.from(base64, 'base64')));
+      ocr = await timer.stage('ocr', () => getOcrEngine().recognize(prepared));
+      if (ocr.coldWorker !== undefined) timer.ocrCold(ocr.coldWorker);
     } catch (err) {
       console.error('OCR failed:', err instanceof Error ? err.message : String(err));
     }
@@ -508,10 +554,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       //     never routed around by handing the same content back as text.
       if (!isRateLimitError(visionError) && !isRecitationError(visionError)) {
         try {
-          const raw = await callGeminiWithRetry(genAI, [ocrUserPrompt(ocrText)], OCR_SYSTEM_PROMPT);
+          const raw = await timer.stage('ocrGemini', () =>
+            callGeminiWithRetry(genAI, [ocrUserPrompt(ocrText)], OCR_SYSTEM_PROMPT, (i) => timer.gemini('ocrGemini', i)),
+          );
           const structured = parseRecipeJson(raw);
           if (structured) {
-            await recordExtractionMethod('ocr+gemini', fallbackReasons);
+            await finish('ocr+gemini', fallbackReasons);
             return res.status(200).json({
               ...buildRecipePayload(structured, 'Photo Upload'),
               extractionMethod: 'ocr+gemini',
@@ -528,8 +576,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
       // 2b. Deterministic local parser — always yields a result from the OCR text.
       //     No model involved, so this is also the only path after RECITATION.
-      const local = parseRecipeText(ocrText);
-      await recordExtractionMethod('ocr+local', fallbackReasons);
+      const local = await timer.stage('local', () => parseRecipeText(ocrText));
+      await finish('ocr+local', fallbackReasons);
       return res.status(200).json({
         title: local.title,
         source: 'Photo Upload',
@@ -546,7 +594,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     // 3. Neither vision nor OCR could read the photo.
     console.log(`extract-recipe: vision + OCR both failed (ocr gate: ${gate.reason})`);
-    await recordExtractionMethod('failed', fallbackReasons);
+    await finish('failed', fallbackReasons);
     if (visionError) return sendGeminiError(res, visionError);
     return res.status(422).json({
       error: 'Could not read the recipe from that photo. Try a clearer, well-lit photo of just the ingredients and steps, or enter it manually.',
@@ -603,11 +651,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const structuredHasSteps =
     Array.isArray(structured?.steps) && (structured!.steps as unknown[]).length > 0;
   const returnStructured = async (fallbackReason: string) => {
-    await recordExtractionMethod('url+structured', [fallbackReason]);
+    await finish('url+structured', [fallbackReason]);
     return res.status(200).json({ ...withCover(buildRecipePayload(structured!, hostname)), extractionMethod: 'url+structured' });
   };
   if (structured && structuredHasSteps) {
-    await recordExtractionMethod('url+structured');
+    await finish('url+structured');
     return res.status(200).json({ ...withCover(buildRecipePayload(structured, hostname)), extractionMethod: 'url+structured' });
   }
 
@@ -619,7 +667,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     ]);
     const data = parseRecipeJson(rawText);
     if (data) {
-      await recordExtractionMethod('url+gemini');
+      await finish('url+gemini');
       return res.status(200).json({ ...withCover(buildRecipePayload(data, hostname)), extractionMethod: 'url+gemini' });
     }
     console.error('URL structuring: JSON parse failure. Raw:', rawText.slice(0, 500));
@@ -628,7 +676,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const reason = `urlGemini-${classifyGeminiError(err)}`;
     // Partial JSON-LD (ingredients but no method) still beats a hard failure.
     if (structured) return returnStructured(reason);
-    await recordExtractionMethod('failed', [reason]);
+    await finish('failed', [reason]);
     return sendGeminiError(res, err);
   }
 
@@ -636,7 +684,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   //    earlier, return that; otherwise it's a tracked failure.
   if (structured) return returnStructured('urlGemini-bad-json');
   console.log('extract-recipe: url extraction failed (no JSON-LD, Gemini unparseable)');
-  await recordExtractionMethod('failed', ['urlGemini-bad-json']);
+  await finish('failed', ['urlGemini-bad-json']);
   return res.status(422).json({
     error: 'Could not extract the recipe from that page. Try a different URL or enter it manually.',
   });

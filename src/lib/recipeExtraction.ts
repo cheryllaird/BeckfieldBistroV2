@@ -1,11 +1,49 @@
+import type { User } from 'firebase/auth';
 import { auth } from './firebase';
-import { authedFetch } from './apiClient';
+import { authedFetch, NetworkError } from './apiClient';
 import type { Recipe } from '../types';
 
 export class RecipeExtractionError extends Error {
   constructor(message: string) {
     super(message);
     this.name = 'RecipeExtractionError';
+  }
+}
+
+export const CONNECTION_LOST_MESSAGE =
+  'Connection lost while reading the recipe. Check your signal and try again.';
+
+/**
+ * POSTs to /api/extract-recipe and returns the parsed recipe. A request or
+ * response body that fails because the connection dropped (authedFetch's
+ * NetworkError, or a TypeError while reading the body) says so, instead of
+ * falling through to a generic message that blames the API key.
+ */
+async function postExtraction(user: User, body: Record<string, string>): Promise<Partial<Recipe>> {
+  let response: Response;
+  try {
+    response = await authedFetch(user, '/api/extract-recipe', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+  } catch (e) {
+    if (e instanceof NetworkError || e instanceof TypeError) throw new RecipeExtractionError(CONNECTION_LOST_MESSAGE);
+    throw e;
+  }
+
+  if (!response.ok) {
+    const errBody = await response.json().catch(() => ({}));
+    throw new RecipeExtractionError(
+      errBody.error ?? "Couldn't read a recipe. Try again, or add it manually."
+    );
+  }
+
+  try {
+    return (await response.json()) as Partial<Recipe>;
+  } catch (e) {
+    if (e instanceof TypeError) throw new RecipeExtractionError(CONNECTION_LOST_MESSAGE);
+    throw e;
   }
 }
 
@@ -70,23 +108,17 @@ export async function extractRecipeFromImage(
 
   // Resize before sending — big enough for server-side OCR accuracy, small
   // enough (≲2.7 MB as base64) to stay under the endpoint's 8mb body limit
+  const t0 = performance.now();
   const resized = await resizeImage(dataUrl, { maxDimension: 2048, quality: 0.9 });
   const { base64, mediaType } = parseDataUrl(resized);
+  const t1 = performance.now();
 
-  const response = await authedFetch(auth.currentUser, '/api/extract-recipe', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ base64, mediaType }),
-  });
-
-  if (!response.ok) {
-    const body = await response.json().catch(() => ({}));
-    throw new RecipeExtractionError(
-      body.error ?? "Couldn't read a recipe. Try again, or add it manually."
-    );
-  }
-
-  return response.json() as Promise<Partial<Recipe>>;
+  const recipe = await postExtraction(auth.currentUser, { base64, mediaType });
+  // Debug timing only: printed to the console, never sent anywhere.
+  console.debug(
+    `extract timing: resize=${Math.round(t1 - t0)}ms request=${Math.round(performance.now() - t1)}ms`,
+  );
+  return recipe;
 }
 
 export async function extractRecipeFromUrl(
@@ -100,18 +132,5 @@ export async function extractRecipeFromUrl(
     throw new RecipeExtractionError('Add your Gemini API key in Settings to extract recipes.');
   }
 
-  const response = await authedFetch(auth.currentUser, '/api/extract-recipe', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ url }),
-  });
-
-  if (!response.ok) {
-    const body = await response.json().catch(() => ({}));
-    throw new RecipeExtractionError(
-      body.error ?? "Couldn't read a recipe. Try again, or add it manually."
-    );
-  }
-
-  return response.json() as Promise<Partial<Recipe>>;
+  return postExtraction(auth.currentUser, { url });
 }

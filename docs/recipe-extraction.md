@@ -306,6 +306,23 @@ One request can add several (e.g. `vision-overload` then `ocrGemini-bad-json` �
 those always end in `ocr+local` or `failed`. The `<method>` counts are unaffected.
 Counters before this was added have no `fallbackReasons`.
 
+**Timing** — every request that gets past sign-in ends at one `finish()` call in
+`api/extract-recipe.ts`, which does both of the following:
+- logs exactly one line, `extract-recipe: timing kind=photo|url method=<method> total=<ms>`
+  followed by the stages that ran (`auth`, `profile`, `vision`, `ocrPreprocess`, `ocr`,
+  `ocrGemini`, `local`, `analytics`), `ocrWorker=cold|warm` after `ocr`, and
+  `<vision|ocrGemini>Model` / `Attempts`. The line is built from an allow-list in
+  `api/_utils/extractionTiming.ts`: no uid, key, image, OCR text or model output.
+- adds the total (measured up to the analytics write) to `durations.<method>.<bucket>` in both
+  analytics docs, buckets `lt5s`, `5to10s`, `10to20s`, `20to40s`, `40sPlus`. Photo requests where
+  OCR ran also add to `ocrCold` or `ocrWarm`. Percentiles read from the daily docs are approximate
+  (bucket-sized), which is enough to choose between speed-ups. Vercel runtime logs expire after
+  1 hour here, so the buckets are the baseline that lasts.
+
+The client prints `extract timing: …` with `console.debug` only (resize, request, and total from
+crop confirm to draft); nothing is sent anywhere. A dropped connection on photo or URL
+extraction shows "Connection lost while reading the recipe…", not an API-key message.
+
 **Reading the signal.** A rising `ocr+*` share means vision is being blocked/failing a
 lot on photos; a high `url+gemini` share means few sites carried usable JSON‑LD. Either
 is grounds to revisit method order (both are localized changes in the handler).
