@@ -38,6 +38,14 @@ describe('consolidateIngredients', () => {
     expect(items.map((i) => i.name)).toEqual(['1500 g sugar']);
   });
 
+  it('merges an ingredient whose prep follows the name without a comma', () => {
+    const items = consolidateIngredients([
+      { ingredients: [makeIngredient({ name: 'sweet potatoes', quantity: 500, unit: 'g' })], servings: 1, originalServings: 1 },
+      { ingredients: [makeIngredient({ name: 'sweet potatoes grated', quantity: 750, unit: 'g' })], servings: 1, originalServings: 1 },
+    ]);
+    expect(items.map((i) => i.name)).toEqual(['1250 g sweet potatoes']);
+  });
+
   it('keeps a whole lemon and its juice on one line', () => {
     const items = consolidateIngredients([
       {
