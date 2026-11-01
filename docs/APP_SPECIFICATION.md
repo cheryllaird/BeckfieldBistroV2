@@ -323,7 +323,10 @@ explicit list) belong to **Immediate**, so existing lists carry over unchanged.
   (§8) is omitted. The skipped staples are shown up front as **"N ingredients in
   store cupboard — skipped"**; opening it lists each ingredient as written in the
   recipe with the cupboard item that covered it (e.g. "sea salt flakes (cupboard:
-  salt)") and an **Add anyway** switch. Switched-on items are included when the
+  salt)") and an **Add anyway** switch. Bare herb and root names mean the fresh
+  thing ("coriander" is fresh coriander, "ginger" is root ginger), so a dried or
+  ground cupboard item such as ground coriander never covers them, nor the
+  reverse. Switched-on items are included when the
   list is generated (and only for that generate — choices aren't remembered). This
   is the key "don't buy what you already have" behaviour.
 - **Targets the Immediate list:** generated items always populate the **Immediate**
