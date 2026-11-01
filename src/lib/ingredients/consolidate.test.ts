@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { consolidateIngredients, mergeIntoShoppingList } from './consolidate';
+import { consolidateIngredients, mergeIntoShoppingList, previewMealAdd } from './consolidate';
 import { splitByPantry } from './pantry';
 import { makeIngredient, makePantryItem, makeShoppingItem } from '../../test/factories';
 import type { ShoppingItem } from '../../types';
@@ -382,5 +382,60 @@ describe('remembered categories', () => {
   it('files items added from a meal the same way', () => {
     const result = mergeIntoShoppingList([], [makeIngredient({ name: 'firm tofu, cubed', unit: 'g' })], { categoryOverrides: { 'firm tofu': 'Dairy & Eggs' } });
     expect(result[0].category).toBe('Dairy & Eggs');
+  });
+});
+
+describe('choosing what a meal adds', () => {
+  const ingredients = [
+    makeIngredient({ name: 'flour', quantity: 200, unit: 'g' }),
+    makeIngredient({ name: 'eggs', quantity: 2, unit: '' }),
+    makeIngredient({ name: 'salt', quantity: 5, unit: 'g' }),
+  ];
+  const pantryItems = [makePantryItem({ name: 'salt', normalizedName: 'salt' })];
+  const opts = { mealEntryId: 'm1', recipeTitle: 'Cake', pantryItems };
+  const names = (items: ShoppingItem[]) => items.map((i) => i.name);
+
+  it('leaves out excluded ingredients', () => {
+    const result = mergeIntoShoppingList([], ingredients, { ...opts, excludeKeys: new Set(['egg']) });
+    expect(names(result)).toEqual(['200 g flour']);
+  });
+
+  it('adds a kept cupboard staple even when other lines are excluded', () => {
+    const result = mergeIntoShoppingList([], ingredients, {
+      ...opts,
+      keepPantryKeys: new Set(['salt']),
+      excludeKeys: new Set(['flour']),
+    });
+    expect(names(result)).toEqual(['2 eggs', '5 g salt']);
+  });
+
+  it('previews every new line, marking cupboard staples', () => {
+    const rows = previewMealAdd([], ingredients, opts);
+    expect(rows).toEqual([
+      { key: 'flour', name: '200 g flour', previousName: undefined, cupboardItem: undefined },
+      { key: 'egg', name: '2 eggs', previousName: undefined, cupboardItem: undefined },
+      { key: 'salt', name: '5 g salt', previousName: undefined, cupboardItem: 'salt' },
+    ]);
+  });
+
+  it('previews the total when a line folds into an item already on the list', () => {
+    const existing = [makeShoppingItem({
+      id: 'f',
+      name: '100 g flour',
+      ingredientKey: 'flour',
+      mealSources: [{ mealEntryId: 'm0', recipeTitle: 'Bread', scaledQuantity: 100, unit: 'g', ingredientName: 'flour' }],
+    })];
+    const rows = previewMealAdd(existing, ingredients.slice(0, 1), opts);
+    expect(rows).toEqual([{ key: 'flour', name: '300 g flour', previousName: '100 g flour', cupboardItem: undefined }]);
+  });
+
+  it('previews nothing once the meal has been added', () => {
+    const added = mergeIntoShoppingList([], ingredients, { ...opts, keepPantryKeys: new Set(['salt']) });
+    expect(previewMealAdd(added, ingredients, opts)).toEqual([]);
+  });
+
+  it('matches the plain add when nothing is unticked', () => {
+    const preview = previewMealAdd([], ingredients, opts).filter((row) => !row.cupboardItem);
+    expect(preview.map((row) => row.name)).toEqual(names(mergeIntoShoppingList([], ingredients, opts)));
   });
 });

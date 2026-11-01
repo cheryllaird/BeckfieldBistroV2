@@ -4,8 +4,9 @@ import { useStore } from '../../store';
 import { Button } from '../../components/ui/Button';
 import { ModalPortal } from '../../components/ui/ModalPortal';
 import { getRecipeIngredients, isoDate, getWeekDays } from '../../lib/utils';
-import { consolidateIngredients, splitByPantry, type IngredientGroup, type PantrySkip } from '../../lib/ingredients';
-import { PantrySkipList } from './PantrySkipList';
+import { consolidateIngredients, splitByPantry, type IngredientGroup } from '../../lib/ingredients';
+import { ItemPicker } from './ItemPicker';
+import { useItemTicks, type PickRow } from './useItemTicks';
 
 interface Props {
   onClose: () => void;
@@ -27,8 +28,8 @@ export function GenerateListModal({ onClose }: Props) {
     new Set(recipeEntries.map((e) => e.id))
   );
 
-  // Cupboard staples the user has switched on for this generate only.
-  const [keepKeys, setKeepKeys] = useState<Set<string>>(new Set());
+  // Items left off and cupboard staples added, for this generate only.
+  const { kept: keepKeys, isTicked, toggle: toggleItem } = useItemTicks();
 
   // The selected meals' ingredients, split into what to buy and what the store
   // cupboard covers, then consolidated.
@@ -47,16 +48,21 @@ export function GenerateListModal({ onClose }: Props) {
     recipeTitle: recipe.title,
   }));
   const toBuy = consolidateIngredients(groups, categoryOverrides);
-  const skipped: PantrySkip[] = [
-    ...new Map(splits.flatMap((s) => s.skipped).map((skip) => [skip.key, skip])).values(),
+  const skipped = new Map(splits.flatMap((s) => s.skipped).map((skip) => [skip.key, skip]));
+  // Staples added anyway are in toBuy too; list them once, under the cupboard.
+  const rows: PickRow[] = [
+    ...toBuy
+      .filter((item) => !skipped.has(item.ingredientKey ?? ''))
+      .map((item) => ({ key: item.ingredientKey ?? item.id, label: item.name })),
+    ...[...skipped.values()].map((skip) => ({
+      key: skip.key,
+      label: toBuy.find((item) => item.ingredientKey === skip.key)?.name ?? skip.ingredient.name,
+      detail: `Cupboard: ${skip.pantryItem.name}`,
+      inCupboard: true,
+    })),
   ];
-
-  const setKept = (key: string, kept: boolean) =>
-    setKeepKeys((prev) => {
-      const next = new Set(prev);
-      if (kept) { next.add(key); } else { next.delete(key); }
-      return next;
-    });
+  const leftOff = new Set(rows.filter((row) => !isTicked(row)).map((row) => row.key));
+  const chosen = toBuy.filter((item) => !leftOff.has(item.ingredientKey ?? item.id));
 
   const toggle = (id: string) =>
     setSelected((prev) => {
@@ -67,7 +73,7 @@ export function GenerateListModal({ onClose }: Props) {
 
   const handleGenerate = () => {
     // Generated items always populate the Immediate list.
-    const items = toBuy.map((item) => ({ ...item, listType: 'immediate' as const }));
+    const items = chosen.map((item) => ({ ...item, listType: 'immediate' as const }));
     // Replace only the Immediate list; leave Stock up items untouched.
     const stockUp = shoppingItems.filter(
       (i) => (i.listType ?? 'immediate') === 'stock-up'
@@ -138,14 +144,9 @@ export function GenerateListModal({ onClose }: Props) {
               })}
             </div>
           )}
-          {skipped.length > 0 && (
-            <div className="mt-3">
-              <PantrySkipList
-                skipped={skipped}
-                added={keepKeys}
-                onAdd={(skip) => setKept(skip.key, true)}
-                onRemove={(skip) => setKept(skip.key, false)}
-              />
+          {rows.length > 0 && (
+            <div className="mt-4">
+              <ItemPicker rows={rows} isTicked={isTicked} onToggle={toggleItem} />
             </div>
           )}
         </div>
@@ -156,7 +157,7 @@ export function GenerateListModal({ onClose }: Props) {
           </Button>
           <Button
             fullWidth
-            disabled={selected.size === 0}
+            disabled={selected.size === 0 || chosen.length === 0}
             onClick={handleGenerate}
           >
             Generate ({selected.size})

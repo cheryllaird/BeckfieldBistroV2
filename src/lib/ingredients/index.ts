@@ -4,11 +4,15 @@ export { formatQuantity } from './amounts';
 export { normalizeIngredientName } from './canonicalName';
 export { categorize, defaultCategory } from './categorize';
 export { categoryKey, itemCategoryKey } from './categoryOverrides';
-export { consolidateIngredients, mergeIntoShoppingList, type IngredientGroup } from './consolidate';
+export {
+  consolidateIngredients,
+  mergeIntoShoppingList,
+  previewMealAdd,
+  type IngredientGroup,
+} from './consolidate';
 export {
   isInStock,
   isOnShoppingList,
   shoppingItemFromPantry,
   splitByPantry,
-  type PantrySkip,
 } from './pantry';
