@@ -6,7 +6,6 @@ export { categorize, defaultCategory } from './categorize';
 export { categoryKey, itemCategoryKey } from './categoryOverrides';
 export { consolidateIngredients, mergeIntoShoppingList, type IngredientGroup } from './consolidate';
 export {
-  findPantryMatch,
   isInStock,
   isOnShoppingList,
   shoppingItemFromPantry,
