@@ -31,6 +31,20 @@ const AMBIGUOUS_PANTRY_HEADS = new Set([
   'sugar',
 ]);
 
+// Ingredients whose bare name means the fresh thing: in a UK recipe
+// "coriander" is a bunch of leaves and "ginger" a knob of root. Their dried or
+// ground forms are a different product on a different shelf, so a jar of
+// ground coriander in the cupboard never covers fresh coriander (or the other
+// way round). For every other staple the form is just a variant ("ground black
+// pepper" is still pepper).
+const FRESH_BY_DEFAULT = new Set([
+  'basil', 'chilli', 'chive', 'coriander', 'dill', 'garlic', 'ginger',
+  'lemongrass', 'mint', 'parsley', 'rosemary', 'sage', 'tarragon', 'thyme',
+]);
+
+// Qualifiers that mark the dried or ground form of an ingredient.
+const PRESERVED_FORM_WORDS = new Set(['dried', 'dry', 'ground', 'granule', 'flak', 'flake']);
+
 const LEADING_AMOUNT = new RegExp(
   `^\\s*(?:[\\d./¼½¾⅓⅔⅛\\s-]+)?\\s*(?:(?:${AMOUNT_UNIT_WORDS.join('|')})\\.?\\s+)?`,
   'i'
@@ -42,16 +56,22 @@ export function stripLeadingAmount(text: string): string {
   return stripped || text.trim();
 }
 
-/** Strips variant qualifiers so "sea salt flakes" and "salt" compare equal. */
-function pantryCoreName(normalizedName: string): string {
+/**
+ * Strips variant qualifiers so "sea salt flakes" and "salt" compare equal, and
+ * notes whether any of them marked a dried or ground form.
+ */
+function pantryCoreName(normalizedName: string): { core: string; preserved: boolean } {
   let words = normalizedName.replace(/-/g, ' ').split(/\s+/).filter(Boolean);
+  let preserved = false;
   while (words.length > 1 && PANTRY_QUALIFIER_PREFIXES.has(words[0])) {
+    preserved ||= PRESERVED_FORM_WORDS.has(words[0]);
     words = words.slice(1);
   }
   while (words.length > 1 && PANTRY_QUALIFIER_SUFFIXES.has(words[words.length - 1])) {
+    preserved ||= PRESERVED_FORM_WORDS.has(words[words.length - 1]);
     words = words.slice(0, -1);
   }
-  return words.join(' ');
+  return { core: words.join(' '), preserved };
 }
 
 /**
@@ -66,8 +86,16 @@ export function matchesPantryName(ingredientName: string, pantryNormalizedName: 
   if (!ingredient || !pantry) return false;
   if (ingredient === pantry) return true;
 
-  const ingredientCore = pantryCoreName(ingredient);
-  const pantryCore = pantryCoreName(pantry);
+  const { core: ingredientCore, preserved: ingredientPreserved } = pantryCoreName(ingredient);
+  const { core: pantryCore, preserved: pantryPreserved } = pantryCoreName(pantry);
+  // Fresh and dried/ground forms of a fresh-by-default ingredient never cover
+  // each other ("coriander" vs cupboard "ground coriander").
+  if (
+    ingredientPreserved !== pantryPreserved &&
+    (FRESH_BY_DEFAULT.has(ingredientCore) || FRESH_BY_DEFAULT.has(pantryCore))
+  ) {
+    return false;
+  }
   if (ingredientCore === pantryCore) return true;
   if (AMBIGUOUS_PANTRY_HEADS.has(pantryCore)) return false;
 

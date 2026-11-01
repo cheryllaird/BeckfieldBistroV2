@@ -35,6 +35,10 @@ describe('matchesPantryName', () => {
     ['salt', 'sea salt'],
     ['caster sugar', 'sugar'],
     ['cloves garlic', 'garlic'],
+    ['ground coriander', 'ground coriander'],
+    ['fresh coriander', 'coriander'],
+    ['1 tsp dried thyme', 'dried thyme'],
+    ['ground cumin', 'cumin'],
   ])('ingredient %j is covered by cupboard %j', (ingredient, pantry) => {
     expect(matchesPantryName(ingredient, pantry)).toBe(true);
   });
@@ -45,6 +49,15 @@ describe('matchesPantryName', () => {
     ['spring onion', 'onion'],
     ['coconut cream', 'cream'],
     ['olive oil', 'salt'],
+    // Bare herb and root names mean fresh; their dried or ground forms are
+    // a different product.
+    ['coriander', 'ground coriander'],
+    ['handful fresh coriander, chopped', 'ground coriander'],
+    ['ground coriander', 'coriander'],
+    ['parsley', 'dried parsley'],
+    ['thumb-sized piece of ginger', 'ground ginger'],
+    ['garlic', 'garlic granules'],
+    ['red chilli', 'dried chilli flakes'],
   ])('ingredient %j is NOT covered by cupboard %j', (ingredient, pantry) => {
     expect(matchesPantryName(ingredient, pantry)).toBe(false);
   });
