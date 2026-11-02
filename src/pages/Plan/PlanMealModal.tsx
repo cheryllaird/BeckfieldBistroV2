@@ -51,12 +51,12 @@ export function PlanMealModal({ date, onClose }: Props) {
   );
 
   const addRecipeMeal = (recipeId: string, servings: number) => {
-    addMealEntry({ id: generateId(), date, type: 'recipe', recipeId, servings });
+    addMealEntry({ id: generateId(), date, type: 'recipe', recipeId, servings, addedFrom: 'plan' });
     onClose();
   };
 
   const addCustomMeal = (title: string) => {
-    addMealEntry({ id: generateId(), date, type: 'custom', customTitle: title.trim(), servings: 1 });
+    addMealEntry({ id: generateId(), date, type: 'custom', customTitle: title.trim(), servings: 1, addedFrom: 'plan' });
     onClose();
   };
 
@@ -68,6 +68,7 @@ export function PlanMealModal({ date, onClose }: Props) {
       customTitle: location.trim() || 'Dining out',
       location: location.trim(),
       servings: 1,
+      addedFrom: 'plan',
     });
     onClose();
   };
