@@ -6,7 +6,7 @@
 // Nothing here ever sees a uid, API key, image, OCR text or model output: only
 // stage names, durations, a model name, an attempt count and a cold/warm flag.
 
-export type StageName =
+type StageName =
   | 'auth'
   | 'profile'
   | 'vision'
