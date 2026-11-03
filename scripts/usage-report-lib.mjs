@@ -71,8 +71,8 @@ function extractionFigures({ lifetime, daily }, now) {
  *   extraction?: { lifetime?: object, daily?: object[] },
  *   bistros: Array<{
  *     memberCount: number,
- *     recipes: Array<{ updateTime: number }>,
- *     mealEntries: Array<{ type?: string, recipeId?: string, updateTime: number }>,
+ *     recipes: Array<{ importMeta?: { method?: string, extractionMethod?: string, editedBeforeSave?: string[] }, updateTime: number }>,
+ *     mealEntries: Array<{ type?: string, recipeId?: string, addedFrom?: string, updateTime: number }>,
  *     pantryItems: Array<{ inStock?: boolean, updateTime: number }>,
  *     shoppingItems: Array<{ updateTime: number }>,
  *     categoryLogs: Array<{ ingredientKey?: string, source?: string, fromCategory: string, toCategory: string }>,
@@ -115,6 +115,28 @@ export function aggregateUsage(input, now = Date.now()) {
   const types = new Map();
   for (const b of bistros) for (const e of b.mealEntries) types.set(e.type ?? 'unknown', (types.get(e.type ?? 'unknown') ?? 0) + 1);
 
+  // How meals are added and how recipes are imported. Docs written before the
+  // metadata existed have no field and count as 'unknown'.
+  const addedFrom = new Map();
+  const importMethods = new Map();
+  const extractionMethods = new Map();
+  const edits = new Map();
+  let extracted = 0;
+  const bump = (m, k) => m.set(k, (m.get(k) ?? 0) + 1);
+  for (const b of bistros) {
+    for (const e of b.mealEntries) bump(addedFrom, e.addedFrom ?? 'unknown');
+    for (const r of b.recipes) {
+      const meta = r.importMeta;
+      bump(importMethods, meta?.method ?? 'unknown');
+      if (meta?.extractionMethod) bump(extractionMethods, meta.extractionMethod);
+      if (Array.isArray(meta?.editedBeforeSave)) {
+        extracted++;
+        if (meta.editedBeforeSave.length === 0) bump(edits, 'unchanged');
+        for (const f of meta.editedBeforeSave) bump(edits, f);
+      }
+    }
+  }
+
   // Weekly active bistros.
   const weeks = new Map();
   for (const b of bistros) {
@@ -144,6 +166,10 @@ export function aggregateUsage(input, now = Date.now()) {
       inStockShare: withPantry.length >= MIN_GROUP && pantryTotal > 0 ? Math.round((inStock / pantryTotal) * 100) / 100 : '<3',
     },
     mealEntryTypes: suppressAll(types),
+    mealEntriesAddedFrom: suppressAll(addedFrom),
+    recipeImportMethods: suppressAll(importMethods),
+    recipeExtractionMethods: suppressAll(extractionMethods),
+    extractedRecipeEdits: { savedRecipes: suppress(extracted), byOutcome: suppressAll(edits) },
     recipesPerBistro: bucketCounts(bistros.map((b) => b.recipes.length), COUNT_BUCKETS),
     recipesEverPlannedPerBistro: bucketCounts(
       bistros.map((b) => new Set(b.mealEntries.map((e) => e.recipeId).filter(Boolean)).size),

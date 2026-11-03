@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { X, Check, ChevronLeft, ChevronRight } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import type { Recipe } from '../../types';
+import type { MealAddedFrom, Recipe } from '../../types';
 import { useStore } from '../../store';
 import { Button } from '../../components/ui/Button';
 import { ModalPortal } from '../../components/ui/ModalPortal';
@@ -13,9 +13,10 @@ interface Props {
   onClose: () => void;
   initialDate?: string;
   onConfirm?: () => void;
+  addedFrom: MealAddedFrom;
 }
 
-export function PlanDateModal({ recipe, servings, onClose, initialDate, onConfirm }: Props) {
+export function PlanDateModal({ recipe, servings, onClose, initialDate, onConfirm, addedFrom }: Props) {
   const navigate = useNavigate();
   const addMealEntry = useStore((s) => s.addMealEntry);
   const mealEntries = useStore((s) => s.mealEntries);
@@ -58,6 +59,7 @@ export function PlanDateModal({ recipe, servings, onClose, initialDate, onConfir
       type: 'recipe',
       recipeId: recipe.id,
       servings,
+      addedFrom,
     });
     onClose();
     if (onConfirm) {

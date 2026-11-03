@@ -308,6 +308,7 @@ export function RecipeDetailPage() {
       {planModalOpen && (
         <PlanDateModal
           recipe={recipe}
+          addedFrom="recipe-detail"
           servings={servings}
           onClose={() => setPlanModalOpen(false)}
         />
