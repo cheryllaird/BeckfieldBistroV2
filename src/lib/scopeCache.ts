@@ -11,7 +11,7 @@ import type { AppState } from '../types';
 
 export type ScopeData = Pick<
   AppState,
-  'recipes' | 'mealEntries' | 'shoppingItems' | 'shoppingTombstones' | 'pantryItems' | 'categoryOverrides' | 'knownSources'
+  'recipes' | 'mealEntries' | 'shoppingItems' | 'shoppingTombstones' | 'pantryItems' | 'categoryOverrides' | 'shelfOverrides' | 'knownSources'
 >;
 
 export const EMPTY_SCOPE: ScopeData = {
@@ -21,6 +21,7 @@ export const EMPTY_SCOPE: ScopeData = {
   shoppingTombstones: {},
   pantryItems: [],
   categoryOverrides: {},
+  shelfOverrides: {},
   knownSources: [],
 };
 
@@ -34,6 +35,7 @@ export function pickScopeData(s: ScopeData): ScopeData {
     shoppingTombstones: s.shoppingTombstones,
     pantryItems: s.pantryItems,
     categoryOverrides: s.categoryOverrides,
+    shelfOverrides: s.shelfOverrides,
     knownSources: s.knownSources,
   };
 }

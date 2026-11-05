@@ -89,7 +89,7 @@ interface Keyword {
  * "toilet", "ham" in "shampoo", "water" in "watercress", "butter" in
  * "butterflied".
  */
-function keywordPattern(keyword: string): RegExp {
+export function keywordPattern(keyword: string): RegExp {
   const escaped = keyword.replace(/[-]/g, '\\-');
   const word = /[^aeiou]y$/.test(escaped) ? `${escaped.slice(0, -1)}(?:y|ies)` : `${escaped}(?:e?s)?`;
   return new RegExp(`(?:^|[^a-z])${word}(?![a-z])`);

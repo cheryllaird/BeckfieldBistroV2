@@ -27,6 +27,8 @@ import {
   logCategoryOverride as firestoreLogCategoryOverride,
   saveCategoryOverride,
   deleteCategoryOverride,
+  saveShelfOverride,
+  deleteShelfOverride,
   flushPendingWrites,
   setDataRoot,
   subscribeToBistroAccess,
@@ -59,7 +61,7 @@ import {
   nextClock,
   reconcileShoppingSnapshot,
 } from '../lib/shoppingSync';
-import { defaultCategory } from '../lib/ingredients';
+import { categoryKey, defaultCategory, defaultShelf } from '../lib/ingredients';
 import type {
   Recipe,
   MealEntry,
@@ -70,6 +72,7 @@ import type {
   SharedRecipe,
   BistroInvite,
   CategoryChange,
+  PantryShelf,
   MigrationState,
 } from '../types';
 
@@ -166,6 +169,11 @@ interface Store extends AppState {
    * logs the change. Choosing the built-in aisle again forgets the override.
    */
   rememberCategory: (change: CategoryChange) => void;
+  /**
+   * Remember the Pantry shelf the bistro files an ingredient on. Choosing the
+   * shelf the keyword tables would pick forgets the override.
+   */
+  rememberShelf: (itemName: string, shelf: PantryShelf) => void;
 
   // Bistro actions
   switchBistro: (bistroId: string) => Promise<void>;
@@ -402,6 +410,11 @@ function attachDataListeners(bistroId: string, ownUid: string, set: SetState, ge
     onCategoryOverrides: (overrides) => {
       applyCollectionSnapshot('categoryOverrides', overrides, Object.keys(get().categoryOverrides).length, () =>
         set({ categoryOverrides: Object.fromEntries(overrides.map((o) => [o.ingredientKey, o.category])) }),
+      );
+    },
+    onShelfOverrides: (overrides) => {
+      applyCollectionSnapshot('shelfOverrides', overrides, Object.keys(get().shelfOverrides).length, () =>
+        set({ shelfOverrides: Object.fromEntries(overrides.map((o) => [o.ingredientKey, o.shelf])) }),
       );
     },
     onKnownSources: (knownSources) => {
@@ -685,6 +698,7 @@ export const useStore = create<Store>()(
       shoppingTombstones: {},
       pantryItems: [],
       categoryOverrides: {},
+      shelfOverrides: {},
       knownSources: [],
       hasGeminiApiKey: false,
       termsAcceptedVersion: undefined,
@@ -1079,6 +1093,21 @@ export const useStore = create<Store>()(
         });
       },
 
+      rememberShelf: (itemName, shelf) => {
+        const ingredientKey = categoryKey(itemName);
+        if (!ingredientKey) return;
+        const overrides = { ...get().shelfOverrides };
+        const isDefault = shelf === defaultShelf(itemName);
+        if (isDefault) delete overrides[ingredientKey];
+        else overrides[ingredientKey] = shelf;
+        set({ shelfOverrides: overrides });
+
+        const scope = scopeOf(get());
+        if (!scope) return;
+        if (isDefault) deleteShelfOverride(scope, ingredientKey);
+        else saveShelfOverride(scope, { ingredientKey, shelf, updatedAt: Date.now() });
+      },
+
       // ── bistros ───────────────────────────────────────────────────────────
 
       switchBistro: (bistroId) => {
@@ -1179,6 +1208,7 @@ export const useStore = create<Store>()(
         shoppingTombstones: s.shoppingTombstones,
         pantryItems: s.pantryItems,
         categoryOverrides: s.categoryOverrides,
+        shelfOverrides: s.shelfOverrides,
         knownSources: s.knownSources,
         hasGeminiApiKey: s.hasGeminiApiKey,
         // So an offline relaunch doesn't wait on the profile to know it's accepted.

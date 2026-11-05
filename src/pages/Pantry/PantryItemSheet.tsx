@@ -1,8 +1,9 @@
 import { useEffect } from 'react';
 import { Trash2 } from 'lucide-react';
 import { ModalPortal } from '../../components/ui/ModalPortal';
+import { ShelfPicker } from '../../components/ShelfPicker';
 import type { PantryItem, ShoppingCategory } from '../../types';
-import { CATEGORY_ORDER } from './categoryOrder';
+import { CATEGORY_ORDER } from '../../lib/ingredients/categoryOrder';
 
 // Bottom sheet for the less frequent store cupboard edits, matching the
 // shopping list's item sheet. Changes apply as soon as they are made.
@@ -64,6 +65,8 @@ export function PantryItemSheet({
               ))}
             </div>
           </section>
+
+          {item.category === 'Pantry' && <ShelfPicker name={item.name} />}
 
           <button
             onClick={onRemove}

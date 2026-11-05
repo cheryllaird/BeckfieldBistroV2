@@ -4,10 +4,9 @@ import { ArrowLeft, Plus, Archive, ArrowUpDown } from 'lucide-react';
 import { useStore } from '../../store';
 import { Button } from '../../components/ui/Button';
 import { generateId } from '../../lib/utils';
-import { categorize, categoryKey, normalizeIngredientName } from '../../lib/ingredients';
+import { categorize, categoryKey, categoryRank, normalizeIngredientName } from '../../lib/ingredients';
 import type { ShoppingCategory } from '../../types';
 import { PantryItemRow } from './PantryItemRow';
-import { CATEGORY_ORDER } from './categoryOrder';
 
 export function PantryPage() {
   const navigate = useNavigate();
@@ -58,7 +57,7 @@ export function PantryPage() {
 
   const handleAutoSort = () => {
     const sorted = [...pantryItems].sort(
-      (a, b) => CATEGORY_ORDER.indexOf(a.category) - CATEGORY_ORDER.indexOf(b.category)
+      (a, b) => categoryRank(a.category) - categoryRank(b.category)
     );
     reorderPantryItems(sorted);
   };

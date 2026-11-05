@@ -93,6 +93,27 @@ export type ShoppingCategory =
   | 'Beverages'
   | 'Other';
 
+// Finer grouping inside the Pantry category. Derived from the ingredient name
+// (lib/ingredients/shelves.ts), never stored on items.
+export type PantryShelf =
+  | 'Oils & Vinegars'
+  | 'Condiments & Sauces'
+  | 'Pasta, Rice & Grains'
+  | 'Tins & Jars'
+  | 'Baking'
+  | 'Nuts, Seeds & Dried Fruit'
+  | 'Spreads & Syrups'
+  | 'Other pantry';
+
+// The shelf a bistro has chosen for a Pantry ingredient. One doc per ingredient
+// key in its own collection, so older clients rewriting a category override
+// can't wipe it; removed when the choice goes back to the worked-out shelf.
+export interface ShelfOverride {
+  ingredientKey: string; // categoryKey of the ingredient
+  shelf: PantryShelf;
+  updatedAt: number; // epoch ms
+}
+
 export interface SharedRecipe {
   id: string;
   fromUid: string;
@@ -192,6 +213,8 @@ export interface AppState {
   pantryItems: PantryItem[];
   // Ingredient key → the aisle this bistro files it under (CategoryOverride).
   categoryOverrides: Record<string, ShoppingCategory>;
+  // Ingredient key → the Pantry shelf this bistro files it on (ShelfOverride).
+  shelfOverrides: Record<string, PantryShelf>;
   knownSources: string[];
   hasGeminiApiKey: boolean;
   // The Terms version this user last accepted (lib/legal.ts). undefined until

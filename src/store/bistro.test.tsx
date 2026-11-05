@@ -130,6 +130,26 @@ describe('scope', () => {
     expect(useStore.getState().categoryOverrides).toEqual({ tofu: 'Dairy & Eggs' });
   });
 
+  it('remembers a shelf choice and forgets it when set back to the worked-out shelf', () => {
+    launch();
+    useStore.getState().rememberShelf('200 g capers', 'Tins & Jars');
+    expect(useStore.getState().shelfOverrides).toEqual({ caper: 'Tins & Jars' });
+    expect(firestore.saveShelfOverride).toHaveBeenCalledWith('me', expect.objectContaining({ ingredientKey: 'caper', shelf: 'Tins & Jars' }));
+
+    useStore.getState().rememberShelf('capers', 'Condiments & Sauces');
+    expect(useStore.getState().shelfOverrides).toEqual({});
+    expect(firestore.deleteShelfOverride).toHaveBeenCalledWith('me', 'caper');
+  });
+
+  it('loads shelf overrides from the server', () => {
+    launch();
+    const callbacks = vi.mocked(firestore.subscribeToUserData).mock.calls.at(-1)![2] as unknown as {
+      onShelfOverrides: (o: { ingredientKey: string; shelf: string; updatedAt: number }[]) => void;
+    };
+    callbacks.onShelfOverrides([{ ingredientKey: 'honey', shelf: 'Baking', updatedAt: 1 }]);
+    expect(useStore.getState().shelfOverrides).toEqual({ honey: 'Baking' });
+  });
+
   it('saves accepted recipe shares into the active bistro', async () => {
     launch({ activeBistroId: 'ann' });
     const share = {
