@@ -6,9 +6,10 @@ import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
 import { generateId, sortSourcesByRecentUse } from '../../lib/utils';
 import { NetworkError } from '../../lib/apiClient';
-import { extractRecipeFromImage, extractRecipeFromUrl, resizeImage, ORIGINAL_IMAGE_RESIZE, RecipeExtractionError } from '../../lib/recipeExtraction';
+import { extractRecipeFromImage, extractRecipeFromUrl, resizeImage, ORIGINAL_IMAGE_RESIZE, RecipeExtractionError, type ImageExtractionStage } from '../../lib/recipeExtraction';
 import type { Recipe } from '../../types';
 import { RecipeForm } from './RecipeForm';
+import { ExtractionProgress } from './ExtractionProgress';
 import { ImageCropper } from '../../components/ImageCropper';
 import { CameraCapture } from '../../components/CameraCapture';
 import { useOnlineStatus } from '../../hooks/useOnlineStatus';
@@ -35,6 +36,7 @@ export function NewRecipePage() {
   const [mode, setMode] = useState<CaptureMode>(prefillTitle || isEditMode ? 'manual' : 'upload');
   const [urlInput, setUrlInput] = useState('');
   const [isExtracting, setIsExtracting] = useState(false);
+  const [stage, setStage] = useState<ImageExtractionStage>('preparing');
   const [extractError, setExtractError] = useState('');
 
   const [isSaving, setIsSaving] = useState(false);
@@ -86,12 +88,13 @@ export function NewRecipePage() {
 
   const handleCropConfirm = async (croppedDataUrl: string) => {
     setCropSrc(null);
+    setStage('preparing');
     setIsExtracting(true);
     setExtractError('');
     const startedAt = performance.now();
     try {
       const [extracted, resizedDataUrl, originalDataUrl] = await Promise.all([
-        extractRecipeFromImage(croppedDataUrl, hasGeminiApiKey),
+        extractRecipeFromImage(croppedDataUrl, hasGeminiApiKey, setStage),
         resizeImage(croppedDataUrl),
         // Kept so the source photo stays reachable even after the cover is
         // swapped for a nicer picture of the finished dish.
@@ -263,13 +266,7 @@ export function NewRecipePage() {
                 : 'border-slate-200',
             ].join(' ')}>
               {isExtracting ? (
-                <>
-                  <Loader size={32} className="text-amber-500 animate-spin" />
-                  <div className="text-center">
-                    <p className="text-sm font-medium text-slate-700">Analysing photo…</p>
-                    <p className="text-xs text-slate-400 mt-0.5">This may take a few seconds</p>
-                  </div>
-                </>
+                <ExtractionProgress stage={stage} />
               ) : (
                 <>
                   <Camera size={32} className="text-slate-400" />
