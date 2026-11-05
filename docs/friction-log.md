@@ -23,6 +23,17 @@ Only the triage agent or a human changes a status. Entries are never deleted.
 
 ## Entries
 
+### 2026-11-05: Ready issues depend on unmerged work and ADR numbers collide
+- **Who:** agent (build-ready)
+- **Task:** nightly build of #175 and #211
+- **Friction:** #175 says "build after #198" and #212 says "after #211", but both prerequisites
+  are open PRs, not on `main`, while the issues carry `status:ready`. The skill says to branch from
+  `main`, so #175 will conflict with PR #215 and #212 had to be skipped. Open PRs also reserve
+  the next ADR number (#215 uses 0017), so parallel PRs pick numbers by guesswork.
+- **Suggested fix:** list prerequisites as `Blocked by #n` and have build-ready skip issues whose
+  blockers are still open; reserve ADR numbers in the PR title or pick `max(main, open PRs) + 1`.
+- **Status:** open
+
 ### 2026-11-01: Merging a meal into a manual item drops the manual amount
 - **Who:** agent (ship-feature)
 - **Task:** shopping list preview, issue https://github.com/cheryllaird/BeckfieldBistroV2/issues/209
