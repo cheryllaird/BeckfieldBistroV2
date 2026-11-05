@@ -18,13 +18,12 @@ import {
 import { useStore } from '../../store';
 import { Button } from '../../components/ui/Button';
 import { generateId } from '../../lib/utils';
-import { categorize, formatQuantity, itemCategoryKey } from '../../lib/ingredients';
+import { categorize, categoryRank, formatQuantity, itemCategoryKey, shelfOf, shelfRank } from '../../lib/ingredients';
 import type { MealSource, ShoppingCategory, ShoppingItem, ShoppingListType } from '../../types';
 import { GenerateListModal } from './GenerateListModal';
 import { EditItem } from './EditItem';
 import { ItemSheet } from './ItemSheet';
 import { UndoToast } from './UndoToast';
-import { CATEGORY_ORDER } from './categoryOrder';
 import { ModalPortal } from '../../components/ui/ModalPortal';
 
 type Mode = 'shop' | 'edit';
@@ -46,6 +45,7 @@ export function ShoppingListPage() {
     setShoppingItems,
     reorderShoppingItems,
     categoryOverrides,
+    shelfOverrides,
     rememberCategory,
   } = useStore();
 
@@ -120,7 +120,10 @@ export function ShoppingListPage() {
     pushHistory();
     const sorted = [...listItems].sort(
       (a, b) =>
-        CATEGORY_ORDER.indexOf(a.category) - CATEGORY_ORDER.indexOf(b.category)
+        categoryRank(a.category) - categoryRank(b.category) ||
+        (a.category === 'Pantry' && b.category === 'Pantry'
+          ? shelfRank(shelfOf(a.name, shelfOverrides)) - shelfRank(shelfOf(b.name, shelfOverrides))
+          : 0)
     );
     setShoppingItems(withActiveList(sorted));
   };

@@ -289,6 +289,15 @@ moves together. Moving it back to the keyword category forgets the choice.
 Stored per bistro in `categoryOverrides` (one doc per ingredient); every change
 is also appended to the `categoryOverrideLogs` audit trail.
 
+**Pantry shelves.** Items in Pantry also sit on a **shelf**: Oils & Vinegars,
+Condiments & Sauces, Pasta, Rice & Grains, Tins & Jars, Baking, Nuts, Seeds & Dried
+Fruit, Spreads & Syrups, or Other pantry. The shelf is worked out from the name
+(same most-specific-match rules as categories) and never stored on items, so
+existing items have one straight away. A shelf choice made in an item sheet is
+remembered for the ingredient across the bistro in `shelfOverrides` (one doc per
+ingredient, separate from `categoryOverrides` so older app versions can't wipe
+it); choosing the worked-out shelf again forgets it. See ADR 0018.
+
 ### 6.5 Source tracking
 Generated/merged items remember **which planned meals contributed them** and in
 what scaled quantity, so a shopping item can show a "used in these meals"
@@ -362,10 +371,10 @@ explicit list) belong to **Immediate**, so existing lists carry over unchanged.
 - **Check-off** with running progress (checked/total); checked items collect in an
   "In basket" group.
 - **Curate:** in edit mode each row has only a drag handle (reorder, including
-  one-tap **auto-sort by category**); tapping the item opens an **item sheet**
+  one-tap **auto-sort by category**, with Pantry items ordered by shelf); tapping the item opens an **item sheet**
   where changes apply instantly: rename, recategorise (remembered for that
   ingredient from then on — see §6.4), switch list (Immediate / Stock up), and
-  remove. Moving or removing shows a short "Moved to … / Removed … · Undo" toast.
+  remove. For Pantry items the sheet shows a second row of **shelf** choices (§6.4). Moving or removing shows a short "Moved to … / Removed … · Undo" toast.
 - **Undo:** list-changing actions (check, remove, edit, sort, reorder, move to the
   other list) are revertible.
 - **Meal-source insight:** any generated item can reveal the recipes and scaled
@@ -388,7 +397,7 @@ explicit list) belong to **Immediate**, so existing lists carry over unchanged.
 - Each row shows a drag handle (reorder, plus **auto-sort by category**), the name
   and category, the in-stock switch and a "more" button. Tapping the name or "more"
   opens an **item sheet** to recategorise (one tap; remembered for that ingredient —
-  see §6.4) or **remove** the item.
+  see §6.4), pick a **shelf** for Pantry items (§6.4) or **remove** the item.
 - Its main functional purpose: **recipe ingredients matching an in-stock pantry item are
   excluded from the shopping list** — whether the list is generated wholesale or a
   single meal is added to it (matched via the same normalised-name logic as §6, so

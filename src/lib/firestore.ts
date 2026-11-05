@@ -11,7 +11,7 @@ import {
   waitForPendingWrites,
 } from 'firebase/firestore';
 import { db, auth } from './firebase';
-import type { Recipe, MealEntry, ShoppingItem, PantryItem, SharedRecipe, CategoryOverride, CategoryOverrideLog, Bistro } from '../types';
+import type { Recipe, MealEntry, ShoppingItem, PantryItem, SharedRecipe, CategoryOverride, CategoryOverrideLog, ShelfOverride, Bistro } from '../types';
 import type { ShoppingItemPatch } from './shoppingSync';
 import type { User } from 'firebase/auth';
 import { authedFetch } from './apiClient';
@@ -166,6 +166,7 @@ const mealEntriesCol = (bistroId: string) => collection(db!, _root, bistroId, 'm
 const shoppingItemsCol = (bistroId: string) => collection(db!, _root, bistroId, 'shoppingItems');
 const pantryItemsCol = (bistroId: string) => collection(db!, _root, bistroId, 'pantryItems');
 const categoryOverridesCol = (bistroId: string) => collection(db!, _root, bistroId, 'categoryOverrides');
+const shelfOverridesCol = (bistroId: string) => collection(db!, _root, bistroId, 'shelfOverrides');
 /** Shared bistro settings (knownSources). */
 const bistroProfileDoc = (bistroId: string) => doc(db!, _root, bistroId, 'meta', 'profile');
 /** Personal, never shared: holds the encrypted Gemini key. */
@@ -180,6 +181,7 @@ export interface UserDataCallbacks {
   onShoppingItems: (items: ShoppingItem[]) => void;
   onPantryItems: (items: PantryItem[]) => void;
   onCategoryOverrides: (overrides: CategoryOverride[]) => void;
+  onShelfOverrides: (overrides: ShelfOverride[]) => void;
   onKnownSources: (sources: string[]) => void;
   onHasGeminiApiKey: (hasKey: boolean) => void;
   /** The Terms version the user last accepted, or null if never. */
@@ -274,6 +276,15 @@ export function subscribeToUserData(
     handleError
   );
 
+  const unsubShelfOverrides = onSnapshot(
+    shelfOverridesCol(bistroId),
+    (snap) => {
+      if (skipIfCacheMiss(snap)) return;
+      callbacks.onShelfOverrides(snap.docs.map((d) => d.data() as ShelfOverride));
+    },
+    handleError
+  );
+
   const unsubProfile = onSnapshot(
     bistroProfileDoc(bistroId),
     (snap) => {
@@ -300,6 +311,7 @@ export function subscribeToUserData(
     unsubShoppingItems();
     unsubPantryItems();
     unsubCategoryOverrides();
+    unsubShelfOverrides();
     unsubProfile();
     unsubUserProfile();
   };
@@ -420,6 +432,20 @@ export function saveCategoryOverride(bistroId: string, override: CategoryOverrid
 export function deleteCategoryOverride(bistroId: string, ingredientKey: string): void {
   ensureFirestoreOnline();
   deleteDoc(categoryOverrideDoc(bistroId, ingredientKey)).catch(logFirestoreError);
+}
+
+// Same key encoding as category overrides, in their own collection.
+const shelfOverrideDoc = (bistroId: string, ingredientKey: string) =>
+  doc(shelfOverridesCol(bistroId), `k_${encodeURIComponent(ingredientKey)}`);
+
+export function saveShelfOverride(bistroId: string, override: ShelfOverride): void {
+  ensureFirestoreOnline();
+  setDoc(shelfOverrideDoc(bistroId, override.ingredientKey), override).catch(logFirestoreError);
+}
+
+export function deleteShelfOverride(bistroId: string, ingredientKey: string): void {
+  ensureFirestoreOnline();
+  deleteDoc(shelfOverrideDoc(bistroId, ingredientKey)).catch(logFirestoreError);
 }
 
 export function logCategoryOverride(bistroId: string, entry: Omit<CategoryOverrideLog, 'id'>): void {
