@@ -122,6 +122,7 @@ export function RecipeCard({ recipe, isSelectMode, isSelected, onLongPress, onSe
       {planModalOpen && (
         <PlanDateModal
           recipe={recipe}
+          addedFrom="library"
           servings={recipe.servings}
           initialDate={defaultDate}
           onClose={() => setPlanModalOpen(false)}
