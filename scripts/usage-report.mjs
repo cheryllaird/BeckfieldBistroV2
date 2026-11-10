@@ -43,8 +43,8 @@ const bistroRefs = await db.collection('bistros').listDocuments();
 const bistros = [];
 for (const ref of bistroRefs) {
   const [recipes, mealEntries, pantryItems, shoppingItems, categoryLogs, parent] = await Promise.all([
-    times(ref.collection('recipes')),
-    withFields(ref.collection('mealEntries'), ['type', 'recipeId']),
+    withFields(ref.collection('recipes'), ['importMeta']),
+    withFields(ref.collection('mealEntries'), ['type', 'recipeId', 'addedFrom']),
     withFields(ref.collection('pantryItems'), ['inStock']),
     times(ref.collection('shoppingItems')),
     withFields(ref.collection('categoryOverrideLogs'), ['ingredientKey', 'source', 'fromCategory', 'toCategory']),

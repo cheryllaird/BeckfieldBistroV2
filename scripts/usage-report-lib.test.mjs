@@ -96,4 +96,24 @@ describe('aggregateUsage', () => {
       expect(text).not.toContain(leak);
     }
   });
+
+  it('counts import methods, edits and meal sources, with older docs as unknown', () => {
+    const recipes = [
+      { importMeta: { method: 'photo', extractionMethod: 'gemini-vision', editedBeforeSave: [] }, updateTime: NOW },
+      { importMeta: { method: 'url', extractionMethod: 'url+structured', editedBeforeSave: ['ingredients', 'title'] }, updateTime: NOW },
+      { importMeta: { method: 'manual' }, updateTime: NOW },
+      { updateTime: NOW },
+    ];
+    const mealEntries = [
+      { type: 'recipe', addedFrom: 'plan', updateTime: NOW },
+      { type: 'recipe', addedFrom: 'library', updateTime: NOW },
+      { type: 'recipe', updateTime: NOW },
+    ];
+    const bistros = Array.from({ length: 3 }, () => bistro({ recipes, mealEntries }));
+    const out = aggregateUsage({ bistros, unmigratedUsers: 0 }, NOW);
+    expect(out.recipeImportMethods).toEqual({ manual: 3, photo: 3, unknown: 3, url: 3 });
+    expect(out.recipeExtractionMethods).toEqual({ 'gemini-vision': 3, 'url+structured': 3 });
+    expect(out.extractedRecipeEdits).toEqual({ savedRecipes: 6, byOutcome: { ingredients: 3, title: 3, unchanged: 3 } });
+    expect(out.mealEntriesAddedFrom).toEqual({ library: 3, plan: 3, unknown: 3 });
+  });
 });
