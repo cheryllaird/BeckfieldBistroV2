@@ -98,9 +98,12 @@ function parseDataUrl(dataUrl: string): { base64: string; mediaType: string } {
   return { base64, mediaType };
 }
 
+export type ImageExtractionStage = 'preparing' | 'reading';
+
 export async function extractRecipeFromImage(
   dataUrl: string,
-  hasApiKey: boolean
+  hasApiKey: boolean,
+  onStage?: (stage: ImageExtractionStage) => void
 ): Promise<ExtractedRecipe> {
   if (!auth?.currentUser) {
     throw new RecipeExtractionError('You must be signed in to extract recipes from photos.');
@@ -111,11 +114,13 @@ export async function extractRecipeFromImage(
 
   // Resize before sending — big enough for server-side OCR accuracy, small
   // enough (≲2.7 MB as base64) to stay under the endpoint's 8mb body limit
+  onStage?.('preparing');
   const t0 = performance.now();
   const resized = await resizeImage(dataUrl, { maxDimension: 2048, quality: 0.9 });
   const { base64, mediaType } = parseDataUrl(resized);
   const t1 = performance.now();
 
+  onStage?.('reading');
   const recipe = await postExtraction(auth.currentUser, { base64, mediaType });
   // Debug timing only: printed to the console, never sent anywhere.
   console.debug(
