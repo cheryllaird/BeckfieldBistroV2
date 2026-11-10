@@ -172,6 +172,10 @@ Extraction runs on **each user's own Google Gemini API key**:
 
 - **Storage:** every recipe the user creates, extracts, or accepts from a share
   lives in the bistro they're viewing and syncs across all its members' devices.
+- **Hidden import metadata:** a recipe created from New Recipe stores `importMeta` (how it was
+  added: URL, photo or manual; the extraction route; which of title, ingredients and steps were
+  edited before the first save). Meal entries store `addedFrom` (plan, recipe detail or library).
+  Neither is shown or shared; they feed the usage report (ADR 0017).
 - **Search:** the library is filterable live by **title, source, or any ingredient
   name** — so "what can I make with aubergine?" is answerable.
 - **Serving-aware viewing:** on a recipe, a servings control rescales **every

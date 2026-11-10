@@ -32,7 +32,7 @@ Only the triage agent or a human changes a status. Entries are never deleted.
   is existing behaviour, not the new code. The preview now shows the same label truthfully.
 - **Suggested fix:** decide whether a manual item's own amount should count, and if so fold
   `leadingCount`/amount parsing of the existing name into `labelFor`; file as a bug if it's wrong.
-- **Status:** open
+- **Status:** issue https://github.com/cheryllaird/BeckfieldBistroV2/issues/216
 
 ### 2026-10-31: `npm run lint` fails after running the dev server
 - **Who:** agent (shopping item sheet prototype, PR #195)
@@ -41,7 +41,7 @@ Only the triage agent or a human changes a status. Entries are never deleted.
   `eslint.config.js` only ignores `dist`, so lint then reports 9 errors in generated Workbox
   code. Cost one confused lint run.
 - **Suggested fix:** add `'dev-dist'` to `globalIgnores` in `eslint.config.js`.
-- **Status:** open
+- **Status:** fixed in this PR
 
 ### 2026-10-17: Architectural changes merged while the workflow PR was still open
 - **Who:** agent (refreshing the agentic workflow PR)
@@ -84,5 +84,16 @@ Only the triage agent or a human changes a status. Entries are never deleted.
 - **Suggested fix:** a human runs `npm uninstall @tesseract.js-data/eng`. Also noted, not touched
   (off limits): `initFirebaseAdmin` in `api/_utils/auth.ts` is an unused export, and the root
   `test-*.ts` smoke scripts show as unused files to knip (consider adding them as knip entries).
-- **Status:** open
+- **Status:** issue https://github.com/cheryllaird/BeckfieldBistroV2/issues/217
 - **Seen again:** 2026-11-01 and 2026-11-02, same items still reported by knip. 2026-11-02: also dropped the unused `StageName` export (`api/_utils/extractionTiming.ts`).
+
+### 2026-11-09: Write-path wake was silently throttled away, and lib/firestore.ts had no tests
+- **Who:** agent (interactive)
+- **Task:** investigating "meal plan made on device A didn't reach device B"
+- **Friction:** every write in `src/lib/firestore.ts` calls `ensureFirestoreOnline()`, which reads
+  as "every change wakes the connection", but the leading-edge-only throttle dropped every call
+  within 10s of the previous wake, so changes made just after resuming got no wake. Nothing
+  tested the module itself (only its mock), so the gap wasn't visible.
+- **Suggested fix:** done here — trailing-edge wake plus `src/lib/firestore.test.tsx`. More of the
+  module's sync behaviour (snapshot guards, error recovery) could use direct tests.
+- **Status:** fixed on branch ccr-d0adb988-hav9c9

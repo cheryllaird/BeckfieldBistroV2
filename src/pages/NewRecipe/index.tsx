@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { useNavigate, useSearchParams, useParams } from 'react-router-dom';
 import { ArrowLeft, Camera, Upload, Link, Plus, Loader, WifiOff } from 'lucide-react';
 import { useStore } from '../../store';
@@ -6,8 +6,9 @@ import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
 import { generateId, sortSourcesByRecentUse } from '../../lib/utils';
 import { NetworkError } from '../../lib/apiClient';
+import { editedFields } from '../../lib/recipeEdits';
 import { extractRecipeFromImage, extractRecipeFromUrl, resizeImage, ORIGINAL_IMAGE_RESIZE, RecipeExtractionError } from '../../lib/recipeExtraction';
-import type { Recipe } from '../../types';
+import type { ImportMeta, Recipe } from '../../types';
 import { RecipeForm } from './RecipeForm';
 import { ImageCropper } from '../../components/ImageCropper';
 import { CameraCapture } from '../../components/CameraCapture';
@@ -56,13 +57,20 @@ export function NewRecipePage() {
     }
   );
 
+  // Snapshot of the last successful extraction, kept to record on save how the
+  // recipe was imported and what the user corrected. A new extraction replaces it.
+  const extractionRef = useRef<{ method: 'url' | 'photo'; extractionMethod?: string; draft: Partial<Recipe> } | null>(null);
+
   const handleUrlExtract = async () => {
     if (!urlInput.trim()) return;
     setIsExtracting(true);
     setExtractError('');
     try {
       const extracted = await extractRecipeFromUrl(urlInput.trim(), hasGeminiApiKey);
-      setDraft((prev) => ({ ...prev, ...extracted, sourceUrl: urlInput.trim() }));
+      const { extractionMethod, ...fields } = extracted;
+      const next = { ...fields, sourceUrl: urlInput.trim() };
+      extractionRef.current = { method: 'url', extractionMethod, draft: next };
+      setDraft((prev) => ({ ...prev, ...next }));
       setMode('manual');
     } catch (err) {
       setExtractError(
@@ -97,7 +105,9 @@ export function NewRecipePage() {
         // swapped for a nicer picture of the finished dish.
         resizeImage(croppedDataUrl, ORIGINAL_IMAGE_RESIZE),
       ]);
-      setDraft({ ...extracted, coverImage: resizedDataUrl, originalImage: originalDataUrl });
+      const { extractionMethod, ...fields } = extracted;
+      extractionRef.current = { method: 'photo', extractionMethod, draft: fields };
+      setDraft({ ...fields, coverImage: resizedDataUrl, originalImage: originalDataUrl });
       console.debug(`extract timing: total=${Math.round(performance.now() - startedAt)}ms (crop confirmed to draft set)`);
       setMode('manual');
     } catch (err) {
@@ -120,7 +130,15 @@ export function NewRecipePage() {
         await updateRecipe({ ...existingRecipe, ...recipe, updatedAt: now });
         navigate(`/recipes/${existingRecipe.id}`);
       } else {
-        await addRecipe({ ...recipe, id: generateId(), createdAt: now, updatedAt: now });
+        const snap = extractionRef.current;
+        const importMeta: ImportMeta = snap
+          ? {
+              method: snap.method,
+              ...(snap.extractionMethod ? { extractionMethod: snap.extractionMethod } : {}),
+              editedBeforeSave: editedFields(snap.draft, recipe),
+            }
+          : { method: 'manual' };
+        await addRecipe({ ...recipe, importMeta, id: generateId(), createdAt: now, updatedAt: now });
         navigate('/recipes');
       }
     } catch (err) {
