@@ -97,3 +97,14 @@ Only the triage agent or a human changes a status. Entries are never deleted.
   `test-*.ts` smoke scripts show as unused files to knip (consider adding them as knip entries).
 - **Status:** issue https://github.com/cheryllaird/BeckfieldBistroV2/issues/217
 - **Seen again:** 2026-11-01, same three items still reported by knip.
+
+### 2026-11-09: Write-path wake was silently throttled away, and lib/firestore.ts had no tests
+- **Who:** agent (interactive)
+- **Task:** investigating "meal plan made on device A didn't reach device B"
+- **Friction:** every write in `src/lib/firestore.ts` calls `ensureFirestoreOnline()`, which reads
+  as "every change wakes the connection", but the leading-edge-only throttle dropped every call
+  within 10s of the previous wake, so changes made just after resuming got no wake. Nothing
+  tested the module itself (only its mock), so the gap wasn't visible.
+- **Suggested fix:** done here — trailing-edge wake plus `src/lib/firestore.test.tsx`. More of the
+  module's sync behaviour (snapshot guards, error recovery) could use direct tests.
+- **Status:** fixed on branch ccr-d0adb988-hav9c9

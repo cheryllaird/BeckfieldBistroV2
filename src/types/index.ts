@@ -10,6 +10,15 @@ export interface IngredientSection {
   ingredients: Ingredient[];
 }
 
+export type EditedField = 'title' | 'ingredients' | 'steps';
+
+/** Hidden usage metadata set once when a recipe is created from New Recipe. Never shown or shared. */
+export interface ImportMeta {
+  method: 'url' | 'photo' | 'manual';
+  extractionMethod?: string; // which extraction route worked, e.g. 'gemini-vision'
+  editedBeforeSave?: EditedField[]; // extracted drafts only; absent for manual recipes
+}
+
 export interface Recipe {
   id: string;
   userId: string;
@@ -26,6 +35,7 @@ export interface Recipe {
   steps: string[];
   createdAt: string;
   updatedAt: string;
+  importMeta?: ImportMeta;
 }
 
 type MealEntryType = 'recipe' | 'custom' | 'dining-out';
@@ -41,7 +51,10 @@ export interface MealEntry {
   location?: string; // for dining-out
   mealTime?: MealTime;
   updatedAt?: number; // epoch ms of last change; reconciles snapshots by recency
+  addedFrom?: MealAddedFrom; // hidden usage metadata: where the entry was created
 }
+
+export type MealAddedFrom = 'plan' | 'recipe-detail' | 'library';
 
 export interface MealSource {
   mealEntryId: string;

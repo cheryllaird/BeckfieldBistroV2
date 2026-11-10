@@ -10,6 +10,9 @@ export class RecipeExtractionError extends Error {
   }
 }
 
+/** The API's recipe payload: recipe fields plus which extraction route produced them. */
+export type ExtractedRecipe = Partial<Recipe> & { extractionMethod?: string };
+
 export const CONNECTION_LOST_MESSAGE =
   'Connection lost while reading the recipe. Check your signal and try again.';
 
@@ -19,7 +22,7 @@ export const CONNECTION_LOST_MESSAGE =
  * NetworkError, or a TypeError while reading the body) says so, instead of
  * falling through to a generic message that blames the API key.
  */
-async function postExtraction(user: User, body: Record<string, string>): Promise<Partial<Recipe>> {
+async function postExtraction(user: User, body: Record<string, string>): Promise<ExtractedRecipe> {
   let response: Response;
   try {
     response = await authedFetch(user, '/api/extract-recipe', {
@@ -40,7 +43,7 @@ async function postExtraction(user: User, body: Record<string, string>): Promise
   }
 
   try {
-    return (await response.json()) as Partial<Recipe>;
+    return (await response.json()) as ExtractedRecipe;
   } catch (e) {
     if (e instanceof TypeError) throw new RecipeExtractionError(CONNECTION_LOST_MESSAGE);
     throw e;
@@ -98,7 +101,7 @@ function parseDataUrl(dataUrl: string): { base64: string; mediaType: string } {
 export async function extractRecipeFromImage(
   dataUrl: string,
   hasApiKey: boolean
-): Promise<Partial<Recipe>> {
+): Promise<ExtractedRecipe> {
   if (!auth?.currentUser) {
     throw new RecipeExtractionError('You must be signed in to extract recipes from photos.');
   }
@@ -124,7 +127,7 @@ export async function extractRecipeFromImage(
 export async function extractRecipeFromUrl(
   url: string,
   hasApiKey: boolean
-): Promise<Partial<Recipe>> {
+): Promise<ExtractedRecipe> {
   if (!auth?.currentUser) {
     throw new RecipeExtractionError('You must be signed in to extract recipes from URLs.');
   }

@@ -71,6 +71,7 @@ function logFirestoreError(err: unknown): void {
 // ensureFirestoreOnline for why throttling matters.
 const ENABLE_NETWORK_THROTTLE_MS = 10_000;
 let _lastEnableNetworkAt = 0;
+let _trailingWakeTimer: ReturnType<typeof setTimeout> | null = null;
 
 /**
  * Forces the Firestore SDK back online, throttled.
@@ -93,16 +94,36 @@ let _lastEnableNetworkAt = 0;
  * a continuous stream-restart pressure that made the race fire routinely.
  *
  * So collapse the storm: fire at most once per throttle window. The leading
- * edge still fires immediately (the first write in a burst, or a resume after
- * an idle period wakes the SDK right away); the rapid follow-ups that used to
- * churn the stream are dropped. `force` bypasses the throttle for genuine
- * resume transitions (app foregrounded / network restored), which are
- * infrequent and are precisely when a dormant SDK must be re-woken.
+ * edge fires immediately (the first write in a burst, or a resume after an
+ * idle period wakes the SDK right away). Calls inside the window are not
+ * dropped: they collapse into one trailing wake at the end of the window, so
+ * every change is followed by a wake within ENABLE_NETWORK_THROTTLE_MS. Without
+ * that trailing edge, a change made just after another wake (e.g. planning a
+ * meal right after the app was foregrounded) got no wake at all, and if the
+ * connection had gone dormant the change sat in the local queue until the app
+ * was next opened — "device B never saw the plan". `force` bypasses the
+ * throttle for genuine resume transitions (app foregrounded / network
+ * restored), which are infrequent and are precisely when a dormant SDK must be
+ * re-woken.
  */
 export function ensureFirestoreOnline(force = false): void {
   if (!db) return;
   const now = Date.now();
-  if (!force && now - _lastEnableNetworkAt < ENABLE_NETWORK_THROTTLE_MS) return;
+  const sinceLast = now - _lastEnableNetworkAt;
+  if (!force && sinceLast < ENABLE_NETWORK_THROTTLE_MS) {
+    if (_trailingWakeTimer === null) {
+      _trailingWakeTimer = setTimeout(() => {
+        _trailingWakeTimer = null;
+        ensureFirestoreOnline();
+      }, ENABLE_NETWORK_THROTTLE_MS - sinceLast);
+    }
+    return;
+  }
+  // This wake covers any trailing one that was pending.
+  if (_trailingWakeTimer !== null) {
+    clearTimeout(_trailingWakeTimer);
+    _trailingWakeTimer = null;
+  }
   _lastEnableNetworkAt = now;
   enableNetwork(db).catch(() => {});
 }
@@ -557,6 +578,7 @@ export async function acceptShare(
     createdAt: now,
     updatedAt: now,
   };
+  ensureFirestoreOnline();
   await setDoc(doc(recipesCol(bistroId), newId), stripUndefined(newRecipe));
   await deleteShare(shareId);
   return newId;

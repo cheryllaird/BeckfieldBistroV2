@@ -11,6 +11,8 @@ import { MigrationScreen } from './components/MigrationScreen';
 import { TermsScreen } from './components/TermsScreen';
 import { needsTermsAcceptance } from './lib/legal';
 import { AppLayout } from './components/layout/AppLayout';
+import { AppShellLoading } from './components/layout/AppShellLoading';
+import { hadSession, setSessionHint } from './lib/sessionHint';
 import { LibraryPage } from './pages/Library/index';
 import { RecipeDetailPage } from './pages/RecipeDetail/index';
 import { NewRecipePage } from './pages/NewRecipe/index';
@@ -48,6 +50,15 @@ function AuthenticatedApp() {
     if (useStore.persist.hasHydrated()) return;
     return useStore.persist.onFinishHydration(() => setHasHydrated(true));
   }, []);
+
+  // Read once, synchronously, before hydration: was this device signed in last
+  // time? Lets a refresh show the app shell with a loading state instead of
+  // flashing to the full-screen splash. Kept in step with the real auth state
+  // once the store has hydrated.
+  const [returningUser] = useState(hadSession);
+  useEffect(() => {
+    if (hasHydrated) setSessionHint(isAuthenticated);
+  }, [hasHydrated, isAuthenticated]);
 
   // firebaseChecked flips true when onAuthStateChanged fires. We don't need
   // to wait for it if we already have a persisted identity — that path
@@ -97,6 +108,10 @@ function AuthenticatedApp() {
       unsubAuth();
     };
   }, [hasHydrated, signIn, resubscribe]);
+
+  // A returning user keeps the app's header and nav on screen while the
+  // persisted library loads, rather than seeing the splash between views.
+  if (!hasHydrated && returningUser) return <AppShellLoading />;
 
   // Splash stays up until we know what to render: hydration done, splash
   // timer fired, and either a persisted session exists (render immediately)
