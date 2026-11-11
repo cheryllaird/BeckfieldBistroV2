@@ -14,6 +14,7 @@ import { ExtractionProgress } from './ExtractionProgress';
 import { ImageCropper } from '../../components/ImageCropper';
 import { CameraCapture } from '../../components/CameraCapture';
 import { useOnlineStatus } from '../../hooks/useOnlineStatus';
+import { useImportTracking } from './useImportTracking';
 
 type CaptureMode = 'url' | 'upload' | 'manual';
 
@@ -63,8 +64,12 @@ export function NewRecipePage() {
   // recipe was imported and what the user corrected. A new extraction replaces it.
   const extractionRef = useRef<{ method: 'url' | 'photo'; extractionMethod?: string; draft: Partial<Recipe> } | null>(null);
 
+  // Anonymous started/saved/abandoned counts. Editing isn't an import.
+  const importTracking = useImportTracking(!editId, !editId && !!prefillTitle);
+
   const handleUrlExtract = async () => {
     if (!urlInput.trim()) return;
+    importTracking.begin('url');
     setIsExtracting(true);
     setExtractError('');
     try {
@@ -96,6 +101,7 @@ export function NewRecipePage() {
 
   const handleCropConfirm = async (croppedDataUrl: string) => {
     setCropSrc(null);
+    importTracking.begin('photo');
     setStage('preparing');
     setIsExtracting(true);
     setExtractError('');
@@ -142,10 +148,13 @@ export function NewRecipePage() {
             }
           : { method: 'manual' };
         await addRecipe({ ...recipe, importMeta, id: generateId(), createdAt: now, updatedAt: now });
+        importTracking.saved(importMeta.method);
         navigate('/recipes');
       }
     } catch (err) {
       if (err instanceof Error && err.message === 'SAVE_TIMEOUT') {
+        // Queued offline: it will save, so it counts as saved.
+        if (!isEditMode) importTracking.saved(extractionRef.current?.method ?? 'manual');
         navigate(isEditMode && existingRecipe ? `/recipes/${existingRecipe.id}` : '/recipes');
       } else {
         console.error('Failed to save recipe:', err);
@@ -190,7 +199,12 @@ export function NewRecipePage() {
             return (
               <button
                 key={key}
-                onClick={() => !disabled && setMode(key as CaptureMode)}
+                onClick={() => {
+                  if (disabled) return;
+                  setMode(key as CaptureMode);
+                  // The manual form with an extracted draft is still that import.
+                  if (key === 'manual' && !extractionRef.current) importTracking.begin('manual');
+                }}
                 disabled={disabled}
                 aria-disabled={disabled}
                 title={disabled ? 'Requires internet connection' : undefined}

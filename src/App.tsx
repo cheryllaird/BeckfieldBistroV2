@@ -10,6 +10,7 @@ import { AuthPage } from './pages/AuthPage';
 import { MigrationScreen } from './components/MigrationScreen';
 import { TermsScreen } from './components/TermsScreen';
 import { needsTermsAcceptance } from './lib/legal';
+import { trackDisplayModeOnce } from './lib/usage';
 import { AppLayout } from './components/layout/AppLayout';
 import { AppShellLoading } from './components/layout/AppShellLoading';
 import { hadSession, setSessionHint } from './lib/sessionHint';
@@ -82,6 +83,8 @@ function AuthenticatedApp() {
     const unsubAuth = onAuthStateChanged(auth!, (firebaseUser) => {
       if (firebaseUser) {
         signIn(firebaseUser);
+        // Anonymous installed-app vs browser count, once per session (ADR 0019).
+        trackDisplayModeOnce();
       } else if (useStore.getState().isAuthenticated) {
         // We rendered against a persisted session (see resubscribe() above),
         // but Firebase says there's no real session — the token was revoked,

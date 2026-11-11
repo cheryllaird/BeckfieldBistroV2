@@ -7,6 +7,7 @@ import { getRecipeIngredients, isoDate, getWeekDays } from '../../lib/utils';
 import { consolidateIngredients, splitByPantry, type IngredientGroup } from '../../lib/ingredients';
 import { ItemPicker } from './ItemPicker';
 import { useItemTicks, type PickRow } from './useItemTicks';
+import { track, pantrySkipBucket } from '../../lib/usage';
 
 interface Props {
   onClose: () => void;
@@ -79,6 +80,9 @@ export function GenerateListModal({ onClose }: Props) {
       (i) => (i.listType ?? 'immediate') === 'stock-up'
     );
     setShoppingItems([...items, ...stockUp]);
+    // Anonymous count of how many items the store cupboard kept off (ADR 0019).
+    const cupboardSkips = [...skipped.keys()].filter((key) => leftOff.has(key)).length;
+    void track({ event: 'pantry_skip', value: pantrySkipBucket(cupboardSkips) });
     onClose();
   };
 
