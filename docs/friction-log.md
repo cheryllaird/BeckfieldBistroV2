@@ -23,6 +23,17 @@ Only the triage agent or a human changes a status. Entries are never deleted.
 
 ## Entries
 
+### 2026-11-11: Issue asked to supersede a "Vercel analytics plan" that isn't in the repo
+- **Who:** agent (ship-feature)
+- **Task:** anonymous usage counters, issue https://github.com/cheryllaird/BeckfieldBistroV2/issues/199
+- **Friction:** the notes say the new ADR "supersedes the Vercel analytics plan", but no ADR or doc
+  in `docs/` describes one; it exists only as a phrase in issue #172 ("Replaces the earlier Vercel
+  Web Analytics proposal"). Grepping docs, git history and issues to confirm cost a few minutes,
+  and there was no status line to change.
+- **Suggested fix:** when `scope-issue` writes "supersedes X", link X (ADR, doc or issue), or say
+  "no ADR to supersede; record the rejected option under Alternatives".
+- **Status:** open
+
 ### 2026-11-01: Merging a meal into a manual item drops the manual amount
 - **Who:** agent (ship-feature)
 - **Task:** shopping list preview, issue https://github.com/cheryllaird/BeckfieldBistroV2/issues/209

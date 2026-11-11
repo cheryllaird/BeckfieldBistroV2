@@ -66,8 +66,38 @@ function extractionFigures({ lifetime, daily }, now) {
   };
 }
 
+// Anonymous feature-use counters from /api/track (ADR 0019): analytics/usage
+// (lifetime) and analytics/usage-YYYY-MM-DD (daily), each `counts.<event>.<value>`.
+// Aggregate across all users, so no suppression. Imports that were started but
+// neither saved nor abandoned were left by closing the app, or not counted
+// while offline.
+function usageCounterFigures({ lifetime, daily }, now) {
+  const since = new Date(now - 30 * DAY_MS).toISOString().slice(0, 10);
+  const add = (target, counts) => {
+    for (const [event, values] of Object.entries(counts ?? {})) {
+      if (!target.has(event)) target.set(event, new Map());
+      mergeCounts(target.get(event), values);
+    }
+  };
+  const shape = (byEvent, total) => ({
+    total,
+    events: Object.fromEntries([...byEvent].sort(([a], [b]) => a.localeCompare(b)).map(([e, m]) => [e, sortedCounts(m)])),
+  });
+  const recent = new Map();
+  let recentTotal = 0;
+  for (const d of daily ?? []) {
+    if (!d.date || d.date < since) continue;
+    add(recent, d.counts);
+    recentTotal += d.total ?? 0;
+  }
+  const life = new Map();
+  add(life, lifetime?.counts);
+  return { lifetime: shape(life, lifetime?.total ?? 0), last30Days: shape(recent, recentTotal) };
+}
+
 /**
  * @param {{
+ *   usageCounters?: { lifetime?: object, daily?: object[] },
  *   extraction?: { lifetime?: object, daily?: object[] },
  *   bistros: Array<{
  *     memberCount: number,
@@ -156,6 +186,7 @@ export function aggregateUsage(input, now = Date.now()) {
   return {
     bistros: suppress(bistros.length),
     extraction: extractionFigures(input.extraction ?? {}, now),
+    usageCounters: usageCounterFigures(input.usageCounters ?? {}, now),
     categoryMoves: {
       byMove: suppressAll(moves),
       namedIngredients: sortedCounts(namedKeys),
