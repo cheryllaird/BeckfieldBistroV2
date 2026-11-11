@@ -23,6 +23,16 @@ Only the triage agent or a human changes a status. Entries are never deleted.
 
 ## Entries
 
+### 2026-11-11: Subagent worktrees aren't gitignored, so `git add -A` commits them
+- **Who:** agent (build-ready, nightly)
+- **Task:** building #216 while subagents built #199 and #223 in worktrees
+- **Friction:** `Agent` with `isolation: worktree` creates `.claude/worktrees/agent-*` inside the
+  repo. `.gitignore` doesn't cover it, so `git add -A` on the main checkout staged both worktrees
+  as embedded repos. Fixing the commit needed a force push (refused), so it took a second
+  "drop worktree entries" commit.
+- **Suggested fix:** add `.claude/worktrees/` to `.gitignore` (done in this PR).
+- **Status:** fixed in this PR
+
 ### 2026-11-01: Merging a meal into a manual item drops the manual amount
 - **Who:** agent (ship-feature)
 - **Task:** shopping list preview, issue https://github.com/cheryllaird/BeckfieldBistroV2/issues/209
@@ -32,7 +42,7 @@ Only the triage agent or a human changes a status. Entries are never deleted.
   is existing behaviour, not the new code. The preview now shows the same label truthfully.
 - **Suggested fix:** decide whether a manual item's own amount should count, and if so fold
   `leadingCount`/amount parsing of the existing name into `labelFor`; file as a bug if it's wrong.
-- **Status:** fixed for #216 on branch `claude/216-manual-amount-merge` (owner chose: the typed amount counts; unreadable amounts get a second line).
+- **Status:** issue https://github.com/cheryllaird/BeckfieldBistroV2/issues/216
 
 ### 2026-10-31: `npm run lint` fails after running the dev server
 - **Who:** agent (shopping item sheet prototype, PR #195)

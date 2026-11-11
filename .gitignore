@@ -28,3 +28,6 @@ dev-dist
 
 # Claude Code local settings
 .claude/settings.local.json
+
+# Agent worktrees (Claude Code subagents)
+.claude/worktrees/
