@@ -11,7 +11,10 @@ import sharp from 'sharp';
 import { createWorker, OEM, type Worker } from 'tesseract.js';
 
 export interface OcrResult {
+  /** The text callers use: column-reflowed when a two-column page was detected. */
   text: string;
+  /** Tesseract's own text, before any column reflow. Kept for offline evaluation. */
+  rawText: string;
   /** Mean word confidence, 0-100. Clean print scores 80-95, garbage <50. */
   confidence: number;
   /** True when a two-column layout was detected and text was re-threaded. */
@@ -70,8 +73,10 @@ class TesseractEngine implements OcrEngine {
         const { data } = await worker.recognize(image, {}, { blocks: true, text: true });
         const lines = collectLines(data as unknown as TesseractData);
         const reflowed = reflowColumns(lines);
+        const rawText = data.text ?? '';
         return {
-          text: reflowed ?? data.text ?? '',
+          text: reflowed ?? rawText,
+          rawText,
           confidence: data.confidence ?? 0,
           columnsReflowed: reflowed !== null,
           coldWorker,
@@ -246,25 +251,42 @@ export function getOcrEngine(): OcrEngine {
 }
 
 /**
+ * Optional preprocessing variants, for comparing settings offline
+ * (`npm run eval:ocr -- --variant …`). Omitted fields keep the production
+ * defaults, so `preprocessForOcr(image)` behaves exactly as before.
+ */
+export interface PreprocessOptions {
+  /** Longest side to resize to. Default: double small photos (cap 2800px), else cap 3000px. */
+  targetLongest?: number;
+  /** Normalize contrast for uneven lighting. Default true. */
+  normalize?: boolean;
+  /** Sharpen glyph edges. Default true. */
+  sharpen?: boolean;
+  /** Hard black/white cutoff (0-255). Default none: tesseract's Otsu copes better with shadows. */
+  threshold?: number;
+}
+
+/**
  * Prepares a photo for OCR: EXIF rotation, upscaling small images toward
  * tesseract's preferred ~300dpi glyph size, grayscale + normalize for uneven
- * lighting, then lossless PNG. No hard threshold — tesseract's internal Otsu
- * binarization copes better with shadows than a global cutoff would.
+ * lighting, then lossless PNG. No hard threshold by default — tesseract's
+ * internal Otsu binarization copes better with shadows than a global cutoff would.
  */
-export async function preprocessForOcr(image: Buffer): Promise<Buffer> {
+export async function preprocessForOcr(image: Buffer, options: PreprocessOptions = {}): Promise<Buffer> {
   const base = sharp(image, { failOn: 'none' }).rotate();
   const meta = await base.metadata();
   const longest = Math.max(meta.width ?? 0, meta.height ?? 0);
   // Small photos double (capped 2800px); large ones cap at 3000px to bound runtime
   const target =
-    longest > 0 && longest < 1400 ? Math.min(longest * 2, 2800) : Math.min(longest || 3000, 3000);
-  return base
+    options.targetLongest ??
+    (longest > 0 && longest < 1400 ? Math.min(longest * 2, 2800) : Math.min(longest || 3000, 3000));
+  let pipeline = base
     .resize({ width: target, height: target, fit: 'inside', withoutEnlargement: false })
-    .grayscale()
-    .normalize()
-    .sharpen()
-    .png()
-    .toBuffer();
+    .grayscale();
+  if (options.normalize ?? true) pipeline = pipeline.normalize();
+  if (options.sharpen ?? true) pipeline = pipeline.sharpen();
+  if (options.threshold !== undefined) pipeline = pipeline.threshold(options.threshold);
+  return pipeline.png().toBuffer();
 }
 
 // Gate thresholds: a real recipe photo comfortably clears all of these; failing
