@@ -297,6 +297,9 @@ is also appended to the `categoryOverrideLogs` audit trail.
 Generated/merged items remember **which planned meals contributed them** and in
 what scaled quantity, so a shopping item can show a "used in these meals"
 breakdown, and re-adding the same meal is idempotent (never double-counts).
+When a meal folds into an item the user typed with an amount, that amount is kept
+as a source too, shown as "Added by you" (it has no meal, so it never blocks a
+re-add), so later merges still count it.
 
 ---
 
@@ -353,6 +356,13 @@ explicit list) belong to **Immediate**, so existing lists carry over unchanged.
   Immediate line is added instead.
 - Items can also be **added manually** by typing; manual items are auto-categorised
   from their text and land on the list currently in view (Immediate or Stock up).
+  A meal added later folds into an unticked typed Immediate item for the same
+  ingredient and **counts its typed amount**: "100 g flour" plus a meal's 200 g
+  reads "300 g flour". The amount can be typed before or after the name ("100g
+  flour", "100 grams flour", "flour 100g", "lemons x2"); amounts that don't add up
+  trail in brackets ("200 g flour (+ 2 bags)"). When the typed amount can't be
+  read (or there is none), the typed item is left as it is and the meal adds a
+  second line, so nothing the user typed is lost.
 - **Pantry exclusion applies to every recipe-derived add** (§8), not just
   generation: the meal preview lists its in-stock store cupboard ingredients
   unticked, and ticking one puts it on the Immediate list with the meal as its

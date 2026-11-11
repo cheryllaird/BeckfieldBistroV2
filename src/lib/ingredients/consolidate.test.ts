@@ -207,10 +207,84 @@ describe('mergeIntoShoppingList', () => {
     expect(result[0].mealSources).toBeUndefined();
   });
 
-  it('does not duplicate a manually-added item with identical text', () => {
-    const manual = makeShoppingItem({ id: 'manual', name: '100 g flour', manual: true });
-    const result = mergeIntoShoppingList([manual], [makeIngredient({ name: 'flour', quantity: 100 })], { scale: 1 });
+  it('does not duplicate a typed item with identical text and no amount', () => {
+    const manual = makeShoppingItem({ id: 'manual', name: 'flour', manual: true });
+    const result = mergeIntoShoppingList([manual], [makeIngredient({ name: 'flour', quantity: 0, unit: '' })], { scale: 1 });
     expect(result).toEqual([manual]);
+  });
+
+  // Regression for #216: the typed amount used to be dropped ("100 g flour" + 200 g → "200 g flour").
+  describe('into an item the user typed', () => {
+    const meal = { scale: 1, mealEntryId: 'm1', recipeTitle: 'Cake' };
+    const flour200 = [makeIngredient({ name: 'flour', quantity: 200, unit: 'g' })];
+    const typed = (name: string) => makeShoppingItem({ id: 'typed', name, category: 'Pantry', manual: true });
+
+    it.each(['100 g flour', '100g flour', '100grams flour', '100 Grams Flour', 'flour 100g', 'flour - 100 g', 'Flour, 100 grams'])(
+      'counts the typed amount in "%s" towards the total',
+      (name) => {
+        const result = mergeIntoShoppingList([typed(name)], flour200, meal);
+        expect(result).toHaveLength(1);
+        expect(result[0]).toMatchObject({ id: 'typed', name: '300 g flour', ingredientKey: 'flour', manual: true, category: 'Pantry' });
+      },
+    );
+
+    it('keeps the typed amount as a source, so a later meal still counts it', () => {
+      const once = mergeIntoShoppingList([typed('100 g flour')], flour200, meal);
+      expect(once[0].mealSources).toEqual([
+        { mealEntryId: '', recipeTitle: 'Added by you', scaledQuantity: 100, unit: 'g', ingredientName: 'flour' },
+        expect.objectContaining({ mealEntryId: 'm1', scaledQuantity: 200 }),
+      ]);
+      const twice = mergeIntoShoppingList(once, flour200, { ...meal, mealEntryId: 'm2', recipeTitle: 'Bread' });
+      expect(twice[0].name).toBe('500 g flour');
+      // Re-adding the first meal still changes nothing.
+      expect(mergeIntoShoppingList(twice, flour200, meal)).toEqual(twice);
+    });
+
+    it('converts between units in the same family', () => {
+      const result = mergeIntoShoppingList([typed('flour 1 kg')], flour200, meal);
+      expect(result.map((i) => i.name)).toEqual(['1200 g flour']);
+    });
+
+    it('keeps an amount that does not add up beside the total', () => {
+      const result = mergeIntoShoppingList([typed('2 bags flour')], flour200, meal);
+      expect(result.map((i) => i.name)).toEqual(['200 g flour (+ 2 bags)']);
+    });
+
+    it('adds a typed count to a counted ingredient', () => {
+      const result = mergeIntoShoppingList([typed('lemons x2')], [makeIngredient({ name: 'lemon', quantity: 1, unit: '' })], meal);
+      expect(result.map((i) => i.name)).toEqual(['3 lemons']);
+    });
+
+    it.each(['a bag of flour', 'flour (1 bag)', 'flour'])('adds a second line when it cannot read an amount in "%s"', (name) => {
+      const item = typed(name);
+      const result = mergeIntoShoppingList([item], flour200, meal);
+      expect(result).toHaveLength(2);
+      expect(result[0]).toEqual(item);
+      expect(result[1]).toMatchObject({ name: '200 g flour', ingredientKey: 'flour' });
+    });
+
+    it('leaves a typed item for something else alone', () => {
+      const item = typed('100 g sugar');
+      const result = mergeIntoShoppingList([item], flour200, meal);
+      expect(result[0]).toEqual(item);
+      expect(result[1]).toMatchObject({ name: '200 g flour' });
+    });
+
+    it('prefers an item built from recipes over a typed one', () => {
+      const built = makeShoppingItem({
+        id: 'built',
+        name: '50 g flour',
+        ingredientKey: 'flour',
+        mealSources: [{ mealEntryId: 'm0', recipeTitle: 'Scones', scaledQuantity: 50, unit: 'g', ingredientName: 'flour' }],
+      });
+      const result = mergeIntoShoppingList([typed('100 g flour'), built], flour200, meal);
+      expect(result.map((i) => i.name)).toEqual(['100 g flour', '250 g flour']);
+    });
+
+    it('previews the total', () => {
+      const rows = previewMealAdd([typed('100 g flour')], flour200, meal);
+      expect(rows).toEqual([{ key: 'flour', name: '300 g flour', previousName: '100 g flour', cupboardItem: undefined }]);
+    });
   });
 
   it('does not mutate the existing list', () => {

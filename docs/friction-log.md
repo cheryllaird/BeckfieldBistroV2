@@ -32,7 +32,7 @@ Only the triage agent or a human changes a status. Entries are never deleted.
   is existing behaviour, not the new code. The preview now shows the same label truthfully.
 - **Suggested fix:** decide whether a manual item's own amount should count, and if so fold
   `leadingCount`/amount parsing of the existing name into `labelFor`; file as a bug if it's wrong.
-- **Status:** issue https://github.com/cheryllaird/BeckfieldBistroV2/issues/216
+- **Status:** fixed for #216 on branch `claude/216-manual-amount-merge` (owner chose: the typed amount counts; unreadable amounts get a second line).
 
 ### 2026-10-31: `npm run lint` fails after running the dev server
 - **Who:** agent (shopping item sheet prototype, PR #195)

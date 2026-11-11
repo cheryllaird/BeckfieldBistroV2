@@ -34,6 +34,47 @@ const LEADING_COUNT = new RegExp(`^${LEADING_NUMBER}\\s+([a-z]+)`);
 
 const UNICODE_FRACTIONS: Record<string, number> = { '¼': 0.25, '½': 0.5, '¾': 0.75, '⅓': 1 / 3, '⅔': 2 / 3, '⅛': 0.125 };
 
+/** The value of a number as LEADING_NUMBER matches it ("2", "1.5", "1/2", "½"). */
+function numberValue(number: string): number {
+  if (number in UNICODE_FRACTIONS) return UNICODE_FRACTIONS[number];
+  const [numerator, denominator] = number.split('/').map(Number);
+  return denominator ? numerator / denominator : numerator;
+}
+
+// An amount typed before or after a shopping item's name: "100 g flour",
+// "100g flour", "100grams flour", "flour 100g", "flour - 100 grams", "lemons x2".
+const UNIT_WORDS = AMOUNT_UNIT_WORDS.join('|');
+const TYPED_LEADING = new RegExp(`^${LEADING_NUMBER}\\s*(?:(${UNIT_WORDS})\\.?\\s+|\\s+)(\\S.*)$`);
+const TYPED_TRAILING = new RegExp(
+  `^(.*?[^\\s\\d.,:–-])\\s*[,:–-]?\\s*(?:x\\s*)?${LEADING_NUMBER}\\s*(?:(${UNIT_WORDS})\\.?)?$`
+);
+
+/** A typed shopping item split into its amount and the name it's an amount of. */
+export interface TypedAmount {
+  name: string;
+  amount: IngredientAmount;
+}
+
+/**
+ * Reads the amount out of a typed shopping item, wherever the user put it
+ * ("100 g flour", "flour 100g" → 100 g of flour). Undefined when there's no
+ * amount it can read, so the caller knows not to fold anything into it.
+ */
+export function parseTypedAmount(text: string): TypedAmount | undefined {
+  const lower = text.trim().toLowerCase();
+  const leading = lower.match(TYPED_LEADING);
+  if (leading) {
+    const [, number, unit = '', name] = leading;
+    return { name: name.trim(), amount: { quantity: numberValue(number), unit } };
+  }
+  const trailing = lower.match(TYPED_TRAILING);
+  if (trailing) {
+    const [, name, number, unit = ''] = trailing;
+    return { name: name.trim(), amount: { quantity: numberValue(number), unit } };
+  }
+  return undefined;
+}
+
 /**
  * The count an ingredient's name leads with when no unit follows it ("2
  * shallots" → 2), for lines that put the amount in the name instead of the
@@ -42,10 +83,7 @@ const UNICODE_FRACTIONS: Record<string, number> = { '¼': 0.25, '½': 0.5, '¾':
 export function leadingCount(name: string): number {
   const match = name.trim().toLowerCase().match(LEADING_COUNT);
   if (!match || AMOUNT_UNIT_WORDS.includes(match[2])) return 0;
-  const number = match[1];
-  if (number in UNICODE_FRACTIONS) return UNICODE_FRACTIONS[number];
-  const [numerator, denominator] = number.split('/').map(Number);
-  return denominator ? numerator / denominator : numerator;
+  return numberValue(match[1]);
 }
 
 /**
