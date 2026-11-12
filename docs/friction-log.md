@@ -23,6 +23,18 @@ Only the triage agent or a human changes a status. Entries are never deleted.
 
 ## Entries
 
+### 2026-11-12: vitest `globals: true` doesn't reach the project configs
+- **Who:** agent (interactive, ship-feature)
+- **Task:** OCR-only eval, https://github.com/cheryllaird/BeckfieldBistroV2/issues/223
+- **Friction:** `vitest.config.ts` sets `globals: true` at the root, but the `unit`/`dom` projects
+  don't inherit it, so a new test file without `import { describe, it, expect } from 'vitest'`
+  fails with "describe is not defined". `tsconfig.test.json` declares `vitest/globals`, so
+  typecheck passes and the error only shows at run time. One wasted run. Separately, an earlier
+  nightly run of this issue was cut short by three container restarts (see the issue comment).
+- **Suggested fix:** either move `globals: true` into each project or drop it plus the
+  `vitest/globals` type, so the config states one convention (explicit imports, as every test does).
+- **Status:** open
+
 ### 2026-11-11: Nightly cleanup routine names a branch the session can't push to
 - **Who:** agent (nightly-cleanup routine)
 - **Task:** nightly cleanup, dropping the unused `SLOW_AFTER_MS` export

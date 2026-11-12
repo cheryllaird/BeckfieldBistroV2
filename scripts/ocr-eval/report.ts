@@ -185,8 +185,9 @@ export function renderMarkdown(report: ReportJson): string {
 
 // ─── HTML ────────────────────────────────────────────────────────────────────
 
-export function escapeHtml(s: string): string {
-  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+/** Takes unknown because truth files are hand-edited JSON: a wrong type must still render safely. */
+export function escapeHtml(value: unknown): string {
+  return String(value ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 }
 
 function htmlTable(rows: [string, Metrics][], firstHeader: string): string {
@@ -214,8 +215,8 @@ function photoCard(p: PhotoResult): string {
 <p class="muted">confidence ${Math.round(p.confidence)} · columns reflowed: ${p.columnsReflowed ? 'yes' : 'no'} · edits needed: ${s.edits ?? '—'}${p.error ? ` · <strong>OCR error: ${escapeHtml(p.error)}</strong>` : ''}</p>
 <div class="photo">${p.thumbnail ? `<img src="${p.thumbnail}" alt="Photo ${escapeHtml(p.id)}">` : ''}<div>${stageRowsHtml}</div></div>
 <div class="cols">
-<div><h4>Truth: ${escapeHtml(p.truth.title)} (serves ${p.truth.servings || '—'})</h4><h5>Ingredients</h5>${list(truthIngs)}<h5>Steps</h5>${list(p.truth.steps)}</div>
-<div><h4>Parsed: ${escapeHtml(p.parsed.title)} (serves ${p.parsed.servings || '—'})</h4><h5>Ingredients</h5>${list(parsedIngs)}<h5>Steps</h5>${list(p.parsed.steps)}</div>
+<div><h4>Truth: ${escapeHtml(p.truth.title)} (serves ${escapeHtml(String(p.truth.servings || '—'))})</h4><h5>Ingredients</h5>${list(truthIngs)}<h5>Steps</h5>${list(p.truth.steps)}</div>
+<div><h4>Parsed: ${escapeHtml(p.parsed.title)} (serves ${escapeHtml(String(p.parsed.servings || '—'))})</h4><h5>Ingredients</h5>${list(parsedIngs)}<h5>Steps</h5>${list(p.parsed.steps)}</div>
 </div>
 <details><summary>Reflowed OCR text</summary><pre>${escapeHtml(p.text)}</pre></details>
 <details><summary>Raw OCR text</summary><pre>${escapeHtml(p.rawText)}</pre></details>

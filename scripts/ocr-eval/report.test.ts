@@ -63,6 +63,14 @@ describe('rendering', () => {
     expect(escapeHtml(`"x" & 'y'`)).toBe('&quot;x&quot; &amp; &#39;y&#39;');
   });
 
+  it('escapes fields that should be numbers but arrive as strings', () => {
+    const p = photo('a', true);
+    p.truth = { ...truth, servings: '<img src=x onerror=alert(1)>' as unknown as number };
+    const html = renderHtml(buildReportJson([p], meta), [p]);
+    expect(html).not.toContain('<img src=x');
+    expect(html).toContain('&lt;img src=x onerror=alert(1)&gt;');
+  });
+
   it('formats metrics as percentages and missing values as a dash', () => {
     expect(formatMetric('ingredientRecall', 0.5)).toBe('50%');
     expect(formatMetric('stepCer', 0.1234)).toBe('12.3%');

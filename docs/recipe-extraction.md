@@ -394,7 +394,9 @@ Firestore with the service account.
 1. `FIREBASE_SERVICE_ACCOUNT='…' node scripts/export-ocr-corpus.mjs --uid <your uid>`
    is a dry run that prints counts. Add `--apply` to write to `corpus/` (`--out` to
    change). It reads `bistros/{uid}/recipes` and `users/{uid}/recipes` and keeps
-   recipes with `importMeta.method === 'photo'` and a JPEG `originalImage`.
+   recipes with `importMeta.method === 'photo'` and a JPEG `originalImage`. Only
+   recipes you created (`userId` is your uid) are exported: other bistro members'
+   recipes are skipped and counted.
 2. `corpus/` and `eval-out/` are gitignored. They hold your own recipes: keep them on
    your machine and never commit them.
 3. Re-exporting keeps existing truth files and manifest tags (`--overwrite` replaces

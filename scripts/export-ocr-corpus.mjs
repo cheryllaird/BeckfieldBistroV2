@@ -1,9 +1,11 @@
-// Exports one user's saved photo recipes as a local corpus for the OCR-only
+// Exports one user's own saved photo recipes as a local corpus for the OCR-only
 // eval (`npm run eval:ocr`). Each photo recipe becomes <id>.jpg (its saved
 // originalImage) and <id>.truth.json (the saved recipe, used as the truth),
 // plus one manifest.csv row where you tag the layout and mark hand-checked.
 //
 // Read-only on Firestore. Writes only to --out (default corpus/, gitignored).
+// Only recipes that user created are exported (userId === uid): a shared
+// bistro also holds other members' recipes, and those stay out.
 // The corpus holds the user's own recipes: keep it on your machine and never
 // commit it. Run by a human, never by an agent.
 //
@@ -49,20 +51,36 @@ const JPEG_DATA_URL = /^data:image\/jpe?g;base64,/;
 
 // Firestore ids are usually [A-Za-z0-9]; anything else must not escape --out.
 const safeId = (id) => id.replace(/[^A-Za-z0-9_-]/g, '_');
+const str = (v) => (typeof v === 'string' ? v : '');
+const num = (v) => (typeof v === 'number' && Number.isFinite(v) ? v : 0);
 const csvField = (v) => (/[",\r\n]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v);
 
 // bistros/{uid} is the current home; users/{uid} holds pre-bistro copies.
 // The same recipe can exist in both, so the bistro copy wins.
+const counts = { recipes: 0, otherMembers: 0, idClash: 0, photo: 0, noImage: 0, notJpeg: 0, written: 0, keptTruth: 0 };
 const recipes = new Map();
-for (const ref of [db.collection('bistros').doc(values.uid), db.collection('users').doc(values.uid)]) {
+const sourceIds = new Map();
+const sources = [
+  { ref: db.collection('bistros').doc(values.uid), shared: true },
+  // users/{uid} is private to the user, so a missing userId there is still theirs
+  { ref: db.collection('users').doc(values.uid), shared: false },
+];
+for (const { ref, shared } of sources) {
   const snap = await ref.collection('recipes').get();
   for (const doc of snap.docs) {
+    const data = doc.data();
+    if (data.userId !== values.uid && (shared || data.userId !== undefined)) {
+      counts.otherMembers++;
+      continue;
+    }
     const id = safeId(doc.id);
-    if (!recipes.has(id)) recipes.set(id, doc.data());
+    if (sourceIds.has(id) && sourceIds.get(id) !== doc.id) counts.idClash++;
+    if (recipes.has(id)) continue;
+    recipes.set(id, data);
+    sourceIds.set(id, doc.id);
   }
 }
-
-const counts = { recipes: recipes.size, photo: 0, noImage: 0, notJpeg: 0, written: 0, keptTruth: 0 };
+counts.recipes = recipes.size;
 const rows = new Map();
 
 // Keep the owner's layout tags and hand-checked marks from an earlier export.
@@ -93,20 +111,27 @@ for (const [id, r] of recipes) {
     continue;
   }
 
-  const ingredientSections =
-    Array.isArray(r.ingredientSections) && r.ingredientSections.length > 0
-      ? r.ingredientSections
-      : [{ title: '', ingredients: Array.isArray(r.ingredients) ? r.ingredients : [] }];
+  // Firestore does not enforce types, so every field is coerced to the shape
+  // the eval expects; anything else in the doc is left out.
+  const ingredients = (list) =>
+    (Array.isArray(list) ? list : [])
+      .filter((i) => i && typeof i === 'object')
+      .map((i) => ({ name: str(i.name), quantity: num(i.quantity), unit: str(i.unit), originalText: str(i.originalText) }));
+  const sections = (Array.isArray(r.ingredientSections) ? r.ingredientSections : [])
+    .filter((s) => s && typeof s === 'object')
+    .map((s) => ({ title: str(s.title), ingredients: ingredients(s.ingredients) }));
   const truth = {
     id,
-    title: r.title ?? '',
-    servings: r.servings ?? 0,
-    prepTime: r.prepTime ?? '',
-    totalTime: r.totalTime ?? '',
-    ingredientSections,
-    steps: Array.isArray(r.steps) ? r.steps : [],
-    extractionMethod: r.importMeta.extractionMethod ?? null,
-    editedBeforeSave: Array.isArray(r.importMeta.editedBeforeSave) ? r.importMeta.editedBeforeSave : null,
+    title: str(r.title),
+    servings: num(r.servings),
+    prepTime: str(r.prepTime),
+    totalTime: str(r.totalTime),
+    ingredientSections: sections.length > 0 ? sections : [{ title: '', ingredients: ingredients(r.ingredients) }],
+    steps: (Array.isArray(r.steps) ? r.steps : []).filter((s) => typeof s === 'string'),
+    extractionMethod: typeof r.importMeta.extractionMethod === 'string' ? r.importMeta.extractionMethod : null,
+    editedBeforeSave: Array.isArray(r.importMeta.editedBeforeSave)
+      ? r.importMeta.editedBeforeSave.filter((f) => typeof f === 'string')
+      : null,
   };
 
   const before = previous.get(id);
@@ -136,7 +161,9 @@ if (values.apply) {
 }
 
 console.log(
-  `${counts.recipes} recipes, ${counts.photo} photo imports: ` +
+  `${counts.recipes} recipes created by this user (${counts.otherMembers} by other bistro members skipped` +
+    (counts.idClash ? `, ${counts.idClash} dropped because their ids clash once made file-safe` : '') +
+    `), ${counts.photo} photo imports: ` +
     `${counts.noImage} without originalImage, ${counts.notJpeg} not a JPEG data URL, ` +
     (values.apply
       ? `${counts.written} written to ${values.out}/ (${counts.keptTruth} existing truth files kept)`
