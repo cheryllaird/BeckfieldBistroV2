@@ -9,23 +9,35 @@ entries into fixes or issues.
 below. Be specific and short, and add an entry even when you found a workaround. Never paste
 secrets, tokens or user data.
 
-**After a merge:** this file merges with `merge=union` (`.gitattributes`), so parallel entries
-never conflict. Because new entries all end with the same Status line, git may keep only one of
-them: check that every entry still ends with its own `- **Status:**` line and a blank line.
+**Merging:** this file merges with `merge=union` (`.gitattributes`), so entries added by
+parallel PRs never conflict; git keeps both. That's why **Status** comes straight after the
+title: if every entry ended with the same `- **Status:** open` line, git would keep only one copy
+of it. Two entries merged this way may end up with no blank line between them, which renders the
+same. Entries from before 2026-11-12 still have Status last.
 
 **Statuses:** `open` · `fixed in <PR link>` · `issue <link>` · `wontfix: <reason>`.
 Only the triage agent or a human changes a status. Entries are never deleted.
 
 ```markdown
 ### YYYY-MM-DD: short title
+- **Status:** open
 - **Who:** agent (session/skill) or human
 - **Task:** what you were doing, with PR/issue link if any
 - **Friction:** what got in the way, and what it cost (time, wrong turn, retries)
 - **Suggested fix:** the smallest change that would have prevented it
-- **Status:** open
 ```
 
 ## Entries
+
+### 2026-11-12: Every open PR conflicts in the friction log once another merges
+- **Status:** fixed in this PR
+- **Who:** agent (interactive, steward)
+- **Task:** resolving merge conflicts on open PRs #220, #225 and #226
+- **Friction:** each PR adds its entry to the top of `docs/friction-log.md`, so merging any one
+  left the others conflicting at the same spot. Two rounds of hand-resolving in three days, all
+  in this file.
+- **Suggested fix:** `merge=union` for the file, with **Status** moved to straight after the
+  title so parallel entries don't share their last line.
 
 ### 2026-11-11: Nightly cleanup routine names a branch the session can't push to
 - **Who:** agent (nightly-cleanup routine)
