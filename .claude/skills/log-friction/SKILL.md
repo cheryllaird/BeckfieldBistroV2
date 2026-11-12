@@ -11,12 +11,14 @@ description: Add an entry to docs/friction-log.md when something slowed down wor
 2. Otherwise insert a new entry at the **top** of the `## Entries` section, in this format:
    ```markdown
    ### YYYY-MM-DD: short title
+   - **Status:** open
    - **Who:** agent (<skill or task>) or human
    - **Task:** what you were doing, with PR/issue link if any
    - **Friction:** what got in the way, and what it cost
    - **Suggested fix:** the smallest change that would have prevented it
-   - **Status:** open
    ```
+   Keep **Status** straight after the title: the file union-merges (`.gitattributes`), and an
+   identical last line shared by parallel entries would be kept only once.
 3. Be specific: file paths, command, error text (trimmed). One entry per distinct problem.
 4. Never include secrets, tokens, environment values or user data.
 5. If the fix is trivial and inside your task's scope, fix it, and set the status to
