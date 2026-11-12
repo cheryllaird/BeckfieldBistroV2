@@ -1,6 +1,6 @@
 # Privacy Policy
 
-*Effective 1 November 2026*
+*Effective 12 November 2026*
 
 This policy explains what personal data Beckfield Bistro collects, why, and what your rights are. Cheryl Laird is the controller of this data under UK data protection law (the UK GDPR and the Data Protection Act 2018). Contact us at cheryl.laird@outlook.com.
 

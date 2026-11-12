@@ -5,8 +5,10 @@ import { useOnlineStatus } from '../hooks/useOnlineStatus';
 import { KOFI_PANEL_URL, KOFI_URL } from '../lib/tips';
 import { ModalPortal } from './ui/ModalPortal';
 
-// Ko-fi's checkout opens PayPal/card windows as pop-ups, so those are allowed;
-// top-level navigation isn't, so the panel can never navigate the app away.
+// Ko-fi's checkout opens PayPal/card windows as pop-ups. They must escape the
+// sandbox to work (a sandboxed pop-up can't run checkout); they're full browser
+// windows that show their own URL. Top-level navigation isn't allowed, so the
+// panel can never navigate the app away. See ADR 0018.
 const SANDBOX = 'allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox';
 
 /**
@@ -62,7 +64,7 @@ function Sheet({ onClose }: { onClose: () => void }) {
                   src={KOFI_PANEL_URL}
                   title="Ko-fi donation panel"
                   sandbox={SANDBOX}
-                  referrerPolicy="strict-origin-when-cross-origin"
+                  referrerPolicy="no-referrer"
                   onLoad={() => setLoaded(true)}
                   className="w-full h-full border-0"
                 />

@@ -25,8 +25,15 @@ every page) and a donation panel (an `<iframe>` of the Ko-fi page).
 - The iframe **only exists while the sheet is open**, so Ko-fi isn't contacted unless the user
   asks. Offline, the sheet says tipping needs a connection instead of loading the frame.
 - The frame is sandboxed: scripts, forms and pop-ups (PayPal or card checkout windows) are allowed,
-  but **top-level navigation isn't**, so the panel can't navigate the app away. A link under the
-  frame opens the Ko-fi page in the browser in case checkout doesn't work in the frame.
+  but **top-level navigation isn't**, so the panel can't navigate the app away. Pop-ups may escape
+  the sandbox (`allow-popups-to-escape-sandbox`): checkout runs there, and a still-sandboxed pop-up
+  can't complete a payment. The trade-off is that a pop-up keeps an `opener` reference to the
+  frame, so a compromised Ko-fi page could attempt to redirect via `opener.top`. We accept this for
+  a trusted payment host, and payment details are entered in a real browser window that shows its
+  URL. Remove the flag if checkout turns out to work without it.
+- The frame is loaded with `referrerPolicy="no-referrer"`.
+- A link under the frame opens the Ko-fi page in the browser in case checkout doesn't work in the
+  frame.
 - `https://ko-fi.com` is added to `frame-src` in the report-only CSP in `vercel.json`. The
   enforced CSP doesn't restrict frames, so this keeps the report-only policy accurate for when it's
   enforced.
@@ -39,6 +46,8 @@ every page) and a donation panel (an `<iframe>` of the Ko-fi page).
 - Users can tip without leaving the app; nobody who doesn't open the sheet is exposed to Ko-fi.
 - Opening the sheet lets Ko-fi and its payment providers see the user's IP address and set their
   own cookies in the frame. That's disclosed in the Privacy Policy.
+- If Ko-fi redirects the panel to another host (such as `www.ko-fi.com`), the report-only CSP
+  will log `frame-src` violations; add that host.
 - If Ko-fi blocks being framed or changes the panel URL, the sheet shows a broken frame, and the
   fallback link still works. Revisit if Ko-fi changes its widget.
 - Enforcing the full CSP later must keep `https://ko-fi.com` in `frame-src`.
