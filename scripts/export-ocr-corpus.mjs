@@ -57,7 +57,7 @@ const csvField = (v) => (/[",\r\n]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v);
 
 // bistros/{uid} is the current home; users/{uid} holds pre-bistro copies.
 // The same recipe can exist in both, so the bistro copy wins.
-const counts = { recipes: 0, otherMembers: 0, idClash: 0, photo: 0, noImage: 0, notJpeg: 0, written: 0, keptTruth: 0 };
+const counts = { recipes: 0, untagged: 0, otherMembers: 0, idClash: 0, photo: 0, noImage: 0, notJpeg: 0, written: 0, keptTruth: 0 };
 const recipes = new Map();
 const sourceIds = new Map();
 const sources = [
@@ -100,8 +100,12 @@ if (existsSync(manifestPath)) {
 if (values.apply) mkdirSync(values.out, { recursive: true });
 
 for (const [id, r] of recipes) {
-  if (r.importMeta?.method !== 'photo') continue;
+  // Recipes saved before importMeta existed have none. The app only stores an
+  // originalImage when a recipe is created from a photo, so treat those as photo imports.
+  const untaggedPhoto = !r.importMeta && typeof r.originalImage === 'string' && r.originalImage !== '';
+  if (r.importMeta?.method !== 'photo' && !untaggedPhoto) continue;
   counts.photo++;
+  if (untaggedPhoto) counts.untagged++;
   if (typeof r.originalImage !== 'string' || !r.originalImage) {
     counts.noImage++;
     continue;
@@ -128,8 +132,8 @@ for (const [id, r] of recipes) {
     totalTime: str(r.totalTime),
     ingredientSections: sections.length > 0 ? sections : [{ title: '', ingredients: ingredients(r.ingredients) }],
     steps: (Array.isArray(r.steps) ? r.steps : []).filter((s) => typeof s === 'string'),
-    extractionMethod: typeof r.importMeta.extractionMethod === 'string' ? r.importMeta.extractionMethod : null,
-    editedBeforeSave: Array.isArray(r.importMeta.editedBeforeSave)
+    extractionMethod: typeof r.importMeta?.extractionMethod === 'string' ? r.importMeta.extractionMethod : null,
+    editedBeforeSave: Array.isArray(r.importMeta?.editedBeforeSave)
       ? r.importMeta.editedBeforeSave.filter((f) => typeof f === 'string')
       : null,
   };
@@ -163,7 +167,7 @@ if (values.apply) {
 console.log(
   `${counts.recipes} recipes created by this user (${counts.otherMembers} by other bistro members skipped` +
     (counts.idClash ? `, ${counts.idClash} dropped because their ids clash once made file-safe` : '') +
-    `), ${counts.photo} photo imports: ` +
+    `), ${counts.photo} photo imports (${counts.untagged} from before importMeta, found by their originalImage): ` +
     `${counts.noImage} without originalImage, ${counts.notJpeg} not a JPEG data URL, ` +
     (values.apply
       ? `${counts.written} written to ${values.out}/ (${counts.keptTruth} existing truth files kept)`
