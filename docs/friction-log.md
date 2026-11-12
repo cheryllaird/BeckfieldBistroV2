@@ -9,6 +9,10 @@ entries into fixes or issues.
 below. Be specific and short, and add an entry even when you found a workaround. Never paste
 secrets, tokens or user data.
 
+**After a merge:** this file merges with `merge=union` (`.gitattributes`), so parallel entries
+never conflict. Because new entries all end with the same Status line, git may keep only one of
+them: check that every entry still ends with its own `- **Status:**` line and a blank line.
+
 **Statuses:** `open` · `fixed in <PR link>` · `issue <link>` · `wontfix: <reason>`.
 Only the triage agent or a human changes a status. Entries are never deleted.
 
