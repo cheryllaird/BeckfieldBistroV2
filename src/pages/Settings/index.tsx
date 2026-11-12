@@ -4,6 +4,7 @@ import { ApiKeyCard } from './ApiKeyCard';
 import { BistroCard } from './BistroCard';
 import { LegalCard } from './LegalCard';
 import { AccountCard } from './AccountCard';
+import { SupportCard } from './SupportCard';
 
 export function SettingsPage() {
   const navigate = useNavigate();
@@ -23,6 +24,7 @@ export function SettingsPage() {
 
       <BistroCard />
       <ApiKeyCard />
+      <SupportCard />
       <LegalCard />
       <AccountCard />
     </div>

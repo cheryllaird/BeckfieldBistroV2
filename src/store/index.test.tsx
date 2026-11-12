@@ -26,6 +26,63 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
+describe('tip prompt', () => {
+  const addMany = async (n: number, from = 0) => {
+    for (let i = from; i < from + n; i++) await useStore.getState().addRecipe(makeRecipe({ id: `r${i}` }));
+  };
+
+  it('shows the thank-you note on the 5th saved recipe, once', async () => {
+    signedIn();
+    await addMany(4);
+    expect(useStore.getState().tipPromptMilestone).toBeNull();
+
+    await addMany(1, 4);
+    expect(useStore.getState().tipPromptMilestone).toBe(5);
+    expect(useStore.getState().tipPromptShown).toBe(true);
+
+    useStore.getState().dismissTipPrompt();
+    await addMany(5, 5);
+    expect(useStore.getState().recipes).toHaveLength(10);
+    expect(useStore.getState().tipPromptMilestone).toBeNull();
+  });
+
+  it('shows on the 10th for someone who already had more than 5', async () => {
+    signedIn();
+    useStore.setState({ recipes: Array.from({ length: 7 }, (_, i) => makeRecipe({ id: `old${i}`, userId: 'user-1' })) });
+    await addMany(2);
+    expect(useStore.getState().tipPromptMilestone).toBeNull();
+    await addMany(1, 2);
+    expect(useStore.getState().tipPromptMilestone).toBe(10);
+  });
+
+  it("counts only the user's own recipes, not other bistro members'", async () => {
+    signedIn();
+    useStore.setState({ recipes: Array.from({ length: 4 }, (_, i) => makeRecipe({ id: `ann${i}`, userId: 'ann' })) });
+    await addMany(1);
+    expect(useStore.getState().tipPromptMilestone).toBeNull();
+  });
+
+  it('opens and closes the donation panel, and closes it on sign-out', async () => {
+    signedIn();
+    useStore.getState().openSupportPanel();
+    expect(useStore.getState().supportPanelOpen).toBe(true);
+    useStore.getState().closeSupportPanel();
+    expect(useStore.getState().supportPanelOpen).toBe(false);
+
+    useStore.getState().openSupportPanel();
+    await useStore.getState().signOut();
+    expect(useStore.getState().supportPanelOpen).toBe(false);
+  });
+
+  it('remembers on this device that it was shown, and clears the note on sign-out', async () => {
+    signedIn();
+    await addMany(5);
+    await useStore.getState().signOut();
+    expect(useStore.getState().tipPromptMilestone).toBeNull();
+    expect(useStore.getState().tipPromptShown).toBe(true);
+  });
+});
+
 describe('recipes', () => {
   it('adds a recipe owned by the signed-in user, records its source and saves it', async () => {
     signedIn();

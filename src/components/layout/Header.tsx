@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Check, LogOut, Settings, User } from 'lucide-react';
+import { Check, Coffee, LogOut, Settings, User } from 'lucide-react';
 import { useStore, scopeOf } from '../../store';
 import type { Bistro } from '../../types';
 import { useOnlineStatus } from '../../hooks/useOnlineStatus';
@@ -23,7 +23,7 @@ function ConnectionDiagnostics() {
 }
 
 export function Header() {
-  const { user, signOut, bistros, switchBistro } = useStore();
+  const { user, signOut, bistros, switchBistro, openSupportPanel } = useStore();
   const activeId = useStore(scopeOf);
   const navigate = useNavigate();
   const [menuOpen, setMenuOpen] = useState(false);
@@ -106,6 +106,13 @@ export function Header() {
                   >
                     <Settings size={14} />
                     Settings
+                  </button>
+                  <button
+                    onClick={() => { openSupportPanel(); setMenuOpen(false); }}
+                    className="w-full flex items-center gap-2 px-3 py-2 text-sm text-slate-600 hover:bg-slate-50 transition-colors"
+                  >
+                    <Coffee size={14} />
+                    Buy me a coffee
                   </button>
                   <button
                     onClick={() => { signOut(); setMenuOpen(false); }}

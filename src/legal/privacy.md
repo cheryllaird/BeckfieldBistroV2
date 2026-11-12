@@ -1,6 +1,6 @@
 # Privacy Policy
 
-*Effective 1 November 2026*
+*Effective 12 November 2026*
 
 This policy explains what personal data Beckfield Bistro collects, why, and what your rights are. Cheryl Laird is the controller of this data under UK data protection law (the UK GDPR and the Data Protection Act 2018). Contact us at cheryl.laird@outlook.com.
 
@@ -29,6 +29,8 @@ We do not use your data for advertising, sell it, or use it to train AI models.
 | Vercel Inc. | Hosts the app and runs its server functions, as our processor | United States and other regions |
 | Google (Gemini API) | Reads recipe photos and pages when you extract a recipe. This uses your own API key, under your own agreement with Google | United States and other regions |
 | People you share with, and members of your bistro | See the recipes and data you share with them | Wherever they are |
+
+If you choose "Buy me a coffee", Ko-fi's tipping page opens inside the app. Ko-fi (and the payment provider you pick there) then receive your IP address and device information, may set their own cookies, and handle any tip under their own privacy policies. Nothing is loaded from Ko-fi unless you open it.
 
 We may also disclose data if the law requires it, or to protect our rights or someone's safety.
 
