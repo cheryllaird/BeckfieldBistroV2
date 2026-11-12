@@ -59,3 +59,23 @@ describe('connection drops during extraction', () => {
     expect(err.message).toBe('Nope');
   });
 });
+
+describe('extractRecipeFromImage stages', () => {
+  it('reports preparing then reading, with reading before the request is sent', async () => {
+    const events: string[] = [];
+    const fetchMock = vi.fn().mockImplementation(async () => {
+      events.push('fetch');
+      return new Response(JSON.stringify({ recipe: { title: 'T' } }), { status: 200 });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    await extractRecipeFromImage('data:image/jpeg;base64,AAAA', true, (s) => events.push(s)).catch(() => undefined);
+    expect(events.slice(0, 3)).toEqual(['preparing', 'reading', 'fetch']);
+  });
+
+  it('works without a stage callback', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new TypeError('Load failed')));
+    await expect(extractRecipeFromImage('data:image/jpeg;base64,AAAA', true)).rejects.toMatchObject({
+      message: CONNECTION_LOST_MESSAGE,
+    });
+  });
+});

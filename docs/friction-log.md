@@ -23,6 +23,16 @@ Only the triage agent or a human changes a status. Entries are never deleted.
 
 ## Entries
 
+### 2026-11-11: Nightly cleanup routine names a branch the session can't push to
+- **Who:** agent (nightly-cleanup routine)
+- **Task:** nightly cleanup, dropping the unused `SLOW_AFTER_MS` export
+- **Friction:** the routine prompt and `.claude/skills/nightly-cleanup/SKILL.md` say to use
+  `claude/nightly-cleanup-YYYYMMDD`, but the cloud session is told to push only to its own
+  designated `claude/<random>` branch. The agent has to pick one; it used the session branch.
+- **Suggested fix:** let the skill and routine prompt accept the session's designated branch
+  (for example "use the session branch if one is assigned, otherwise claude/nightly-cleanup-YYYYMMDD").
+- **Status:** open
+
 ### 2026-11-05: Ready issues depend on unmerged work and ADR numbers collide
 - **Who:** agent (build-ready)
 - **Task:** nightly build of #175 and #211
@@ -96,7 +106,8 @@ Only the triage agent or a human changes a status. Entries are never deleted.
   (off limits): `initFirebaseAdmin` in `api/_utils/auth.ts` is an unused export, and the root
   `test-*.ts` smoke scripts show as unused files to knip (consider adding them as knip entries).
 - **Status:** issue https://github.com/cheryllaird/BeckfieldBistroV2/issues/217
-- **Seen again:** 2026-11-01, same three items still reported by knip.
+- **Seen again:** 2026-11-01 and 2026-11-02, same items still reported by knip. 2026-11-02: also dropped the unused `StageName` export (`api/_utils/extractionTiming.ts`).
+- **Seen again:** 2026-11-11, same items still reported by knip; also dropped the unused `SLOW_AFTER_MS` export (`src/pages/NewRecipe/ExtractionProgress.tsx`).
 
 ### 2026-11-09: Write-path wake was silently throttled away, and lib/firestore.ts had no tests
 - **Who:** agent (interactive)
