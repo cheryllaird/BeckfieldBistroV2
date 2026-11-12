@@ -38,7 +38,7 @@ export function TipThankYouCard() {
         </div>
       </div>
       <div className="flex items-center gap-2 pl-7">
-        <KofiLink onClick={dismiss}>Tip on Ko-fi</KofiLink>
+        <KofiLink onClick={dismiss}>Buy me a coffee</KofiLink>
         <Button variant="ghost" size="sm" onClick={dismiss}>
           Maybe later
         </Button>

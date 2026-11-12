@@ -10,7 +10,7 @@ export function SupportCard() {
         Enjoying the app? A tip helps cover its running costs.
       </p>
       <div>
-        <KofiLink>Tip on Ko-fi</KofiLink>
+        <KofiLink>Buy me a coffee</KofiLink>
       </div>
     </Card>
   );

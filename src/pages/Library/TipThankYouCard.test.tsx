@@ -24,7 +24,7 @@ describe('TipThankYouCard', () => {
     useStore.setState({ tipPromptMilestone: 5 });
     render(<TipThankYouCard />);
     expect(screen.getByText(/5 recipes saved/)).toBeInTheDocument();
-    const link = screen.getByRole('link', { name: /tip on ko-fi/i });
+    const link = screen.getByRole('link', { name: /buy me a coffee/i });
     expect(link).toHaveAttribute('href', KOFI_URL);
     expect(link).toHaveAttribute('target', '_blank');
     expect(link).toHaveAttribute('rel', expect.stringContaining('noopener'));
@@ -41,7 +41,7 @@ describe('TipThankYouCard', () => {
   it('hides once the tip link is tapped', async () => {
     useStore.setState({ tipPromptMilestone: 5 });
     render(<TipThankYouCard />);
-    const link = screen.getByRole('link', { name: /tip on ko-fi/i });
+    const link = screen.getByRole('link', { name: /buy me a coffee/i });
     link.addEventListener('click', (e) => e.preventDefault());
     await userEvent.click(link);
     expect(useStore.getState().tipPromptMilestone).toBeNull();
