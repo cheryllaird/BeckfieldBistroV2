@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { Loader } from 'lucide-react';
 import type { ImageExtractionStage } from '../../lib/recipeExtraction';
 
-export const SLOW_AFTER_MS = 10_000;
+const SLOW_AFTER_MS = 10_000;
 
 const LABELS: Record<ImageExtractionStage, string> = {
   preparing: 'Preparing photo',
