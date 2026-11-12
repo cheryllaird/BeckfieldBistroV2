@@ -178,7 +178,7 @@ Behind the `OcrEngine` interface so a cloud OCR (e.g. Google Cloud Vision) can r
 Tesseract by adding one class and switching `getOcrEngine()` — callers never change.
 
 ```ts
-interface OcrResult { text: string; confidence: number; columnsReflowed: boolean }
+interface OcrResult { text: string; rawText: string; confidence: number; columnsReflowed: boolean; coldWorker?: boolean }
 interface OcrEngine { readonly name: string; recognize(image: Buffer): Promise<OcrResult> }
 ```
 
@@ -188,7 +188,11 @@ interface OcrEngine { readonly name: string; recognize(image: Buffer): Promise<O
   Language `eng` from `api/_tessdata/eng.traineddata.gz` (bundled via `includeFiles`).
 - **`preprocessForOcr(image)`** — sharp: EXIF `rotate()`, upscale small images toward
   ~300 dpi (cap ~2800/3000 px), grayscale, `normalize`, `sharpen`, PNG. No hard
-  threshold (Tesseract's Otsu handles uneven lighting better).
+  threshold (Tesseract's Otsu handles uneven lighting better). Optional
+  `PreprocessOptions` (`targetLongest`, `normalize`, `sharpen`, `threshold`) exist only
+  for comparing variants in the offline eval; production passes none.
+- **`rawText`** — Tesseract's own text before column reflow. Production uses `text`;
+  `rawText` lets the eval measure what the reflow adds.
 - **Column reflow — `reflowColumns` (the important part).** Tesseract merges
   side‑by‑side columns (ingredients | method) into single lines, gluing ingredient
   text to method text so the structuring step drops ingredients. The reflow rebuilds
@@ -362,6 +366,66 @@ trace through Tesseract's dynamic `require`. **Removing that glob breaks OCR at 
   the OCR actually read.
 - Tesseract bundling can only be fully verified on a **Vercel preview deploy** — a local
   pass does not prove `includeFiles` is correct.
+
+### 11.1 OCR-only accuracy eval
+
+Measures how accurate the free path (Tesseract + `parseRecipeText`, i.e. `ocr+local`) is,
+with no Gemini. Code: `scripts/eval-ocr.ts` (runner), `scripts/ocr-eval/` (pure scorer,
+corpus format, report rendering, with Vitest tests).
+
+**Corpus format.** A directory with `<id>.jpg`, `<id>.truth.json` (the recipe as it
+should be, plus `extractionMethod` and `editedBeforeSave`) and `manifest.csv` with
+columns `id, layout, handChecked, extractionMethod, editedBeforeSave`. `fixtures/`
+holds a committed corpus of the 4 test photos with hand-written truth, so anyone can run
+the eval end to end:
+
+```bash
+npm run eval:ocr -- --corpus fixtures
+```
+
+It writes `eval-out/report.md`, `report.json` and a self-contained `report.html`
+(per-photo detail: thumbnail, gate, truth vs parsed ingredients and steps, raw and
+reflowed OCR text). Options: `--out <dir>`, `--limit <n>`, and preprocessing variants
+`--target <px>`, `--threshold <0-255>`, `--no-normalize`, `--no-sharpen`.
+
+**Exporting the owner's photos (human only).** Agents never run this: it reads
+Firestore with the service account.
+
+1. `FIREBASE_SERVICE_ACCOUNT='…' node scripts/export-ocr-corpus.mjs --uid <your uid>`
+   is a dry run that prints counts. Add `--apply` to write to `corpus/` (`--out` to
+   change). It reads `bistros/{uid}/recipes` and `users/{uid}/recipes` and keeps
+   recipes with `importMeta.method === 'photo'` and a JPEG `originalImage`.
+2. `corpus/` and `eval-out/` are gitignored. They hold your own recipes: keep them on
+   your machine and never commit them.
+3. Re-exporting keeps existing truth files and manifest tags (`--overwrite` replaces
+   truth files).
+
+**Hand-checking about 10 photos.** The saved recipe is only an approximation of the
+truth: it may have come from Gemini, and you may have edited it. For a trustworthy
+headline:
+
+1. Pick about 10 photos across layouts (single column, two column, card, handwritten…).
+2. Open `<id>.jpg` beside `<id>.truth.json`. Make the title, servings, each ingredient's
+   `originalText`, `quantity` and `unit`, and the steps match the photo exactly.
+   Steps are compared without their numbering.
+3. In `manifest.csv`, set `layout` to a short tag and `handChecked` to `true`.
+4. Run `npm run eval:ocr -- --corpus corpus`.
+
+**Reading the report.** Headline numbers come from the hand-checked subset (the full
+set if none is marked) at the parser stage. Every metric is also broken down by
+layout tag, stage, edited vs unedited, and hand-checked vs full set.
+
+- Stages: **raw** (Tesseract text before reflow), **reflow** (after `reflowColumns`),
+  **parser** (`parseRecipeText` output). Text stages only measure whether the truth is
+  present in reading order (ingredient recall, step CER, title), so the gap between
+  reflow and parser is what the parser loses.
+- Metrics: quantity+unit exact (of matched ingredients), ingredient recall and
+  precision (fuzzy `originalText`, ≥80% similar), step character error rate, step
+  count match, title (≥80% similar), servings (exact), "≤2 edits" (the user could reach
+  the truth with at most two field edits) and gate pass rate.
+- Gate failures are scored too, although production would not run `ocr+local` on them.
+- Exported photos are the saved `originalImage` (1200px, JPEG q0.72); production OCRs
+  the 2048px q0.9 upload. Scores are therefore a **lower bound**.
 
 ---
 

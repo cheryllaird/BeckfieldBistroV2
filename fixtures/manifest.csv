@@ -1,0 +1,5 @@
+id,layout,handChecked,extractionMethod,editedBeforeSave
+recipe-print,single-column,true,,
+recipe-twocol,two-column,true,,
+recipe-real,two-column,true,,
+recipe-hard,blurred,true,,

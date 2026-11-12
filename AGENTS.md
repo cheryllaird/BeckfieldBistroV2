@@ -35,7 +35,7 @@ All of lint, typecheck, test and build must pass before you open or update a PR.
 | Types | `src/types/index.ts` | Shared domain types |
 | API (server) | `api/*.ts` | Vercel functions; the only place secrets exist |
 | API helpers | `api/_utils/` | `auth.ts`, `safeFetch.ts`, `crypto.ts`, `*Rules.ts`, `accountDeletion.ts`, `pendingExpiry.ts`, parsers, OCR |
-| Scripts | `scripts/` | CI helpers and one-off admin scripts (admin ones dry-run by default and are run by a human) |
+| Scripts | `scripts/` | CI helpers, one-off admin scripts (admin ones dry-run by default and are run by a human), and the OCR-only eval (`npm run eval:ocr`, `scripts/ocr-eval/`) |
 | Security rules | `firestore.rules` | The real access boundary for client data |
 | Tests | `*.test.ts(x)` beside the code | Factories in `src/test/factories.ts`, mocks in `src/lib/__mocks__/` |
 

@@ -31,3 +31,7 @@ dev-dist
 
 # Agent worktrees (Claude Code subagents)
 .claude/worktrees/
+
+# OCR eval: exported photo corpora and reports stay on the owner's machine
+corpus/
+eval-out/

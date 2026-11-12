@@ -16,7 +16,8 @@
     "test:coverage": "vitest run --coverage",
     "knip": "knip",
     "preview": "vite preview",
-    "generate-pwa-assets": "pwa-assets-generator --config pwa-assets.config.ts"
+    "generate-pwa-assets": "pwa-assets-generator --config pwa-assets.config.ts",
+    "eval:ocr": "tsx scripts/eval-ocr.ts"
   },
   "dependencies": {
     "@google/generative-ai": "^0.24.0",
@@ -52,6 +53,7 @@
     "jsdom": "^30.1.1",
     "knip": "^6.39.0",
     "tailwindcss": "^4.2.2",
+    "tsx": "^4.21.0",
     "typescript": "~5.9.3",
     "typescript-eslint": "^8.57.0",
     "vite": "^8.0.1",
