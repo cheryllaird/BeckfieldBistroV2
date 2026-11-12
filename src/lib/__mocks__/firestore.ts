@@ -24,6 +24,8 @@ export const dismissShare = vi.fn(async () => {});
 export const logCategoryOverride = vi.fn();
 export const saveCategoryOverride = vi.fn();
 export const deleteCategoryOverride = vi.fn();
+export const saveShelfOverride = vi.fn();
+export const deleteShelfOverride = vi.fn();
 export const recoverIfSdkCrashed = vi.fn();
 export const ensureFirestoreOnline = vi.fn(async () => {});
 export const flushPendingWrites = vi.fn(async () => {});

@@ -93,3 +93,51 @@ describe('ShoppingListPage — item sheet in edit mode', () => {
     expect(screen.getByRole('status')).toHaveTextContent('Removed milk');
   });
 });
+
+describe('ShoppingListPage — Pantry shelves', () => {
+  beforeEach(() => {
+    useStore.setState({
+      shoppingItems: [
+        makeShoppingItem({ id: 'milk', name: 'milk', category: 'Dairy & Eggs' }),
+        makeShoppingItem({ id: 'honey', name: 'honey', category: 'Pantry' }),
+      ],
+    });
+  });
+
+  it('shows the shelf picker only for Pantry items', async () => {
+    const user = userEvent.setup();
+    renderPage();
+    expect((await openSheetFor(user, 'milk')).queryByRole('group', { name: 'Shelf' })).not.toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Done' }));
+    const sheet = await openSheetFor(user, 'honey');
+    expect(sheet.getByRole('button', { name: 'Spreads & Syrups' })).toHaveAttribute('aria-pressed', 'true');
+  });
+
+  it('remembers a chosen shelf, and forgets it when the worked-out shelf is chosen again', async () => {
+    const user = userEvent.setup();
+    renderPage();
+    const sheet = await openSheetFor(user, 'honey');
+    await user.click(sheet.getByRole('button', { name: 'Baking' }));
+    expect(useStore.getState().shelfOverrides).toEqual({ honey: 'Baking' });
+    expect(sheet.getByRole('button', { name: 'Baking' })).toHaveAttribute('aria-pressed', 'true');
+    await user.click(sheet.getByRole('button', { name: 'Spreads & Syrups' }));
+    expect(useStore.getState().shelfOverrides).toEqual({});
+  });
+
+  it('Auto sort keeps category order and orders Pantry items by shelf', async () => {
+    useStore.setState({
+      shoppingItems: [
+        makeShoppingItem({ id: 'honey', name: 'honey', category: 'Pantry' }),
+        makeShoppingItem({ id: 'milk', name: 'milk', category: 'Dairy & Eggs' }),
+        makeShoppingItem({ id: 'flour', name: 'plain flour', category: 'Pantry' }),
+        makeShoppingItem({ id: 'oil', name: 'olive oil', category: 'Pantry' }),
+        makeShoppingItem({ id: 'carrot', name: 'carrots', category: 'Vegetables' }),
+      ],
+    });
+    const user = userEvent.setup();
+    renderPage();
+    await user.click(screen.getByRole('button', { name: /Edit$/ }));
+    await user.click(screen.getByRole('button', { name: /Auto sort/ }));
+    expect(useStore.getState().shoppingItems.map((i) => i.id)).toEqual(['carrot', 'milk', 'oil', 'flour', 'honey']);
+  });
+});

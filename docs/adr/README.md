@@ -45,3 +45,4 @@ Not needed for: bug fixes, UI tweaks, refactors that keep behaviour and structur
 | [0015](0015-scope-in-conversation-build-when-ready.md) | Scope issues in conversation, build them once the owner marks them ready | Accepted |
 | [0016](0016-pantry-in-stock-flag.md) | Track whether a store cupboard item is in stock | Accepted |
 | [0017](0017-hidden-import-and-plan-metadata.md) | Record hidden import and meal-planning metadata for the usage report | Accepted |
+| [0018](0018-pantry-shelves.md) | Group Pantry items by a derived shelf | Accepted |

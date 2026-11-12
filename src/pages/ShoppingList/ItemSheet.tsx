@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react';
 import { Trash2 } from 'lucide-react';
 import { ModalPortal } from '../../components/ui/ModalPortal';
+import { ShelfPicker } from '../../components/ShelfPicker';
 import type { ShoppingCategory, ShoppingItem, ShoppingListType } from '../../types';
-import { CATEGORY_ORDER } from './categoryOrder';
+import { CATEGORY_ORDER } from '../../lib/ingredients/categoryOrder';
 
 const LISTS: { id: ShoppingListType; label: string }[] = [
   { id: 'immediate', label: 'Immediate' },
@@ -117,6 +118,8 @@ export function ItemSheet({
               ))}
             </div>
           </section>
+
+          {item.category === 'Pantry' && <ShelfPicker name={item.name} />}
 
           <button
             onClick={onRemove}
