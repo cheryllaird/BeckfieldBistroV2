@@ -1,0 +1,3 @@
+# Every PR adds an entry to the top of the friction log, so parallel PRs always conflict there.
+# Union merge keeps both sides' lines instead of conflicting. See the note in the file's header.
+docs/friction-log.md merge=union
