@@ -3,8 +3,7 @@
 // Ko-fi widget or script is loaded, so nothing is sent to Ko-fi unless the user
 // taps it.
 
-// TODO(owner): replace with the real Ko-fi page before merging.
-export const KOFI_URL = 'https://ko-fi.com/beckfieldbistro';
+export const KOFI_URL = 'https://ko-fi.com/cheryllaird';
 
 /** Saved-recipe counts at which the thank-you note may appear. */
 export const TIP_MILESTONES = [5, 10] as const;
