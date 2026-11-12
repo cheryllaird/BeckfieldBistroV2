@@ -33,6 +33,16 @@ Only the triage agent or a human changes a status. Entries are never deleted.
   (for example "use the session branch if one is assigned, otherwise claude/nightly-cleanup-YYYYMMDD").
 - **Status:** open
 
+### 2026-11-11: Subagent worktrees aren't gitignored, so `git add -A` commits them
+- **Who:** agent (build-ready, nightly)
+- **Task:** building #216 while subagents built #199 and #223 in worktrees
+- **Friction:** `Agent` with `isolation: worktree` creates `.claude/worktrees/agent-*` inside the
+  repo. `.gitignore` doesn't cover it, so `git add -A` on the main checkout staged both worktrees
+  as embedded repos. Fixing the commit needed a force push (refused), so it took a second
+  "drop worktree entries" commit.
+- **Suggested fix:** add `.claude/worktrees/` to `.gitignore` (done in this PR).
+- **Status:** fixed in this PR
+
 ### 2026-11-01: Merging a meal into a manual item drops the manual amount
 - **Who:** agent (ship-feature)
 - **Task:** shopping list preview, issue https://github.com/cheryllaird/BeckfieldBistroV2/issues/209

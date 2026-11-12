@@ -1,6 +1,15 @@
 import type { Ingredient, MealSource, PantryItem, ShoppingCategory, ShoppingItem } from '../../types';
 import { generateId } from '../utils';
-import { formatItemName, ingredientUnit, leadingCount, readsAsPlural, round2, type IngredientAmount } from './amounts';
+import {
+  formatItemName,
+  ingredientUnit,
+  leadingCount,
+  normalizeUnit,
+  parseTypedAmount,
+  readsAsPlural,
+  round2,
+  type IngredientAmount,
+} from './amounts';
 import { canonicalizeIngredientName, normalizeIngredientName } from './canonicalName';
 import { categorize } from './categorize';
 import type { CategoryOverrides } from './categoryOverrides';
@@ -65,6 +74,47 @@ function linesFromSources(sources: readonly MealSource[]): Pick<ListLine, 'name'
     name: canonicalizeIngredientName(source.ingredientName),
     amount: { quantity: source.scaledQuantity, unit: source.unit },
   }));
+}
+
+/**
+ * Marks the source that stands for an amount the user typed themselves, kept
+ * when a meal folds into a typed item ("100 g flour") so later merges still
+ * count it. It has no meal, so it never blocks or matches a meal re-add.
+ */
+const TYPED_SOURCE_TITLE = 'Added by you';
+
+/** The user's own amount on a typed item, as a source to keep alongside the meals. */
+function typedSource(name: string, amount: IngredientAmount): MealSource {
+  return {
+    mealEntryId: '',
+    recipeTitle: TYPED_SOURCE_TITLE,
+    scaledQuantity: amount.quantity,
+    unit: normalizeUnit(amount.unit),
+    ingredientName: name,
+  };
+}
+
+/**
+ * What an existing item already holds, for folding a meal into it: its meal
+ * sources, or for an item with none, the amount written into its name. An
+ * item typed with no amount it can read gives nothing to fold into.
+ */
+function existingAmount(item: ShoppingItem): { lines: Pick<ListLine, 'name' | 'amount'>[]; sources: MealSource[] } | undefined {
+  if (item.mealSources?.length) return { lines: linesFromSources(item.mealSources), sources: item.mealSources };
+  const typed = parseTypedAmount(item.name);
+  if (typed) {
+    const source = typedSource(typed.name, typed.amount);
+    return { lines: linesFromSources([source]), sources: [source] };
+  }
+  // A recipe-built item with no sources has nothing of its own to lose.
+  return item.ingredientKey ? { lines: [], sources: [] } : undefined;
+}
+
+/** The key a typed item would have, read past any amount ("flour 100g" → "flour"). */
+function typedKey(item: ShoppingItem): string | undefined {
+  if (item.ingredientKey) return undefined;
+  const typed = parseTypedAmount(item.name);
+  return typed ? normalizeIngredientName(typed.name) : undefined;
 }
 
 /** Groups lines by key, keeping first-seen order. */
@@ -164,14 +214,18 @@ export function mergeIntoShoppingList(
     // Ticked and Stock up items are never merged into: new quantity there would
     // sit hidden under "In basket" or on the wrong list.
     const canMerge = (item: ShoppingItem) => !item.checked && (item.listType ?? 'immediate') === 'immediate';
-    const index = result.findIndex((item) => sameIngredient(item) && canMerge(item));
+    // Prefer an item built from recipes; otherwise fold into one the user typed
+    // with an amount ("100 g flour"), so their amount counts towards the total.
+    const keyedIndex = result.findIndex((item) => sameIngredient(item) && canMerge(item));
+    const index = keyedIndex >= 0 ? keyedIndex : result.findIndex((item) => canMerge(item) && typedKey(item) === key);
+    const held = index >= 0 ? existingAmount(result[index]) : undefined;
 
-    if (index >= 0) {
+    if (held) {
       const item = result[index];
-      const sources = [...(item.mealSources ?? []), ...newSources];
+      const sources = [...held.sources, ...newSources];
       result[index] = {
         ...item,
-        name: labelFor([...linesFromSources(item.mealSources ?? []), ...keyed]),
+        name: labelFor([...held.lines, ...keyed]),
         mealSources: sources.length > 0 ? sources : undefined,
         ingredientKey: key,
       };
