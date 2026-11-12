@@ -33,9 +33,12 @@ const withFields = async (ref, fields) => {
 
 const analyticsSnap = await db.collection('analytics').get();
 const extraction = { lifetime: undefined, daily: [] };
+const usageCounters = { lifetime: undefined, daily: [] };
 for (const d of analyticsSnap.docs) {
   if (d.id === 'extractionStats') extraction.lifetime = d.data();
   else if (d.id.startsWith('extractionStats-')) extraction.daily.push(d.data());
+  else if (d.id === 'usage') usageCounters.lifetime = d.data();
+  else if (d.id.startsWith('usage-')) usageCounters.daily.push(d.data());
 }
 
 // The parent bistros/{id} doc may not exist, so list by reference.
@@ -69,4 +72,4 @@ for (const ref of userRefs) {
   if (!profile.exists || !profile.data()?.migratedAt) unmigratedUsers++;
 }
 
-console.log(JSON.stringify(aggregateUsage({ extraction, bistros, unmigratedUsers }), null, 2));
+console.log(JSON.stringify(aggregateUsage({ extraction, usageCounters, bistros, unmigratedUsers }), null, 2));

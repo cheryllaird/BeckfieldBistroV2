@@ -81,6 +81,50 @@ describe('aggregateUsage', () => {
     expect(out.extraction.last30Days).toEqual({ total: 2, methods: { 'ocr+local': 2 }, fallbackReasons: {} });
   });
 
+  it('prints the feature-use counters, lifetime and last 30 days', () => {
+    const out = aggregateUsage(
+      {
+        bistros: [],
+        unmigratedUsers: 0,
+        usageCounters: {
+          lifetime: {
+            total: 9,
+            counts: {
+              import_started: { url: 4, photo: 2 },
+              import_saved: { url: 3 },
+              pantry_skip: { '0': 1, '2-3': 1 },
+              display_mode: { standalone: 1 },
+            },
+          },
+          daily: [
+            { date: '2026-10-31', total: 2, counts: { import_started: { url: 1 }, display_mode: { browser: 1 } } },
+            { date: '2026-10-30', total: 1, counts: { import_started: { url: 1 } } },
+            { date: '2026-08-01', total: 5, counts: { import_started: { photo: 5 } } },
+          ],
+        },
+      },
+      NOW,
+    );
+    expect(out.usageCounters.lifetime).toEqual({
+      total: 9,
+      events: {
+        display_mode: { standalone: 1 },
+        import_saved: { url: 3 },
+        import_started: { url: 4, photo: 2 },
+        pantry_skip: { '0': 1, '2-3': 1 },
+      },
+    });
+    expect(out.usageCounters.last30Days).toEqual({
+      total: 3,
+      events: { display_mode: { browser: 1 }, import_started: { url: 2 } },
+    });
+  });
+
+  it('reports empty counters before any were recorded', () => {
+    const out = aggregateUsage({ bistros: [], unmigratedUsers: 0 }, NOW);
+    expect(out.usageCounters).toEqual({ lifetime: { total: 0, events: {} }, last30Days: { total: 0, events: {} } });
+  });
+
   it('never emits ids, item names or titles', () => {
     const bistros = Array.from({ length: 4 }, (_, i) =>
       bistro({

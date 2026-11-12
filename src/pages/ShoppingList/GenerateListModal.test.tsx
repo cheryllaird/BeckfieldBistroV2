@@ -8,6 +8,11 @@ import { makeIngredient, makeMealEntry, makePantryItem, makeRecipe, makeShopping
 
 vi.mock('../../lib/firestore');
 vi.mock('../../lib/idbStorage');
+const track = vi.fn();
+vi.mock('../../lib/usage', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../lib/usage')>()),
+  track: (e: unknown) => track(e),
+}));
 
 const initialState = useStore.getState();
 
@@ -45,6 +50,7 @@ const listNames = () => useStore.getState().shoppingItems.map((i) => i.name);
 beforeEach(() => {
   // Fake only the clock, so user-event's own timers still run.
   vi.useFakeTimers({ now: TODAY, toFake: ['Date'] });
+  track.mockReset();
   useStore.setState(initialState, true);
   useStore.setState({
     recipes: [cake, bread],
@@ -157,6 +163,33 @@ describe('GenerateListModal', () => {
 
     const salt = useStore.getState().shoppingItems.find((i) => i.name.endsWith('salt'));
     expect(salt).toMatchObject({ name: '10 g salt', listType: 'immediate' });
+  });
+
+  it('counts the cupboard skips left off when generating, as a bucket', async () => {
+    useStore.setState({ pantryItems: [makePantryItem({ name: 'salt', normalizedName: 'salt' })] });
+    renderModal();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Generate (2)' }));
+
+    expect(track).toHaveBeenCalledExactlyOnceWith({ event: 'pantry_skip', value: '1' });
+  });
+
+  it('does not count a cupboard item ticked back on as skipped', async () => {
+    useStore.setState({ pantryItems: [makePantryItem({ name: 'salt', normalizedName: 'salt' })] });
+    renderModal();
+
+    await userEvent.click(screen.getByRole('checkbox', { name: 'salt' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Generate (2)' }));
+
+    expect(track).toHaveBeenCalledExactlyOnceWith({ event: 'pantry_skip', value: '0' });
+  });
+
+  it('counts nothing on Cancel', async () => {
+    renderModal();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+
+    expect(track).not.toHaveBeenCalled();
   });
 
   it('shows no cupboard line when nothing matches', () => {

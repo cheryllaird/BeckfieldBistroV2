@@ -176,6 +176,11 @@ Extraction runs on **each user's own Google Gemini API key**:
   added: URL, photo or manual; the extraction route; which of title, ingredients and steps were
   edited before the first save). Meal entries store `addedFrom` (plan, recipe detail or library).
   Neither is shown or shared; they feed the usage report (ADR 0017).
+- **Anonymous usage counters:** the app counts, without any user or bistro id, recipe imports
+  started, saved and abandoned (by URL, photo or manual), how many items the store cupboard kept
+  off each generated shopping list (bucketed), and whether it runs installed or in a browser
+  (once per launch). Counts go to `POST /api/track` and only while online in production builds;
+  nothing is queued or stored on the device (ADR 0019).
 - **Search:** the library is filterable live by **title, source, or any ingredient
   name** — so "what can I make with aubergine?" is answerable.
 - **Serving-aware viewing:** on a recipe, a servings control rescales **every
