@@ -5,6 +5,7 @@ import type { User as FirebaseUser } from 'firebase/auth';
 import { auth } from '../lib/firebase';
 import { idbStorage } from '../lib/idbStorage';
 import { LEGAL } from '../lib/legal';
+import { shouldShowTipPrompt } from '../lib/tips';
 import { clearFirestoreCache, deleteAccountOnServer } from '../lib/account';
 import {
   subscribeToUserData,
@@ -109,6 +110,11 @@ interface Store extends AppState {
   migration: MigrationState | null;
   // Name of a bistro the user was just removed from while viewing it.
   removedFromBistro: string | null;
+  // Ko-fi thank-you note (lib/tips.ts). Shown is per device and persisted so
+  // the note appears once; the milestone is set only while the note is up.
+  tipPromptShown: boolean;
+  tipPromptMilestone: number | null;
+  dismissTipPrompt: () => void;
 
   // Recipe actions
   addRecipe: (recipe: Omit<Recipe, 'userId'>) => Promise<void>;
@@ -699,6 +705,8 @@ export const useStore = create<Store>()(
       pendingInvites: [],
       migration: null,
       removedFromBistro: null,
+      tipPromptShown: false,
+      tipPromptMilestone: null,
 
       addRecipe: async (recipe) => {
         // userId records who added it; the bistro it lives in is the scope.
@@ -711,11 +719,19 @@ export const useStore = create<Store>()(
             ? s.knownSources
             : [...s.knownSources, recipeWithUser.source],
         }));
+        // Marked shown as soon as it's triggered, so it never comes back even if
+        // the user leaves before dismissing it.
+        const ownCount = uid ? get().recipes.filter((r) => r.userId === uid).length : 0;
+        if (shouldShowTipPrompt(ownCount, get().tipPromptShown)) {
+          set({ tipPromptShown: true, tipPromptMilestone: ownCount });
+        }
         if (scope) {
           await saveRecipe(scope, recipeWithUser);
           saveKnownSources(scope, get().knownSources);
         }
       },
+
+      dismissTipPrompt: () => set({ tipPromptMilestone: null }),
 
       updateRecipe: async (recipe) => {
         const sourceIsNew = !get().knownSources.includes(recipe.source);
@@ -959,6 +975,7 @@ export const useStore = create<Store>()(
           pendingInvites: [],
           migration: null,
           removedFromBistro: null,
+          tipPromptMilestone: null,
         });
       },
 
@@ -1190,6 +1207,7 @@ export const useStore = create<Store>()(
         defaultBistroId: s.defaultBistroId,
         bistroMigrated: s.bistroMigrated,
         bistros: s.bistros,
+        tipPromptShown: s.tipPromptShown,
       }),
     },
   ),

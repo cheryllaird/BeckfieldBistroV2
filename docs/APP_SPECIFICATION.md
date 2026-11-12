@@ -193,6 +193,11 @@ Extraction runs on **each user's own Google Gemini API key**:
   captured in-app. Recipes with no original image simply don't show the entry.
 - **Deletion** removes the recipe from the library across all devices (with
   confirmation).
+- **Tip prompt:** when a user saves their own 5th or 10th recipe (counted in the bistro being
+  viewed), a dismissible thank-you note appears above the library with a link to the Ko-fi page.
+  It appears at most once per device (remembered locally, not synced) and goes away when
+  dismissed or the link is tapped. Settings carries a permanent "Support Beckfield Bistro" link.
+  It's a plain outbound link: no Ko-fi script loads and nothing is sent to Ko-fi unless tapped.
 
 ---
 
