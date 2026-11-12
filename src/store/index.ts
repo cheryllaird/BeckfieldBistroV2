@@ -115,6 +115,10 @@ interface Store extends AppState {
   tipPromptShown: boolean;
   tipPromptMilestone: number | null;
   dismissTipPrompt: () => void;
+  // The in-app Ko-fi donation panel (components/SupportPanelModal). Session only.
+  supportPanelOpen: boolean;
+  openSupportPanel: () => void;
+  closeSupportPanel: () => void;
 
   // Recipe actions
   addRecipe: (recipe: Omit<Recipe, 'userId'>) => Promise<void>;
@@ -707,6 +711,7 @@ export const useStore = create<Store>()(
       removedFromBistro: null,
       tipPromptShown: false,
       tipPromptMilestone: null,
+      supportPanelOpen: false,
 
       addRecipe: async (recipe) => {
         // userId records who added it; the bistro it lives in is the scope.
@@ -732,6 +737,8 @@ export const useStore = create<Store>()(
       },
 
       dismissTipPrompt: () => set({ tipPromptMilestone: null }),
+      openSupportPanel: () => set({ supportPanelOpen: true }),
+      closeSupportPanel: () => set({ supportPanelOpen: false }),
 
       updateRecipe: async (recipe) => {
         const sourceIsNew = !get().knownSources.includes(recipe.source);
@@ -976,6 +983,7 @@ export const useStore = create<Store>()(
           migration: null,
           removedFromBistro: null,
           tipPromptMilestone: null,
+          supportPanelOpen: false,
         });
       },
 

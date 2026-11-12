@@ -62,6 +62,18 @@ describe('tip prompt', () => {
     expect(useStore.getState().tipPromptMilestone).toBeNull();
   });
 
+  it('opens and closes the donation panel, and closes it on sign-out', async () => {
+    signedIn();
+    useStore.getState().openSupportPanel();
+    expect(useStore.getState().supportPanelOpen).toBe(true);
+    useStore.getState().closeSupportPanel();
+    expect(useStore.getState().supportPanelOpen).toBe(false);
+
+    useStore.getState().openSupportPanel();
+    await useStore.getState().signOut();
+    expect(useStore.getState().supportPanelOpen).toBe(false);
+  });
+
   it('remembers on this device that it was shown, and clears the note on sign-out', async () => {
     signedIn();
     await addMany(5);

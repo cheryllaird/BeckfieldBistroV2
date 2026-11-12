@@ -3,7 +3,6 @@ import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { TipThankYouCard } from './TipThankYouCard';
 import { useStore } from '../../store';
-import { KOFI_URL } from '../../lib/tips';
 
 vi.mock('../../lib/firestore');
 vi.mock('../../lib/idbStorage');
@@ -20,14 +19,10 @@ describe('TipThankYouCard', () => {
     expect(container).toBeEmptyDOMElement();
   });
 
-  it('thanks the user and links to Ko-fi in a new tab', () => {
+  it('thanks the user with the milestone reached', () => {
     useStore.setState({ tipPromptMilestone: 5 });
     render(<TipThankYouCard />);
     expect(screen.getByText(/5 recipes saved/)).toBeInTheDocument();
-    const link = screen.getByRole('link', { name: /buy me a coffee/i });
-    expect(link).toHaveAttribute('href', KOFI_URL);
-    expect(link).toHaveAttribute('target', '_blank');
-    expect(link).toHaveAttribute('rel', expect.stringContaining('noopener'));
   });
 
   it.each(['Dismiss', 'Maybe later'])('hides when "%s" is tapped', async (name) => {
@@ -38,12 +33,11 @@ describe('TipThankYouCard', () => {
     expect(screen.queryByText(/recipes saved/)).not.toBeInTheDocument();
   });
 
-  it('hides once the tip link is tapped', async () => {
+  it('opens the donation panel and hides itself when "Buy me a coffee" is tapped', async () => {
     useStore.setState({ tipPromptMilestone: 5 });
     render(<TipThankYouCard />);
-    const link = screen.getByRole('link', { name: /buy me a coffee/i });
-    link.addEventListener('click', (e) => e.preventDefault());
-    await userEvent.click(link);
+    await userEvent.click(screen.getByRole('button', { name: /buy me a coffee/i }));
+    expect(useStore.getState().supportPanelOpen).toBe(true);
     expect(useStore.getState().tipPromptMilestone).toBeNull();
   });
 });

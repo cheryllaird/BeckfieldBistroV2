@@ -1,5 +1,5 @@
 import { Card } from '../../components/ui/Card';
-import { KofiLink } from '../../components/KofiLink';
+import { BuyCoffeeButton } from '../../components/BuyCoffeeButton';
 
 /** A quiet, always-available way to tip; the only other ask is the one-off library note. */
 export function SupportCard() {
@@ -10,7 +10,7 @@ export function SupportCard() {
         Enjoying the app? A tip helps cover its running costs.
       </p>
       <div>
-        <KofiLink>Buy me a coffee</KofiLink>
+        <BuyCoffeeButton />
       </div>
     </Card>
   );

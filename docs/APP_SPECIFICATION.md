@@ -193,11 +193,13 @@ Extraction runs on **each user's own Google Gemini API key**:
   captured in-app. Recipes with no original image simply don't show the entry.
 - **Deletion** removes the recipe from the library across all devices (with
   confirmation).
-- **Tip prompt:** when a user saves their own 5th or 10th recipe (counted in the bistro being
-  viewed), a dismissible thank-you note appears above the library with a link to the Ko-fi page.
-  It appears at most once per device (remembered locally, not synced) and goes away when
-  dismissed or the link is tapped. Settings carries a permanent "Support Beckfield Bistro" link.
-  It's a plain outbound link: no Ko-fi script loads and nothing is sent to Ko-fi unless tapped.
+- **Tipping:** "Buy me a coffee" opens Ko-fi's donation panel in an in-app sheet (ADR 0018). It's
+  in the user menu and on a "Support Beckfield Bistro" card in Settings. When a user saves their own
+  5th or 10th recipe (counted in the bistro being viewed), a dismissible thank-you note with the same
+  button appears above the library. The note appears at most once per device (remembered locally,
+  not synced) and goes away when dismissed or the button is tapped. The panel is loaded only while
+  the sheet is open; offline, the sheet says tipping needs a connection. A link in the sheet opens
+  Ko-fi in the browser as a fallback.
 
 ---
 

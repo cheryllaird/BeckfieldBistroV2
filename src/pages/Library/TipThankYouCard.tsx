@@ -1,12 +1,12 @@
 import { Heart, X } from 'lucide-react';
 import { useStore } from '../../store';
 import { Button } from '../../components/ui/Button';
-import { KofiLink } from '../../components/KofiLink';
+import { BuyCoffeeButton } from '../../components/BuyCoffeeButton';
 
 /**
  * One-off thank-you shown above the library after the user's 5th or 10th saved
- * recipe (see lib/tips.ts). Dismissing it, or tapping the tip link, hides it
- * for good.
+ * recipe (see lib/tips.ts). Dismissing it, or tapping "Buy me a coffee" (which
+ * opens the donation panel), hides it for good.
  */
 export function TipThankYouCard() {
   const milestone = useStore((s) => s.tipPromptMilestone);
@@ -38,7 +38,7 @@ export function TipThankYouCard() {
         </div>
       </div>
       <div className="flex items-center gap-2 pl-7">
-        <KofiLink onClick={dismiss}>Buy me a coffee</KofiLink>
+        <BuyCoffeeButton onClick={dismiss} />
         <Button variant="ghost" size="sm" onClick={dismiss}>
           Maybe later
         </Button>
