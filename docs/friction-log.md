@@ -121,7 +121,7 @@ Only the triage agent or a human changes a status. Entries are never deleted.
   (off limits): `initFirebaseAdmin` in `api/_utils/auth.ts` is an unused export, and the root
   `test-*.ts` smoke scripts show as unused files to knip (consider adding them as knip entries).
 - **Status:** issue https://github.com/cheryllaird/BeckfieldBistroV2/issues/217
-- **Seen again:** 2026-11-01 and 2026-11-02, same items still reported by knip. 2026-11-02: also dropped the unused `StageName` export (`api/_utils/extractionTiming.ts`).
+- **Seen again:** 2026-11-01 and 2026-11-02, same items still reported by knip. 2026-11-02: also dropped the unused `StageName` export (`api/_utils/extractionTiming.ts`). 2026-11-13: same items still reported.
 - **Seen again:** 2026-11-11, same items still reported by knip; also dropped the unused `SLOW_AFTER_MS` export (`src/pages/NewRecipe/ExtractionProgress.tsx`).
 
 ### 2026-11-09: Write-path wake was silently throttled away, and lib/firestore.ts had no tests
