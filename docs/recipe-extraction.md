@@ -49,6 +49,7 @@ as OCR text) — that would circumvent the filter.
 | API handler | `api/extract-recipe.ts` | Auth, key decryption, the full method ladders, analytics, response shaping |
 | OCR module | `api/_utils/ocr.ts` | Image preprocessing, Tesseract engine, quality gate |
 | Column reflow | `api/_utils/columnReflow.ts` | Rebuilds reading order of side‑by‑side columns from word boxes |
+| Fraction recovery | `api/_utils/fractions.ts` | Finds misread fraction glyphs and decides what the re-read evidence adds up to |
 | Parsers | `api/_utils/recipeParsers.ts` | Deterministic ingredient/step parsing, `parseRecipeText`, JSON‑LD helpers' dependencies |
 | OCR line clean‑up | `api/_utils/ocrLines.ts` | Bullets, junk, nutrition boxes, unit misreads — line classification for `parseRecipeText` |
 | Crypto | `api/_utils/crypto.ts` | AES‑256‑GCM decrypt of the per‑user Gemini key |
@@ -180,7 +181,7 @@ Behind the `OcrEngine` interface so a cloud OCR (e.g. Google Cloud Vision) can r
 Tesseract by adding one class and switching `getOcrEngine()` — callers never change.
 
 ```ts
-interface OcrResult { text: string; rawText: string; confidence: number; columnsReflowed: boolean; coldWorker?: boolean }
+interface OcrResult { text: string; rawText: string; confidence: number; columnsReflowed: boolean; fractionsRecovered?: number; coldWorker?: boolean }
 interface OcrEngine { readonly name: string; recognize(image: Buffer): Promise<OcrResult> }
 ```
 
@@ -218,6 +219,20 @@ interface OcrEngine { readonly name: string; recognize(image: Buffer): Promise<O
      A column that runs on below its neighbour stays in its column. No recurring
      gutter → `null`, Tesseract's text passes through. `columnsReflowed` records
      whether a reflow happened.
+- **Fraction recovery — `recoverFractions` (in `ocr.ts`, logic in `fractions.ts`).**
+  Tesseract almost never reads fraction glyphs on a photo: "1½" comes back as `1%`,
+  "½" as `¥`, `Ya` or a plain `2`, "¼" as `V4`, "⅓" as `5`. Its confidence does not
+  flag these (`1%` scores 96), so candidates are found by shape instead: an odd token
+  (`%`, `¥`, `V4`, `Ya`…) at the start of a line, after bullets, or after "of", or a
+  lone leading digit too wide to be a digit. Each glyph is cropped from the image
+  (between the whole‑number digit and the next word, then trimmed to the ink),
+  enlarged, and its top‑left and bottom‑right quarters are read as single digits.
+  `resolveFraction` accepts only a kitchen fraction (½ ⅓ ⅔ ¼ ¾ ⅛) read from the image,
+  ½ from a lone denominator of 2, or an unambiguous misread (`V4` → ¼) that the image
+  does not contradict. **Anything else leaves the OCR text unchanged** — `1%` is ½ or
+  ¼, so it is never guessed. Corrections go into `text`; `rawText` stays Tesseract's
+  own. The worker's page settings are restored after the pass. Adds well under a
+  second per photo.
 - **Quality gate — `assessOcrQuality`.** All must hold: text ≥ **150** chars,
   confidence ≥ **60**, alpha ratio (`[A-Za-z]` / non‑whitespace) ≥ **0.55**, non‑empty
   lines ≥ **6**. Failing any one routes the photo back to `gemini-vision` (or `failed`).
@@ -462,8 +477,9 @@ layout tag, stage, edited vs unedited, and hand-checked vs full set.
 
 - **Silent OCR character errors.** Tesseract can be confidently wrong (`0/O`, `1/l`,
   `5/S`), corrupting quantities without failing the gate. The most insidious accuracy
-  risk. A per‑word‑confidence flag or an `originalText`‑appears‑in‑OCR check would catch
-  it (not yet implemented).
+  risk. Fraction glyphs are re‑read from the image (§6), but only when the evidence is
+  clear: a `%` whose glyph will not read stays wrong, and a fraction misread as an
+  ordinary‑width digit (`4 tsp` for "½ tsp") is not detected at all.
 - **Reflow false positive.** A tabular ingredient list (amounts aligned in one column,
   names in another) can look like two columns and get split, divorcing quantities from
   names.

@@ -8,8 +8,9 @@
 import path from 'node:path';
 import { createRequire } from 'node:module';
 import sharp from 'sharp';
-import { createWorker, OEM, type Worker } from 'tesseract.js';
+import { createWorker, OEM, PSM, type Worker } from 'tesseract.js';
 import { collectLines, reflowColumns, type TesseractData } from './columnReflow.js';
+import { findFractionCandidates, resolveFraction, typicalDigitWidth, type CandidateWord } from './fractions.js';
 
 export interface OcrResult {
   /** The text callers use: column-reflowed when side-by-side columns were detected. */
@@ -20,6 +21,8 @@ export interface OcrResult {
   confidence: number;
   /** True when side-by-side columns were detected and text was re-threaded. */
   columnsReflowed: boolean;
+  /** Fraction glyphs re-read from the image and corrected in `text` (not in rawText). */
+  fractionsRecovered?: number;
   /** True when this call had to start the OCR worker (cold instance). */
   coldWorker?: boolean;
 }
@@ -72,12 +75,14 @@ class TesseractEngine implements OcrEngine {
         // Request the block/line/word hierarchy so we can reconstruct reading
         // order — tesseract's flat `text` reads across side-by-side columns.
         const { data } = await worker.recognize(image, {}, { blocks: true, text: true });
+        const rawText = data.text ?? '';
+        const fixed = await recoverFractions(worker, image, data as unknown as FractionPage);
         const lines = collectLines(data as unknown as TesseractData);
         const reflowed = reflowColumns(lines);
-        const rawText = data.text ?? '';
         return {
-          text: reflowed ?? rawText,
+          text: reflowed ?? applyLineFixes(rawText, fixed),
           rawText,
+          fractionsRecovered: fixed.length,
           confidence: data.confidence ?? 0,
           columnsReflowed: reflowed !== null,
           coldWorker,
@@ -93,6 +98,87 @@ class TesseractEngine implements OcrEngine {
     queue = result.catch(() => undefined);
     return result;
   }
+}
+
+// ─── Fraction recovery ───────────────────────────────────────────────────────
+// Tesseract misreads fraction glyphs ("1½" → "1%", "⅓" → "5"). For each
+// candidate (see fractions.ts) the glyph is cropped, enlarged, and its top-left
+// and bottom-right quarters are read as single digits. Words are corrected in
+// place, so the column reflow and the fallback text both carry the fix.
+
+interface FractionPage {
+  blocks?: { paragraphs?: { lines?: { text?: string; words?: CandidateWord[] }[] }[] }[] | null;
+}
+
+/** Line text before and after a fix, to patch Tesseract's flat text too. */
+interface LineFix { before: string; after: string }
+
+async function readDigit(worker: Worker, glyph: Buffer, size: { width: number; height: number }, left: number, top: number): Promise<string> {
+  const part = await sharp(glyph)
+    .extract({
+      left: Math.round(size.width * left),
+      top: Math.round(size.height * top),
+      width: Math.max(2, Math.round(size.width * 0.58)),
+      height: Math.max(2, Math.round(size.height * 0.58)),
+    })
+    .resize({ height: 100 })
+    .extend({ top: 40, bottom: 40, left: 40, right: 40, background: '#ffffff' })
+    .png()
+    .toBuffer();
+  const { data } = await worker.recognize(part);
+  return (data.text ?? '').trim();
+}
+
+async function recoverFractions(worker: Worker, image: Buffer, page: FractionPage): Promise<LineFix[]> {
+  const lines = (page.blocks ?? []).flatMap((b) => (b.paragraphs ?? []).flatMap((p) => p.lines ?? []));
+  const digitWidth = typicalDigitWidth(lines.flatMap((l) => l.words ?? []));
+  const work = lines.flatMap((line) =>
+    findFractionCandidates(line.words ?? [], digitWidth).map((candidate) => ({ line, candidate })),
+  );
+  if (work.length === 0) return [];
+
+  const meta = await sharp(image).metadata();
+  const fixes: LineFix[] = [];
+  // Single-digit reading for the glyph parts; the page settings are restored
+  // before the worker is used for anything else
+  await worker.setParameters({ tessedit_char_whitelist: '0123456789', tessedit_pageseg_mode: PSM.SINGLE_CHAR });
+  try {
+    for (const { line, candidate } of work) {
+      const words = line.words ?? [];
+      const word = words[candidate.index];
+      const { left, top } = candidate.region;
+      const width = Math.min(candidate.region.width, (meta.width ?? 0) - left);
+      const height = Math.min(candidate.region.height, (meta.height ?? 0) - top);
+      if (width < 4 || height < 4) continue;
+      // Two steps: sharp applies trim before extract within one pipeline
+      const crop = await sharp(image).extract({ left, top, width, height }).toBuffer();
+      const glyph = await sharp(crop).trim({ threshold: 60 }).toBuffer({ resolveWithObject: true });
+      if (glyph.info.width < 8 || glyph.info.height < 8) continue;
+      const numerator = await readDigit(worker, glyph.data, glyph.info, 0, 0);
+      const denominator = await readDigit(worker, glyph.data, glyph.info, 0.42, 0.42);
+      const replacement = resolveFraction(word.text, candidate.lead, numerator, denominator);
+      if (!replacement) continue;
+      const before = words.map((w) => w.text).join(' ');
+      word.text = replacement;
+      fixes.push({ before, after: words.map((w) => w.text).join(' ') });
+    }
+  } finally {
+    await worker.setParameters({ tessedit_char_whitelist: '', tessedit_pageseg_mode: PSM.SINGLE_BLOCK });
+  }
+  return fixes;
+}
+
+/** Applies word fixes to Tesseract's flat text, line by line. */
+function applyLineFixes(text: string, fixes: LineFix[]): string {
+  if (fixes.length === 0) return text;
+  return text
+    .split('\n')
+    .map((line) => {
+      const normalised = line.replace(/\s+/g, ' ').trim();
+      const fix = fixes.find((f) => f.before === normalised);
+      return fix ? fix.after : line;
+    })
+    .join('\n');
 }
 
 const tesseractEngine = new TesseractEngine();
