@@ -1,6 +1,18 @@
 // Shared non-AI recipe parsers used by /api/extract-recipe — the OCR-text
 // fallback (parseRecipeText) and the URL JSON-LD structuring.
 
+import {
+  cleanLine,
+  continuesIngredient,
+  isMagazineStep,
+  isNoiseLine,
+  isNutritionLine,
+  realWords,
+  splitAtBullets,
+  wordLikeRatio,
+  type OcrLine,
+} from './ocrLines.js';
+
 export interface Ingredient {
   name: string;
   quantity: number;
@@ -238,19 +250,44 @@ function isMetadataLine(line: string): boolean {
   return matchServings(line) !== null || matchPrepTime(line) !== null || matchTotalTime(line) !== null;
 }
 
+// "1. Heat…", "2) Add…", or magazine style "3 Stir in…" — the text after the number
+function stepStartText(line: string): string | null {
+  const m = line.match(/^\d+[.)]\s*(.*)$/);
+  if (m) return m[1];
+  return isMagazineStep(line) ? line.replace(/^\d{1,2}\s+/, '') : null;
+}
+
+function splitParagraphs(lines: string[]): string[] {
+  if (lines.length < 4) return [];
+  const sorted = lines.map((l) => l.length).sort((a, b) => a - b);
+  const typical = sorted[Math.floor(sorted.length / 2)];
+  if (typical < 30) return [];
+  const paragraphs: string[] = [];
+  let current: string[] = [];
+  lines.forEach((line, i) => {
+    current.push(line);
+    const endsParagraph = /[.!?)]["'’”]?$/.test(line) && line.length < typical * 0.8;
+    if (endsParagraph || i === lines.length - 1) {
+      paragraphs.push(current.join(' ').replace(/\s+/g, ' ').trim());
+      current = [];
+    }
+  });
+  return paragraphs.filter(Boolean);
+}
+
 function groupSteps(stepLines: string[]): string[] {
   const lines = stepLines.filter((l) => l.trim().length > 0);
   if (lines.length === 0) return [];
 
   // Numbered method: one step per number, continuation lines appended
-  if (lines.some((l) => NUMBERED_STEP_RE.test(l))) {
+  if (lines.some((l) => stepStartText(l) !== null)) {
     const steps: string[] = [];
     let current = '';
     for (const line of lines) {
-      const m = line.match(/^\d+[.)]\s*(.*)$/);
-      if (m) {
+      const m = stepStartText(line);
+      if (m !== null) {
         if (current.trim()) steps.push(current.trim());
-        current = m[1];
+        current = m;
       } else {
         current = current ? `${current} ${line}` : line;
       }
@@ -259,8 +296,15 @@ function groupSteps(stepLines: string[]): string[] {
     return steps;
   }
 
-  // Unnumbered method: OCR gives one line per printed line, so re-join and
-  // split on sentence boundaries instead of treating each line as a step.
+  // Unnumbered method: OCR gives one line per printed line. Cookbooks print each
+  // step as a paragraph, and a paragraph's last line is the one that ends a
+  // sentence well short of the column width — so split there when there is
+  // enough text to judge the width.
+  const paragraphs = splitParagraphs(lines);
+  if (paragraphs.length >= 2) return paragraphs;
+
+  // Otherwise re-join and split on sentence boundaries instead of treating
+  // each line as a step.
   const blob = lines.join(' ').replace(/\s+/g, ' ').trim();
   return blob
     .split(/(?<=[.!?])\s+(?=[A-Z])/)
@@ -268,92 +312,263 @@ function groupSteps(stepLines: string[]): string[] {
     .filter(Boolean);
 }
 
+// Labels and straplines near the top of a page that are never the recipe title
+const TITLE_LABEL_RE =
+  /^(?:vegetarian|vegan|serves|makes|equipment|ingredients|method|you will (?:also )?need|per serving|swaps|goes well with)\b|\brecipes?$/i;
+
+function isTitleCandidate(text: string): boolean {
+  return (
+    text.length <= 70 &&
+    !/^['"‘“]/.test(text) && // pull-quotes and intro text open with a quote mark
+    !/^\p{Ll}/u.test(text) && // titles never open in lower case; wrapped intro lines do
+    !QUANTITY_START_RE.test(text) &&
+    !isMetadataLine(text) &&
+    !isNutritionLine(text) &&
+    !TITLE_LABEL_RE.test(text) &&
+    !/[.!?:/]\s*$/.test(text) &&
+    realWords(text).length >= 2 &&
+    wordLikeRatio(text) >= 0.75
+  );
+}
+
+const isAllCaps = (text: string) => /\p{Lu}/u.test(text) && text === text.toUpperCase();
+
+// Cookbook titles are often set in capitals and wrap over two lines ("BEETROOT
+// CURRY WITH" / "A COCONUT SAMBOL"), sometimes with a lower-case subtitle line
+// ("with green bean mallum"). Prefer the first capitals line and join what wraps.
+function findTitle(lines: string[]): string {
+  const candidates = lines.map(isTitleCandidate);
+  let i = lines.findIndex((l, k) => candidates[k] && isAllCaps(l));
+  if (i === -1) i = candidates.indexOf(true);
+  if (i === -1) return 'Scanned Recipe';
+  let title = lines[i];
+  const next = lines[i + 1];
+  if (
+    next !== undefined &&
+    // 0.6, not 0.75: a wrapped title line can open with "A" ("A COCONUT SAMBOL")
+    ((isAllCaps(title) && isAllCaps(next) && wordLikeRatio(next) >= 0.6 && !TITLE_LABEL_RE.test(next)) ||
+      /^with\s/i.test(next))
+  ) {
+    title = `${title} ${next}`;
+  }
+  return title;
+}
+
+// Joins wrapped ingredient lines ("1 cucumber, halved" + "lengthways") and keeps
+// section headers; drops everything else in the block (stray OCR fragments).
+// An ingredient wraps over a couple of lines at most; more lower-case lines
+// after it are a paragraph of method, not its continuation.
+const MAX_TAILS = 2;
+
+// How many lines from `start` read as continuations (lower case or "(", not
+// an ingredient or header) — a stretch longer than MAX_TAILS is a paragraph.
+function tailStretch(lines: OcrLine[], start: number, isIngredient: (l: OcrLine) => boolean): number {
+  let n = 0;
+  // Only "more than MAX_TAILS" matters, so stop there: scanning to the end from
+  // every line would be quadratic on a long run of lower-case lines
+  for (let i = start; i < lines.length && n <= MAX_TAILS; i++) {
+    const l = lines[i];
+    if (isIngredient(l) || looksLikeSectionHeader(l.text) || l.bulleted || !/^[\p{Ll}(]/u.test(l.text)) break;
+    n++;
+  }
+  return n;
+}
+
+function ingredientBlockLines(block: OcrLine[], isIngredient: (l: OcrLine) => boolean, bulletedList: boolean): string[] {
+  const out: string[] = [];
+  let prev: OcrLine | null = null;
+  let tails = 0;
+  for (const [i, line] of block.entries()) {
+    if (looksLikeSectionHeader(line.text)) {
+      out.push(line.text);
+      prev = null;
+    } else if (
+      prev &&
+      tails < MAX_TAILS &&
+      (tails > 0 || tailStretch(block, i, isIngredient) <= MAX_TAILS) &&
+      continuesIngredient(prev, line, bulletedList)
+    ) {
+      out[out.length - 1] = `${out[out.length - 1]} ${line.text}`;
+      prev = { ...line, text: out[out.length - 1] };
+      tails++;
+    } else if (isIngredient(line)) {
+      out.push(line.text);
+      prev = line;
+      tails = 0;
+    }
+  }
+  return out;
+}
+
+// A short lower-case fragment ("chopped", "cut into cubes"): the wrapped tail
+// of an ingredient, never a method line of its own.
+function isShortTail(text: string): boolean {
+  return text.length <= 25 && /^\p{Ll}/u.test(text) && realWords(text).length <= 3 && !/[.!?]$/.test(text);
+}
+
+// A method line worth keeping: two real words at least, and not a
+// capitals-only label such as "PER SERVING" or "YOU WILL NEED".
+function isStepText(text: string): boolean {
+  if (NUMBERED_STEP_RE.test(text)) return true;
+  if (isMetadataLine(text) || isNutritionLine(text)) return false;
+  if (isAllCaps(text) && text.length < 30) return false;
+  const words = realWords(text).length;
+  // One word is enough for the wrapped end of a sentence ("cover.") or a
+  // lower-case continuation; a lone capitalised word is more likely a label.
+  return words >= 2 || (words === 1 && (/[.!?]$/.test(text) || /^\p{Ll}/u.test(text)));
+}
+
 export function parseRecipeText(ocrText: string): ParsedRecipeText {
-  // Re-join words hyphenated across line breaks before splitting into lines
-  const lines = ocrText
+  // Re-join words hyphenated across line breaks, then clean each line (bullets,
+  // edge noise, unit misreads) and drop junk lines entirely
+  const all = ocrText
     .replace(/-\n\s*/g, '')
     .split('\n')
-    .map((l) => l.replace(/\s+/g, ' ').trim())
-    .filter((l) => l.length > 0);
+    .flatMap(splitAtBullets)
+    .map(cleanLine)
+    .filter((l) => l.text.length > 0);
 
+  // Metadata is read before junk is dropped: "SERVES 4 V Vn DF" looks like
+  // noise because of its diet badges, but still carries the servings.
   let servings = 0;
   let prepTime = '';
   let totalTime = '';
-  for (const line of lines) {
-    if (!servings) servings = matchServings(line) ?? 0;
-    if (!prepTime) prepTime = matchPrepTime(line) ?? '';
-    if (!totalTime) totalTime = matchTotalTime(line) ?? '';
+  for (const { text } of all) {
+    if (!servings) servings = matchServings(text) ?? 0;
+    if (!prepTime) prepTime = matchPrepTime(text) ?? '';
+    if (!totalTime) totalTime = matchTotalTime(text) ?? '';
   }
+
+  // Junk, nutrition boxes and page furniture never belong in any field
+  const content = all.filter((l) => !isNoiseLine(l.text) && !isNutritionLine(l.text));
+  const lines = content.map((l) => l.text);
 
   const ingredientsStart = lines.findIndex((l) => INGREDIENTS_HEADER_RE.test(l));
   const methodStart = lines.findIndex((l) => METHOD_HEADER_RE.test(l));
 
+  // Amount-led or bulleted, but not a method sentence that merely opens with a
+  // number ("4 minutes, stirring…" or "2 Add the pepper…"): ingredient lines are
+  // short and lack a mid-line sentence break.
+  const isIngredient = (l: OcrLine) =>
+    (QUANTITY_START_RE.test(l.text) || l.bulleted) &&
+    !NUMBERED_STEP_RE.test(l.text) &&
+    !isMagazineStep(l.text) &&
+    !isMetadataLine(l.text) &&
+    l.text.length <= 60 &&
+    !/[a-z]\.\s/.test(l.text);
+  const bulletedList = content.filter((l) => l.bulleted && isIngredient(l)).length >= 3;
+
   let ingredientLines: string[];
   let stepLines: string[];
+  let titleZoneEnd: number;
 
   if (ingredientsStart >= 0 && methodStart > ingredientsStart) {
-    ingredientLines = lines.slice(ingredientsStart + 1, methodStart);
-    stepLines = lines.slice(methodStart + 1);
+    ingredientLines = ingredientBlockLines(
+      content.slice(ingredientsStart + 1, methodStart),
+      () => true,
+      bulletedList,
+    );
+    stepLines = lines.slice(methodStart + 1).filter(isStepText);
+    titleZoneEnd = ingredientsStart;
   } else if (ingredientsStart >= 0) {
     // No method header: ingredients run until the first numbered step or the
     // first long prose line that doesn't start with an amount
-    const rest = lines.slice(ingredientsStart + 1);
+    const rest = content.slice(ingredientsStart + 1);
     let split = rest.findIndex(
-      (l) => NUMBERED_STEP_RE.test(l) || (l.length > 60 && !QUANTITY_START_RE.test(l)),
+      (l) =>
+        NUMBERED_STEP_RE.test(l.text) ||
+        isMagazineStep(l.text) ||
+        (l.text.length > 60 && !QUANTITY_START_RE.test(l.text)),
     );
     if (split === -1) split = rest.length;
-    ingredientLines = rest.slice(0, split);
-    stepLines = rest.slice(split);
+    ingredientLines = ingredientBlockLines(rest.slice(0, split), isIngredient, bulletedList);
+    stepLines = rest.slice(split).map((l) => l.text).filter(isStepText);
+    titleZoneEnd = ingredientsStart;
   } else if (methodStart >= 0) {
-    ingredientLines = lines
-      .slice(0, methodStart)
-      .filter((l) => QUANTITY_START_RE.test(l) && !NUMBERED_STEP_RE.test(l) && !isMetadataLine(l));
-    stepLines = lines.slice(methodStart + 1);
+    ingredientLines = ingredientBlockLines(content.slice(0, methodStart), isIngredient, bulletedList);
+    stepLines = lines.slice(methodStart + 1).filter(isStepText);
+    titleZoneEnd = methodStart;
   } else {
     // No explicit "Ingredients"/"Method" headers (common in cookbooks that use
-    // "For the curry" style sub-headings instead). Ingredients are the
-    // contiguous block of amount-led lines; bound to that block so method prose
-    // that happens to start with a number ("4 minutes, stirring…") can't leak
-    // in, and keep section sub-headers inside the block so they title sections.
-    // Amount-led, but not a method sentence that merely opens with a number
-    // ("4 minutes, stirring…"): ingredient lines are short and lack a mid-line
-    // sentence break.
-    const isAmount = (l: string) =>
-      QUANTITY_START_RE.test(l) &&
-      !NUMBERED_STEP_RE.test(l) &&
-      !isMetadataLine(l) &&
-      l.length <= 60 &&
-      !/[a-z]\.\s/.test(l);
-    const amountIdx = lines.map((l, i) => (isAmount(l) ? i : -1)).filter((i) => i >= 0);
+    // "For the curry" style sub-headings instead). Ingredients are the runs of
+    // ingredient lines, with section headers and wrapped continuations inside a
+    // run and at most one stray line between ingredients. A lone amount-led line
+    // elsewhere (a page number, "2 x 400g" in the intro) forms a run of one and
+    // is ignored, so it can no longer stretch the block over the method.
+    const runs: { start: number; end: number; count: number }[] = [];
+    let run: { start: number; end: number; count: number } | null = null;
+    let gap = 0;
+    let tails = 0;
+    content.forEach((l, i) => {
+      if (isIngredient(l)) {
+        // A section header right above the first ingredient belongs to the run
+        if (!run) run = { start: i > 0 && looksLikeSectionHeader(lines[i - 1]) ? i - 1 : i, end: i, count: 0 };
+        run.count++;
+        run.end = i;
+        gap = 0;
+        tails = 0;
+      } else if (run) {
+        // A continuation must sit directly under the ingredient it continues —
+        // never across a stray line, or wrapped method prose gets absorbed.
+        if (looksLikeSectionHeader(l.text)) {
+          run.end = i;
+          gap = 0;
+        } else if (
+          gap === 0 &&
+          tails < MAX_TAILS &&
+          (tails > 0 || tailStretch(content, i, isIngredient) <= MAX_TAILS) &&
+          continuesIngredient(content[i - 1], l, bulletedList)
+        ) {
+          run.end = i;
+          tails++;
+        } else if (gap > 0 && (continuesIngredient(content[i - 1], l, bulletedList) || isShortTail(l.text))) {
+          // The wrapped tail of an ingredient after a stray line ("chopped"):
+          // neither extends the run nor counts as a further gap
+        } else if (++gap > 1) {
+          runs.push(run);
+          run = null;
+          gap = 0;
+        }
+      }
+    });
+    if (run) runs.push(run);
+    const chosen = runs.filter((r) => r.count >= 2);
+    if (chosen.length === 0 && runs.length > 0) chosen.push(runs.reduce((a, b) => (b.count > a.count ? b : a)));
 
-    if (amountIdx.length > 0) {
-      const first = amountIdx[0];
-      const last = amountIdx[amountIdx.length - 1];
-      // Sub-headers use the same test as the section splitter below, so the two
-      // cannot drift: a line admitted here as a header is one there too. It is
-      // narrow enough not to swallow wrapped ingredient continuations ("cut into …").
-      const isSubHeader = looksLikeSectionHeader;
-      ingredientLines = lines.slice(first, last + 1).filter((l) => isAmount(l) || isSubHeader(l));
-      if (first > 0 && isSubHeader(lines[first - 1])) ingredientLines.unshift(lines[first - 1]);
-      stepLines = lines
-        .slice(last + 1)
-        .filter((l) => NUMBERED_STEP_RE.test(l) || (l.length > 40 && !QUANTITY_START_RE.test(l) && !isMetadataLine(l)));
+    if (chosen.length > 0) {
+      const first = chosen[0].start;
+      ingredientLines = chosen.flatMap((r) =>
+        ingredientBlockLines(content.slice(r.start, r.end + 1), isIngredient, bulletedList),
+      );
+      // The method is the prose after the ingredients start, outside ingredient
+      // blocks: a column of ingredients can be read after the method, so it is
+      // not simply "everything after the last block". Prose comes in stretches
+      // of consecutive lines; a lone prose line wedged among ingredients is a
+      // fragment of a neighbouring column, so stretches need two lines.
+      const inBlock = (i: number) => chosen.some((r) => i >= r.start && i <= r.end);
+      const stretches: string[][] = [];
+      lines.forEach((l, i) => {
+        const prose = i > first && !inBlock(i) && isStepText(l) && !isIngredient(content[i]);
+        if (!prose) stretches.push([]);
+        else if (stretches.length === 0) stretches.push([l]);
+        else stretches[stretches.length - 1].push(l);
+      });
+      // Two lines at least, and real prose: a stack of one-word fragments
+      // (a sliver of the facing page) is not a method
+      const method = stretches.filter((st) => st.length >= 2 && st.reduce((n, l) => n + realWords(l).length, 0) >= 8);
+      stepLines = (method.length > 0 ? method : stretches).flat();
+      titleZoneEnd = first;
     } else {
       ingredientLines = [];
       stepLines = lines.filter(
-        (l) => NUMBERED_STEP_RE.test(l) || (l.length > 40 && !isMetadataLine(l)),
+        (l) => NUMBERED_STEP_RE.test(l) || (l.length > 40 && isStepText(l)),
       );
+      titleZoneEnd = Math.min(lines.length, 5);
     }
   }
 
-  const titleZoneEnd = ingredientsStart >= 0 ? ingredientsStart : methodStart >= 0 ? methodStart : Math.min(lines.length, 5);
-  const title =
-    lines
-      .slice(0, titleZoneEnd)
-      .find((l) => /[a-zA-Z]{3,}/.test(l) && !isMetadataLine(l) && !QUANTITY_START_RE.test(l)) ?? 'Scanned Recipe';
-
   return {
-    title,
+    title: findTitle(lines.slice(0, Math.max(titleZoneEnd, 1))),
     servings: servings || 4,
     prepTime,
     totalTime,

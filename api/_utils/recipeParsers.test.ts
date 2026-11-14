@@ -307,6 +307,228 @@ describe('parseRecipeText', () => {
     expect(result.steps).toEqual(['Cook for 5 minutes.']);
   });
 
+  describe('photographed cookbook pages', () => {
+    // Invented text shaped like real Tesseract output of magazine pages: bullet
+    // glyphs, wrapped lines, nutrition boxes, page numbers and edge junk.
+    const magazinePage = [
+      'Ray - ==',
+      'SERVES 4',
+      'HANDS-ON TIME 20 mins',
+      'ROASTED CARROT',
+      'AND LENTIL SALAD',
+      '‘A bright, crunchy salad for warm evenings.',
+      '# 4 carrots, peeled',
+      'and cut into batons',
+      '@ 1 tbsp olive oil',
+      '© 1 x 250g pouch cooked',
+      'puy lentils',
+      'For the dressing',
+      '# 2 tbsp lemon juice',
+      '¢ 1 tsp honey',
+      '# 1 tsp cumin seeds',
+      '| PER SERVING',
+      '310cals; 12g fat (2g sat fat);',
+      '11g protein; 9g fibre; 35g carbs',
+      '1 Heat the oven to 200C. Toss the carrots with the',
+      'oil and roast for 25 minutes.',
+      '2 Warm the lentils. Whisk the lemon juice, honey and',
+      'cumin, then toss everything together.',
+      '175',
+      'h h 4 Fla',
+    ].join('\n');
+
+    it('reads bulleted ingredients and joins their wrapped lines', () => {
+      const result = parseRecipeText(magazinePage);
+      const all = result.ingredientSections.flatMap((s) => s.ingredients.map((i) => i.originalText));
+
+      expect(all).toEqual([
+        '4 carrots, peeled and cut into batons',
+        '1 tbsp olive oil',
+        '1 x 250g pouch cooked puy lentils',
+        '2 tbsp lemon juice',
+        '1 tsp honey',
+        '1 tsp cumin seeds',
+      ]);
+      expect(result.ingredientSections.map((s) => s.title)).toEqual(['', 'For the dressing']);
+    });
+
+    it('keeps nutrition, page numbers and junk out of every field', () => {
+      const result = parseRecipeText(magazinePage);
+      const everything = JSON.stringify(result);
+
+      for (const junk of ['cals', 'protein', '175', 'Ray', 'Fla', 'PER SERVING']) expect(everything).not.toContain(junk);
+    });
+
+    it('splits a magazine-numbered method into its steps', () => {
+      expect(parseRecipeText(magazinePage).steps).toEqual([
+        'Heat the oven to 200C. Toss the carrots with the oil and roast for 25 minutes.',
+        'Warm the lentils. Whisk the lemon juice, honey and cumin, then toss everything together.',
+      ]);
+    });
+
+    it('takes the capitals title across its wrapped line, skipping junk and the pull-quote', () => {
+      expect(parseRecipeText(magazinePage).title).toBe('ROASTED CARROT AND LENTIL SALAD');
+    });
+
+    it('does not let a stray amount line after the method swallow it', () => {
+      const result = parseRecipeText(
+        [
+          'Bean Stew',
+          '2 tbsp oil',
+          '1 onion, sliced',
+          '400g tin beans',
+          'Fry the onion in the oil until soft and golden, about ten minutes.',
+          'Add the beans and simmer gently until thick.',
+          '2 x 400g',
+        ].join('\n'),
+      );
+
+      expect(result.steps.join(' ')).toContain('Fry the onion');
+      expect(result.steps.join(' ')).toContain('Add the beans');
+    });
+
+    it('splits two ingredient columns read as one line at the mid-line bullet', () => {
+      const result = parseRecipeText(
+        ['Soup', '# 2 tbsp olive oil # 1 x 400g tin beans', '# 1 onion, diced # 500ml stock', '# 1 tsp salt'].join('\n'),
+      );
+
+      expect(result.ingredientSections[0].ingredients.map((i) => i.originalText)).toEqual([
+        '2 tbsp olive oil',
+        '1 x 400g tin beans',
+        '1 onion, diced',
+        '500ml stock',
+        '1 tsp salt',
+      ]);
+    });
+
+    it('splits an unnumbered method into paragraphs where a short line ends a sentence', () => {
+      const result = parseRecipeText(
+        [
+          'Bean Stew',
+          'Ingredients',
+          '1 onion',
+          'Method',
+          'Fry the onion in a large pan over a medium heat until',
+          'it is soft and golden, stirring now and then.',
+          'Add the beans and the stock, bring to the boil, then',
+          'simmer for twenty minutes until thick.',
+        ].join('\n'),
+      );
+
+      expect(result.steps).toEqual([
+        'Fry the onion in a large pan over a medium heat until it is soft and golden, stirring now and then.',
+        'Add the beans and the stock, bring to the boil, then simmer for twenty minutes until thick.',
+      ]);
+    });
+
+    it('finds the method between two ingredient columns read one after the other', () => {
+      // A reflowed page: first ingredient column, the method, then a second
+      // ingredient column that was printed beside the first
+      const result = parseRecipeText(
+        [
+          'Fish Stew',
+          '# 2 tbsp olive oil',
+          '# 1 onion, sliced',
+          '# 1 tsp paprika',
+          '1 Heat the oil in a large pan and fry the onion until soft.',
+          'Stir in the paprika and cook for a minute.',
+          '2 Add the tomatoes and the fish and simmer gently until the',
+          'fish is cooked through.',
+          '',
+          '# 400g tin tomatoes',
+          '# 400g white fish, in chunks',
+        ].join('\n'),
+      );
+
+      expect(result.steps).toEqual([
+        'Heat the oil in a large pan and fry the onion until soft. Stir in the paprika and cook for a minute.',
+        'Add the tomatoes and the fish and simmer gently until the fish is cooked through.',
+      ]);
+      expect(result.ingredientSections.flatMap((s) => s.ingredients.map((i) => i.originalText))).toEqual([
+        '2 tbsp olive oil',
+        '1 onion, sliced',
+        '1 tsp paprika',
+        '400g tin tomatoes',
+        '400g white fish, in chunks',
+      ]);
+    });
+
+    it('reads a short numbered step that opens with a cooking verb as a step', () => {
+      const result = parseRecipeText(
+        ['Green Chutney', '# 100g coriander', '# 2 tbsp lemon juice', '1 Put everything into a', 'blender and blitz until smooth.'].join('\n'),
+      );
+
+      expect(result.ingredientSections[0].ingredients).toHaveLength(2);
+      expect(result.steps).toEqual(['Put everything into a blender and blitz until smooth.']);
+    });
+
+    it('ignores a lone fragment of a neighbouring column wedged among ingredients', () => {
+      const result = parseRecipeText(
+        [
+          'Curry',
+          '3 tbsp oil',
+          '1 green chilli, finely cook for 15 minutes, stirring occasionally',
+          'chopped',
+          '2 tsp ground cumin',
+          '1 tsp salt',
+          'Heat the oil and fry the chilli and cumin for a minute.',
+          'Add the salt and cook for ten minutes more until thick.',
+        ].join('\n'),
+      );
+
+      expect(result.steps.join(' ')).not.toContain('stirring occasionally');
+      expect(result.steps.join(' ')).toContain('Heat the oil');
+    });
+
+    it('does not let a lower-case method paragraph join a bulleted ingredient', () => {
+      const result = parseRecipeText(
+        [
+          'Bean Pot',
+          '# 1 x 400g tin beans',
+          '# 1 onion, diced',
+          '# 1 garlic clove',
+          'cook the onion in a little oil',
+          'until soft, then add the garlic',
+          'and the beans with their liquid',
+          'and simmer for ten minutes.',
+        ].join('\n'),
+      );
+      const ingredients = result.ingredientSections.flatMap((s) => s.ingredients.map((i) => i.originalText));
+
+      expect(ingredients.every((i) => i.length < 60)).toBe(true);
+      expect(result.steps.join(' ')).toContain('simmer for ten minutes');
+    });
+
+    it('never takes a wrapped intro line opening in lower case for the title', () => {
+      const result = parseRecipeText(
+        ['MAKES 200g', '‘Known as green chutney, this is a', 'cornerstone of the snack kitchen', '# 100g coriander', '# 30g mint'].join('\n'),
+      );
+
+      expect(result.title).toBe('Scanned Recipe');
+    });
+
+    it('joins a capitals title that wraps onto a line starting with "A"', () => {
+      const result = parseRecipeText(['BEETROOT CURRY WITH', 'A COCONUT SAMBOL', '# 1 tbsp oil', '# 8 curry leaves'].join('\n'));
+
+      expect(result.title).toBe('BEETROOT CURRY WITH A COCONUT SAMBOL');
+    });
+
+    it('keeps a short wrapped method line that the old length filter dropped', () => {
+      const result = parseRecipeText(
+        ['Rice', '200g rice', '400ml water', 'Rinse the rice, then bring it to the boil in the water and', 'cover.'].join('\n'),
+      );
+
+      expect(result.steps.join(' ')).toContain('cover.');
+    });
+  });
+
+  it('parses a long run of short lower-case lines quickly', () => {
+    const text = ['Soup', 'Ingredients', '1 onion', ...Array.from({ length: 5000 }, () => 'and more'), 'Method', 'Cook.'].join('\n');
+    const start = performance.now();
+    parseRecipeText(text);
+    expect(performance.now() - start).toBeLessThan(1000);
+  });
+
   it('falls back to sensible defaults', () => {
     const result = parseRecipeText('123\n456');
 

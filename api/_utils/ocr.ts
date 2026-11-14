@@ -8,17 +8,21 @@
 import path from 'node:path';
 import { createRequire } from 'node:module';
 import sharp from 'sharp';
-import { createWorker, OEM, type Worker } from 'tesseract.js';
+import { createWorker, OEM, PSM, type Worker } from 'tesseract.js';
+import { collectLines, reflowColumns, type TesseractData } from './columnReflow.js';
+import { findFractionCandidates, quarterBox, resolveFraction, typicalDigitWidth, type CandidateWord } from './fractions.js';
 
 export interface OcrResult {
-  /** The text callers use: column-reflowed when a two-column page was detected. */
+  /** The text callers use: column-reflowed when side-by-side columns were detected. */
   text: string;
   /** Tesseract's own text, before any column reflow. Kept for offline evaluation. */
   rawText: string;
   /** Mean word confidence, 0-100. Clean print scores 80-95, garbage <50. */
   confidence: number;
-  /** True when a two-column layout was detected and text was re-threaded. */
+  /** True when side-by-side columns were detected and text was re-threaded. */
   columnsReflowed: boolean;
+  /** Fraction glyphs re-read from the image and corrected in `text` (not in rawText). */
+  fractionsRecovered?: number;
   /** True when this call had to start the OCR worker (cold instance). */
   coldWorker?: boolean;
 }
@@ -71,12 +75,23 @@ class TesseractEngine implements OcrEngine {
         // Request the block/line/word hierarchy so we can reconstruct reading
         // order — tesseract's flat `text` reads across side-by-side columns.
         const { data } = await worker.recognize(image, {}, { blocks: true, text: true });
+        const rawText = data.text ?? '';
+        // Best effort: a failure here must not throw away a good page read.
+        // Only a failed settings restore (RestoreError) fails the call, so the
+        // half-configured worker is dropped below.
+        let fixed: LineFix[] = [];
+        try {
+          fixed = await recoverFractions(worker, image, data as unknown as FractionPage);
+        } catch (err) {
+          if (err instanceof RestoreError) throw err;
+          console.error('fraction recovery failed:', err instanceof Error ? err.message : String(err));
+        }
         const lines = collectLines(data as unknown as TesseractData);
         const reflowed = reflowColumns(lines);
-        const rawText = data.text ?? '';
         return {
-          text: reflowed ?? rawText,
+          text: reflowed ?? applyLineFixes(rawText, fixed),
           rawText,
+          fractionsRecovered: fixed.length,
           confidence: data.confidence ?? 0,
           columnsReflowed: reflowed !== null,
           coldWorker,
@@ -94,154 +109,98 @@ class TesseractEngine implements OcrEngine {
   }
 }
 
-// ─── Column reflow ───────────────────────────────────────────────────────────
-// Many recipes lay ingredients and method in side-by-side columns. Tesseract's
-// layout analysis often merges the two into single lines ("For the curry / and
-// leave them to crackle…"), which glues ingredient text to method text and makes
-// the structuring step drop whole ingredients. We rebuild the reading order from
-// word bounding boxes: detect the vertical gutter, then read the left column
-// fully top-to-bottom before the right. Single-column pages find no gutter and
-// pass through unchanged.
+// ─── Fraction recovery ───────────────────────────────────────────────────────
+// Tesseract misreads fraction glyphs ("1½" → "1%", "⅓" → "5"). For each
+// candidate (see fractions.ts) the glyph is cropped, enlarged, and its top-left
+// and bottom-right quarters are read as single digits. Words are corrected in
+// place, so the column reflow and the fallback text both carry the fix.
 
-interface BBox { x0: number; y0: number; x1: number; y1: number }
-interface TWord { text?: string; bbox?: BBox }
-interface TLine { text?: string; bbox?: BBox; words?: TWord[] }
-interface TPara { lines?: TLine[] }
-interface TBlock { paragraphs?: TPara[] }
-interface TesseractData { blocks?: TBlock[] | null }
-
-interface Line {
-  words: { text: string; x0: number; x1: number }[];
-  yTop: number;
-  width: number; // rightmost x across the line
+interface FractionPage {
+  blocks?: { paragraphs?: { lines?: { text?: string; words?: CandidateWord[] }[] }[] }[] | null;
 }
 
-function collectLines(data: TesseractData): Line[] {
-  const lines: Line[] = [];
-  for (const block of data.blocks ?? []) {
-    for (const para of block.paragraphs ?? []) {
-      for (const ln of para.lines ?? []) {
-        const words = (ln.words ?? [])
-          .filter((w) => (w.text ?? '').trim().length > 0 && w.bbox)
-          .map((w) => ({ text: (w.text ?? '').trim(), x0: w.bbox!.x0, x1: w.bbox!.x1 }))
-          .sort((a, b) => a.x0 - b.x0);
-        if (words.length > 0) {
-          lines.push({ words, yTop: ln.bbox?.y0 ?? 0, width: words[words.length - 1].x1 });
-        }
-      }
-    }
-  }
-  return lines;
+/** Line text before and after a fix, to patch Tesseract's flat text too. */
+interface LineFix { before: string; after: string }
+
+// Bounds on the fraction pass: each candidate costs two recognitions while it
+// holds the instance's only worker, so a page crafted with hundreds of "%"
+// lines must not run the request (and everyone queued behind it) out of time.
+const MAX_FRACTION_CANDIDATES = 24;
+const FRACTION_BUDGET_MS = 3000;
+
+/** The worker's page settings could not be put back; the worker must be dropped. */
+class RestoreError extends Error {}
+
+async function readDigit(worker: Worker, glyph: Buffer, size: { width: number; height: number }, left: number, top: number): Promise<string> {
+  const part = await sharp(glyph)
+    .extract(quarterBox(size, left, top))
+    .resize({ height: 100 })
+    .extend({ top: 40, bottom: 40, left: 40, right: 40, background: '#ffffff' })
+    .png()
+    .toBuffer();
+  const { data } = await worker.recognize(part);
+  return (data.text ?? '').trim();
 }
 
-function median(values: number[]): number {
-  if (values.length === 0) return 0;
-  const sorted = [...values].sort((a, b) => a - b);
-  const mid = Math.floor(sorted.length / 2);
-  return sorted.length % 2 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
+async function recoverFractions(worker: Worker, image: Buffer, page: FractionPage): Promise<LineFix[]> {
+  const lines = (page.blocks ?? []).flatMap((b) => (b.paragraphs ?? []).flatMap((p) => p.lines ?? []));
+  const digitWidth = typicalDigitWidth(lines.flatMap((l) => l.words ?? []));
+  const work = lines
+    .flatMap((line) => findFractionCandidates(line.words ?? [], digitWidth).map((candidate) => ({ line, candidate })))
+    .slice(0, MAX_FRACTION_CANDIDATES);
+  if (work.length === 0) return [];
+
+  // Decode the page once; every crop is cut from the raw pixels
+  const { data: pixels, info } = await sharp(image, { failOn: 'none' }).raw().toBuffer({ resolveWithObject: true });
+  const raw = { raw: { width: info.width, height: info.height, channels: info.channels } };
+  const deadline = Date.now() + FRACTION_BUDGET_MS;
+  const fixes: LineFix[] = [];
+  // Single-digit reading for the glyph parts; the page settings are restored
+  // before the worker is used for anything else
+  await worker.setParameters({ tessedit_char_whitelist: '0123456789', tessedit_pageseg_mode: PSM.SINGLE_CHAR });
+  try {
+    for (const { line, candidate } of work) {
+      if (Date.now() > deadline) break;
+      const words = line.words ?? [];
+      const word = words[candidate.index];
+      const { left, top } = candidate.region;
+      const width = Math.min(candidate.region.width, info.width - left);
+      const height = Math.min(candidate.region.height, info.height - top);
+      if (width < 4 || height < 4) continue;
+      // Two steps: sharp applies trim before extract within one pipeline
+      const crop = await sharp(pixels, raw).extract({ left, top, width, height }).png().toBuffer();
+      const glyph = await sharp(crop).trim({ threshold: 60 }).toBuffer({ resolveWithObject: true });
+      if (glyph.info.width < 8 || glyph.info.height < 8) continue;
+      const numerator = await readDigit(worker, glyph.data, glyph.info, 0, 0);
+      const denominator = await readDigit(worker, glyph.data, glyph.info, 0.42, 0.42);
+      const replacement = resolveFraction(word.text, candidate.lead, numerator, denominator);
+      if (!replacement) continue;
+      const before = words.map((w) => w.text).join(' ');
+      word.text = replacement;
+      fixes.push({ before, after: words.map((w) => w.text).join(' ') });
+    }
+  } finally {
+    try {
+      await worker.setParameters({ tessedit_char_whitelist: '', tessedit_pageseg_mode: PSM.SINGLE_BLOCK });
+    } catch (err) {
+      // eslint-disable-next-line no-unsafe-finally -- the worker must be dropped
+      throw new RestoreError(err instanceof Error ? err.message : String(err));
+    }
+  }
+  return fixes;
 }
 
-/**
- * Returns text re-threaded into left-then-right column order, or null when the
- * page isn't confidently two-column (so the caller keeps tesseract's own text).
- */
-function reflowColumns(lines: Line[]): string | null {
-  if (lines.length < 6) return null;
-
-  const pageWidth = Math.max(...lines.map((l) => l.width));
-  if (pageWidth <= 0) return null;
-
-  // Typical inter-word gap sets the scale; a real gutter is far wider.
-  const wordGaps: number[] = [];
-  for (const l of lines) {
-    for (let i = 1; i < l.words.length; i++) {
-      const g = l.words[i].x0 - l.words[i - 1].x1;
-      if (g > 0) wordGaps.push(g);
-    }
-  }
-  const medianGap = median(wordGaps) || 10;
-  const minGutter = Math.max(pageWidth * 0.045, medianGap * 3.5);
-
-  // Wide inter-word gaps are gutter candidates. Keep each gap's row (y), midpoint
-  // and facing edges so we can recover the empty gutter band precisely.
-  const gaps: { y: number; mid: number; left: number; right: number }[] = [];
-  for (const l of lines) {
-    for (let i = 1; i < l.words.length; i++) {
-      const left = l.words[i - 1].x1;
-      const right = l.words[i].x0;
-      if (right - left >= minGutter) gaps.push({ y: l.yTop, mid: (left + right) / 2, left, right });
-    }
-  }
-
-  // Need enough gutter gaps, clustered at a consistent x (a real column break
-  // recurs down the page; an incidental wide space in one line does not).
-  if (gaps.length < Math.max(3, lines.length * 0.12)) return null;
-  const gutterMedian = median(gaps.map((g) => g.mid));
-  const tolerance = pageWidth * 0.08;
-  const near = gaps.filter((g) => Math.abs(g.mid - gutterMedian) <= tolerance);
-  if (near.length < Math.max(3, gaps.length * 0.5)) return null;
-
-  // The divider is the SECOND column's left edge, not the gap midpoint: ingredient
-  // lines vary in length (so the midpoint wanders and long ingredients reach deep
-  // into a mid-band), but the method column always starts at the same x. Fit that
-  // edge as a sloped line — hand-held photos are tilted/curved, so it drifts down
-  // the page — by least squares on the gap right-edges, judged locally per row.
-  const meanY = near.reduce((s, g) => s + g.y, 0) / near.length;
-  const meanEdge = near.reduce((s, g) => s + g.right, 0) / near.length;
-  let num = 0;
-  let den = 0;
-  for (const g of near) {
-    num += (g.y - meanY) * (g.right - meanEdge);
-    den += (g.y - meanY) ** 2;
-  }
-  let slope = den > 0 ? num / den : 0;
-  slope = Math.max(-0.2, Math.min(0.2, slope)); // clamp to a plausible tilt
-  const intercept = meanEdge - slope * meanY;
-  const edgeAt = (y: number) => slope * y + intercept;
-  const margin = Math.max(pageWidth * 0.012, medianGap);
-
-  // The two-column band is the y-range where gutter gaps actually occur. Rows
-  // inside it are split at the method edge (even if OCR fused an ingredient's
-  // last word with the method word beside it — the split still separates the
-  // clean words). Rows outside it are the full-width title/intro/note/footer,
-  // placed whole by which side they sit on.
-  const nearYs = near.map((g) => g.y);
-  const bandTop = Math.min(...nearYs);
-  const bandBottom = Math.max(...nearYs);
-  const pitches: number[] = [];
-  const sortedYs = lines.map((l) => l.yTop).sort((a, b) => a - b);
-  for (let i = 1; i < sortedYs.length; i++) {
-    const d = sortedYs[i] - sortedYs[i - 1];
-    if (d > 0) pitches.push(d);
-  }
-  const slack = (median(pitches) || 20) * 1.5;
-
-  const left: { y: number; text: string }[] = [];
-  const right: { y: number; text: string }[] = [];
-  for (const l of lines) {
-    const edge = edgeAt(l.yTop);
-    const rw = l.words.filter((w) => w.x0 >= edge - margin);
-    const lw = l.words.filter((w) => w.x0 < edge - margin);
-    const inBand = l.yTop >= bandTop - slack && l.yTop <= bandBottom + slack;
-    if (inBand) {
-      // Both columns are live here — split at the method edge.
-      if (lw.length) left.push({ y: l.yTop, text: lw.map((w) => w.text).join(' ') });
-      if (rw.length) right.push({ y: l.yTop, text: rw.map((w) => w.text).join(' ') });
-    } else if (lw.length && rw.length) {
-      // Full-width heading/intro row — keep whole in the left flow.
-      left.push({ y: l.yTop, text: l.words.map((w) => w.text).join(' ') });
-    } else if (rw.length) {
-      // Method-only row past the ingredient list — keep in the method column.
-      right.push({ y: l.yTop, text: rw.map((w) => w.text).join(' ') });
-    } else {
-      left.push({ y: l.yTop, text: lw.map((w) => w.text).join(' ') });
-    }
-  }
-
-  if (left.length === 0 || right.length === 0) return null;
-  left.sort((a, b) => a.y - b.y);
-  right.sort((a, b) => a.y - b.y);
-  return left.map((o) => o.text).join('\n') + '\n\n' + right.map((o) => o.text).join('\n');
+/** Applies word fixes to Tesseract's flat text, line by line. */
+function applyLineFixes(text: string, fixes: LineFix[]): string {
+  if (fixes.length === 0) return text;
+  return text
+    .split('\n')
+    .map((line) => {
+      const normalised = line.replace(/\s+/g, ' ').trim();
+      const fix = fixes.find((f) => f.before === normalised);
+      return fix ? fix.after : line;
+    })
+    .join('\n');
 }
 
 const tesseractEngine = new TesseractEngine();
