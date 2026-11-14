@@ -421,6 +421,98 @@ describe('parseRecipeText', () => {
       ]);
     });
 
+    it('finds the method between two ingredient columns read one after the other', () => {
+      // A reflowed page: first ingredient column, the method, then a second
+      // ingredient column that was printed beside the first
+      const result = parseRecipeText(
+        [
+          'Fish Stew',
+          '# 2 tbsp olive oil',
+          '# 1 onion, sliced',
+          '# 1 tsp paprika',
+          '1 Heat the oil in a large pan and fry the onion until soft.',
+          'Stir in the paprika and cook for a minute.',
+          '2 Add the tomatoes and the fish and simmer gently until the',
+          'fish is cooked through.',
+          '',
+          '# 400g tin tomatoes',
+          '# 400g white fish, in chunks',
+        ].join('\n'),
+      );
+
+      expect(result.steps).toEqual([
+        'Heat the oil in a large pan and fry the onion until soft. Stir in the paprika and cook for a minute.',
+        'Add the tomatoes and the fish and simmer gently until the fish is cooked through.',
+      ]);
+      expect(result.ingredientSections.flatMap((s) => s.ingredients.map((i) => i.originalText))).toEqual([
+        '2 tbsp olive oil',
+        '1 onion, sliced',
+        '1 tsp paprika',
+        '400g tin tomatoes',
+        '400g white fish, in chunks',
+      ]);
+    });
+
+    it('reads a short numbered step that opens with a cooking verb as a step', () => {
+      const result = parseRecipeText(
+        ['Green Chutney', '# 100g coriander', '# 2 tbsp lemon juice', '1 Put everything into a', 'blender and blitz until smooth.'].join('\n'),
+      );
+
+      expect(result.ingredientSections[0].ingredients).toHaveLength(2);
+      expect(result.steps).toEqual(['Put everything into a blender and blitz until smooth.']);
+    });
+
+    it('ignores a lone fragment of a neighbouring column wedged among ingredients', () => {
+      const result = parseRecipeText(
+        [
+          'Curry',
+          '3 tbsp oil',
+          '1 green chilli, finely cook for 15 minutes, stirring occasionally',
+          'chopped',
+          '2 tsp ground cumin',
+          '1 tsp salt',
+          'Heat the oil and fry the chilli and cumin for a minute.',
+          'Add the salt and cook for ten minutes more until thick.',
+        ].join('\n'),
+      );
+
+      expect(result.steps.join(' ')).not.toContain('stirring occasionally');
+      expect(result.steps.join(' ')).toContain('Heat the oil');
+    });
+
+    it('does not let a lower-case method paragraph join a bulleted ingredient', () => {
+      const result = parseRecipeText(
+        [
+          'Bean Pot',
+          '# 1 x 400g tin beans',
+          '# 1 onion, diced',
+          '# 1 garlic clove',
+          'cook the onion in a little oil',
+          'until soft, then add the garlic',
+          'and the beans with their liquid',
+          'and simmer for ten minutes.',
+        ].join('\n'),
+      );
+      const ingredients = result.ingredientSections.flatMap((s) => s.ingredients.map((i) => i.originalText));
+
+      expect(ingredients.every((i) => i.length < 60)).toBe(true);
+      expect(result.steps.join(' ')).toContain('simmer for ten minutes');
+    });
+
+    it('never takes a wrapped intro line opening in lower case for the title', () => {
+      const result = parseRecipeText(
+        ['MAKES 200g', '‘Known as green chutney, this is a', 'cornerstone of the snack kitchen', '# 100g coriander', '# 30g mint'].join('\n'),
+      );
+
+      expect(result.title).toBe('Scanned Recipe');
+    });
+
+    it('joins a capitals title that wraps onto a line starting with "A"', () => {
+      const result = parseRecipeText(['BEETROOT CURRY WITH', 'A COCONUT SAMBOL', '# 1 tbsp oil', '# 8 curry leaves'].join('\n'));
+
+      expect(result.title).toBe('BEETROOT CURRY WITH A COCONUT SAMBOL');
+    });
+
     it('keeps a short wrapped method line that the old length filter dropped', () => {
       const result = parseRecipeText(
         ['Rice', '200g rice', '400ml water', 'Rinse the rice, then bring it to the boil in the water and', 'cover.'].join('\n'),
