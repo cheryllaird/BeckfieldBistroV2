@@ -1,0 +1,134 @@
+{
+  "id": "recipe-real",
+  "title": "Sri Lankan Beetroot Curry with Green Bean Mallum",
+  "servings": 4,
+  "prepTime": "",
+  "totalTime": "",
+  "ingredientSections": [
+    {
+      "title": "For the curry",
+      "ingredients": [
+        {
+          "name": "rapeseed oil",
+          "quantity": 3,
+          "unit": "tbsp",
+          "originalText": "3 tbsp rapeseed oil"
+        },
+        {
+          "name": "fresh curry leaves",
+          "quantity": 6,
+          "unit": "",
+          "originalText": "6 fresh curry leaves"
+        },
+        {
+          "name": "large red onion, diced",
+          "quantity": 1,
+          "unit": "",
+          "originalText": "1 large red onion, diced"
+        },
+        {
+          "name": "garlic, crushed",
+          "quantity": 4,
+          "unit": "cloves",
+          "originalText": "4 cloves of garlic, crushed"
+        },
+        {
+          "name": "green finger chillies, finely chopped",
+          "quantity": 1.5,
+          "unit": "",
+          "originalText": "1½ green finger chillies, finely chopped"
+        },
+        {
+          "name": "tomato puree",
+          "quantity": 1.5,
+          "unit": "tbsp",
+          "originalText": "1½ tbsp tomato puree"
+        },
+        {
+          "name": "ground cumin",
+          "quantity": 2,
+          "unit": "tsp",
+          "originalText": "2 tsp ground cumin"
+        },
+        {
+          "name": "raw beetroot, peeled and cut into 0.5cm slices",
+          "quantity": 800,
+          "unit": "g",
+          "originalText": "800g raw beetroot, peeled and cut into 0.5cm slices"
+        },
+        {
+          "name": "salt",
+          "quantity": 1.25,
+          "unit": "tsp",
+          "originalText": "1¼ tsp salt"
+        },
+        {
+          "name": "coconut milk",
+          "quantity": 1,
+          "unit": "tin",
+          "originalText": "1 x 400ml tin of coconut milk"
+        },
+        {
+          "name": "lime juice (from 1 lime)",
+          "quantity": 1,
+          "unit": "tbsp",
+          "originalText": "1 tbsp lime juice (from 1 lime)"
+        }
+      ]
+    },
+    {
+      "title": "For the green beans",
+      "ingredients": [
+        {
+          "name": "rapeseed oil",
+          "quantity": 1,
+          "unit": "tbsp",
+          "originalText": "1 tbsp rapeseed oil"
+        },
+        {
+          "name": "green beans, topped, tailed and cut into 1.5cm pieces",
+          "quantity": 300,
+          "unit": "g",
+          "originalText": "300g green beans, topped, tailed and cut into 1.5cm pieces"
+        },
+        {
+          "name": "garlic, crushed",
+          "quantity": 1,
+          "unit": "clove",
+          "originalText": "1 clove of garlic, crushed"
+        },
+        {
+          "name": "green finger chilli, very finely chopped",
+          "quantity": 0.5,
+          "unit": "",
+          "originalText": "½ a green finger chilli, very finely chopped"
+        },
+        {
+          "name": "lime juice (from 1 lime)",
+          "quantity": 1,
+          "unit": "tbsp",
+          "originalText": "1 tbsp lime juice (from 1 lime)"
+        },
+        {
+          "name": "salt",
+          "quantity": 0.333,
+          "unit": "tsp",
+          "originalText": "⅓ tsp salt"
+        },
+        {
+          "name": "desiccated coconut",
+          "quantity": 3.5,
+          "unit": "tbsp",
+          "originalText": "3½ tbsp desiccated coconut"
+        }
+      ]
+    }
+  ],
+  "steps": [
+    "Start with the beetroot curry. On a medium flame, heat the oil in a wide frying pan for which you have a lid, then fry the curry leaves and leave them to crackle and pop for a minute. Stir in the onion, garlic and chillies, cook for around 6 minutes, until the onion turns translucent and soft, then add the tomato puree and cumin, and cook for another 5 minutes.",
+    "Add the beetroot, salt and 6 tablespoons of water, pop on the lid and cook for 15 minutes, stirring occasionally; if the curry looks a bit dry, add more water, a tablespoon at a time. Take off the lid, stir in the coconut milk and simmer for 10 minutes, until the beetroot is tender and the sauce has reduced. Finally, stir in the lime juice and turn off the heat while you get on with the beans.",
+    "In another wide frying pan, heat the oil for the beans on a high flame. Once it's hot, add the beans, stir to coat in the oil, then leave for 3 to 4 minutes, stirring once, until they blister and char. When the beans have got some blackened bits on them, but are still bright green in colour, stir in the garlic, chilli, lime juice and salt, and cook for a minute. Finally, add the desiccated coconut, stir-fry for a minute, then take off the heat."
+  ],
+  "extractionMethod": null,
+  "editedBeforeSave": null
+}

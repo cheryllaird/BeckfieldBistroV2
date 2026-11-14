@@ -21,6 +21,13 @@ export default defineConfig([
     },
   },
   {
+    // Node scripts: admin one-offs and the OCR eval
+    files: ['scripts/**/*.{js,mjs,ts}'],
+    languageOptions: {
+      globals: { ...globals.node },
+    },
+  },
+  {
     files: ['**/*.test.{ts,tsx}', 'src/test/**/*.{ts,tsx}', 'vitest.config.ts'],
     languageOptions: {
       globals: { ...globals.browser, ...globals.node, ...globals.vitest },
