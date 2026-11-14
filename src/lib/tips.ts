@@ -9,7 +9,7 @@ export const KOFI_URL = 'https://ko-fi.com/cheryllaird';
 export const KOFI_PANEL_URL = `${KOFI_URL}/?hidefeed=true&widget=true&embed=true&preview=true`;
 
 /** Saved-recipe counts at which the thank-you note may appear. */
-export const TIP_MILESTONES = [5, 10] as const;
+const TIP_MILESTONES = [5, 10] as const;
 
 /**
  * Whether saving a recipe that brings the user's own count to `ownRecipeCount`
