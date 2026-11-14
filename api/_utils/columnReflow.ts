@@ -90,10 +90,38 @@ function fitGutter(gaps: Gap[], slack: number): Gutter {
   const ys = gaps.map((g) => g.y);
   return {
     edgeAt: (y) => meanX + slope * (y - meanY),
-    top: Math.min(...ys) - slack,
-    bottom: Math.max(...ys) + slack,
+    top: ys.reduce((m, y) => Math.min(m, y), Infinity) - slack,
+    bottom: ys.reduce((m, y) => Math.max(m, y), -Infinity) + slack,
     support: gaps.length,
   };
+}
+
+/**
+ * The x (a candidate's next-column edge) with the most distinct rows within
+ * the tolerance either side. `pool` is sorted by `right`; a sliding window
+ * keeps this linear, so a page crafted with thousands of gaps stays cheap.
+ */
+function densestPeak(pool: Gap[], tolerance: number): { best: number; bestRows: number } {
+  const rowsInWindow = new Map<number, number>();
+  const add = (g: Gap) => rowsInWindow.set(g.y, (rowsInWindow.get(g.y) ?? 0) + 1);
+  const remove = (g: Gap) => {
+    const n = (rowsInWindow.get(g.y) ?? 0) - 1;
+    if (n > 0) rowsInWindow.set(g.y, n);
+    else rowsInWindow.delete(g.y);
+  };
+  let best = pool[0].right;
+  let bestRows = 0;
+  let lo = 0;
+  let hi = 0; // window is pool[lo, hi)
+  for (const centre of pool) {
+    while (hi < pool.length && pool[hi].right <= centre.right + tolerance) add(pool[hi++]);
+    while (pool[lo].right < centre.right - tolerance) remove(pool[lo++]);
+    if (rowsInWindow.size > bestRows) {
+      bestRows = rowsInWindow.size;
+      best = centre.right;
+    }
+  }
+  return { best, bestRows };
 }
 
 /**
@@ -134,26 +162,18 @@ function findGutters(
   // candidate across the page into one group. Instead take the x where the most
   // rows have a gap ending, claim the candidates near it, and repeat.
   const tolerance = pageWidth * 0.02;
-  const rowsNear = (x: number, pool: Gap[]) => new Set(pool.filter((g) => Math.abs(g.right - x) <= tolerance).map((g) => g.y)).size;
-  let pool = [...gaps];
+  let pool = [...gaps].sort((a, b) => a.right - b.right);
   const groups: Gap[][] = [];
   while (pool.length > 0) {
-    let best = pool[0].right;
-    let bestRows = 0;
-    for (const g of pool) {
-      const rows = rowsNear(g.right, pool);
-      if (rows > bestRows) {
-        bestRows = rows;
-        best = g.right;
-      }
-    }
+    const { best, bestRows } = densestPeak(pool, tolerance);
     if (bestRows < minSupport) break;
     // Re-centre on the claimed candidates' median so the group sits on the peak
     const claimed = pool.filter((g) => Math.abs(g.right - best) <= tolerance);
     const centre = median(claimed.map((g) => g.right));
     const group = pool.filter((g) => Math.abs(g.right - centre) <= tolerance * 1.5);
     groups.push(group);
-    pool = pool.filter((g) => !group.includes(g));
+    const claimedSet = new Set(group);
+    pool = pool.filter((g) => !claimedSet.has(g));
   }
   const minColumnWidth = pageWidth * 0.08;
   const supported = groups.filter((group) => new Set(group.map((g) => g.y)).size >= minSupport);
@@ -174,9 +194,16 @@ function findGutters(
  * Returns text re-threaded column by column, or null when the page has no
  * recurring gutter (so the caller keeps Tesseract's own text).
  */
+const MAX_LINES = 1500;
+const MAX_GAPS = 5000;
+
 export function reflowColumns(lines: Line[]): string | null {
   if (lines.length < 6) return null;
-  const pageWidth = Math.max(...lines.flatMap((l) => l.words.map((w) => w.x1)));
+  // Pages beyond any real recipe are left to Tesseract's own reading order:
+  // the gutter search must stay cheap on input crafted to be huge
+  if (lines.length > MAX_LINES) return null;
+  let pageWidth = 0;
+  for (const l of lines) for (const w of l.words) pageWidth = Math.max(pageWidth, w.x1);
   if (pageWidth <= 0) return null;
 
   // The typical gap between words sets the scale; a gutter is far wider.
@@ -211,6 +238,7 @@ export function reflowColumns(lines: Line[]): string | null {
   const slack = pitch * 1.5;
 
   const minSupport = Math.max(3, Math.round(lines.length * 0.08));
+  if (gaps.length > MAX_GAPS) return null;
   const found = findGutters(gaps, pageWidth, minSupport, slack);
   // Match tolerance between a line's gap and a gutter's fitted edge.
   const margin = Math.max(pageWidth * 0.02, medianGap * 2);
@@ -233,8 +261,8 @@ export function reflowColumns(lines: Line[]): string | null {
   // the fitted edge than right of it. A wide gap is still required.
   const hang = Math.max(margin * 2, pageWidth * 0.04);
   const startsAt = (x: number, edgeX: number) => x >= edgeX - hang && x <= edgeX + margin;
-  const columnsTop = gutters.length ? Math.min(...gutters.map((g) => g.top)) : Infinity;
-  const columnsBottom = gutters.length ? Math.max(...gutters.map((g) => g.bottom)) : -Infinity;
+  const columnsTop = gutters.reduce((m, g) => Math.min(m, g.top), Infinity);
+  const columnsBottom = gutters.reduce((m, g) => Math.max(m, g.bottom), -Infinity);
 
   const pieces: { column: number; y: number; text: string }[] = [];
   const above: { y: number; text: string }[] = [];

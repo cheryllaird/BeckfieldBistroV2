@@ -233,6 +233,12 @@ interface OcrEngine { readonly name: string; recognize(image: Buffer): Promise<O
   ¼, so it is never guessed. Corrections go into `text`; `rawText` stays Tesseract's
   own. The worker's page settings are restored after the pass. Adds well under a
   second per photo.
+  The pass is **best effort and bounded**: at most 24 candidates and 3 s per page,
+  the page is decoded once, and any failure in it is logged (message only) and
+  skipped — the page read is kept. Only a failed settings restore fails the call, so
+  the half‑configured worker is dropped. The reflow likewise declines pages beyond
+  any real recipe (over 1,500 lines or 5,000 gap candidates) and keeps Tesseract's
+  text, so crafted input cannot make the gutter search expensive.
 - **Quality gate — `assessOcrQuality`.** All must hold: text ≥ **150** chars,
   confidence ≥ **60**, alpha ratio (`[A-Za-z]` / non‑whitespace) ≥ **0.55**, non‑empty
   lines ≥ **6**. Failing any one routes the photo back to `gemini-vision` (or `failed`).
