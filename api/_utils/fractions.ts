@@ -110,3 +110,24 @@ export function typicalDigitWidth(words: CandidateWord[]): number {
     .sort((a, b) => a - b);
   return widths.length ? widths[Math.floor(widths.length / 2)] : 12;
 }
+
+/**
+ * The box of one quarter of a glyph (numerator top left, denominator bottom
+ * right), clamped inside the glyph. Rounding the offset and the size separately
+ * can overshoot by a pixel (0.42 × 75 and 0.58 × 75 both end in .5), which
+ * sharp rejects, so the size is derived from what is left after the offset.
+ */
+export function quarterBox(
+  size: { width: number; height: number },
+  left: number,
+  top: number,
+): { left: number; top: number; width: number; height: number } {
+  const x = Math.min(Math.round(size.width * left), size.width - 1);
+  const y = Math.min(Math.round(size.height * top), size.height - 1);
+  return {
+    left: x,
+    top: y,
+    width: Math.max(1, Math.min(size.width - x, Math.max(2, Math.round(size.width * 0.58)))),
+    height: Math.max(1, Math.min(size.height - y, Math.max(2, Math.round(size.height * 0.58)))),
+  };
+}

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { findFractionCandidates, resolveFraction, typicalDigitWidth, type CandidateWord } from './fractions';
+import { findFractionCandidates, quarterBox, resolveFraction, typicalDigitWidth, type CandidateWord } from './fractions';
 
 // Words laid out left to right, 12px per character, 10px apart
 function words(...texts: string[]): CandidateWord[] {
@@ -84,5 +84,23 @@ describe('typicalDigitWidth', () => {
 
   it('defaults when the page has no numbers', () => {
     expect(typicalDigitWidth(words('salt', 'and', 'pepper'))).toBe(12);
+  });
+});
+
+describe('quarterBox', () => {
+  it.each([75, 125, 19, 8, 9, 1000])('stays inside a %ipx glyph for both quarters', (n) => {
+    for (const [l, t] of [[0, 0], [0.42, 0.42]]) {
+      const box = quarterBox({ width: n, height: n }, l, t);
+      expect(box.left + box.width).toBeLessThanOrEqual(n);
+      expect(box.top + box.height).toBeLessThanOrEqual(n);
+      expect(box.width).toBeGreaterThan(0);
+      expect(box.height).toBeGreaterThan(0);
+    }
+  });
+
+  it('would have overshot at 75px with independent rounding', () => {
+    // The bug it guards: round(0.42 × 75) + round(0.58 × 75) = 32 + 44 = 76
+    expect(Math.round(0.42 * 75) + Math.round(0.58 * 75)).toBe(76);
+    expect(quarterBox({ width: 75, height: 75 }, 0.42, 0.42)).toEqual({ left: 32, top: 32, width: 43, height: 43 });
   });
 });

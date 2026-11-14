@@ -364,7 +364,9 @@ const MAX_TAILS = 2;
 // an ingredient or header) — a stretch longer than MAX_TAILS is a paragraph.
 function tailStretch(lines: OcrLine[], start: number, isIngredient: (l: OcrLine) => boolean): number {
   let n = 0;
-  for (let i = start; i < lines.length; i++) {
+  // Only "more than MAX_TAILS" matters, so stop there: scanning to the end from
+  // every line would be quadratic on a long run of lower-case lines
+  for (let i = start; i < lines.length && n <= MAX_TAILS; i++) {
     const l = lines[i];
     if (isIngredient(l) || looksLikeSectionHeader(l.text) || l.bulleted || !/^[\p{Ll}(]/u.test(l.text)) break;
     n++;

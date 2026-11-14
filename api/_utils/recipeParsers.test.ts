@@ -522,6 +522,13 @@ describe('parseRecipeText', () => {
     });
   });
 
+  it('parses a long run of short lower-case lines quickly', () => {
+    const text = ['Soup', 'Ingredients', '1 onion', ...Array.from({ length: 5000 }, () => 'and more'), 'Method', 'Cook.'].join('\n');
+    const start = performance.now();
+    parseRecipeText(text);
+    expect(performance.now() - start).toBeLessThan(1000);
+  });
+
   it('falls back to sensible defaults', () => {
     const result = parseRecipeText('123\n456');
 

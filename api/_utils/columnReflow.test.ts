@@ -141,6 +141,23 @@ describe('reflowColumns', () => {
   });
 });
 
+describe('reflowColumns on crafted input', () => {
+  it('stays fast on a dense grid of short words with wide gaps', () => {
+    // 300 lines × 15 word pairs with wide gaps: thousands of gutter candidates
+    const lines = Array.from({ length: 300 }, (_, r) =>
+      line(r * 25, ...Array.from({ length: 15 }, (_, c): [number, string] => [c * 90 + (r % 7) * 3, 'ab cd'])),
+    );
+    const start = performance.now();
+    reflowColumns(lines);
+    expect(performance.now() - start).toBeLessThan(1500);
+  });
+
+  it('declines pages far bigger than any recipe', () => {
+    const lines = Array.from({ length: 2000 }, (_, r) => line(r * 25, [LEFT, 'ingredient'], [MID, 'method text']));
+    expect(reflowColumns(lines)).toBeNull();
+  });
+});
+
 describe('collectLines', () => {
   it('flattens tesseract blocks into lines of words sorted by x', () => {
     const lines = collectLines({

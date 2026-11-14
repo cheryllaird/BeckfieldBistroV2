@@ -10,7 +10,7 @@ import { createRequire } from 'node:module';
 import sharp from 'sharp';
 import { createWorker, OEM, PSM, type Worker } from 'tesseract.js';
 import { collectLines, reflowColumns, type TesseractData } from './columnReflow.js';
-import { findFractionCandidates, resolveFraction, typicalDigitWidth, type CandidateWord } from './fractions.js';
+import { findFractionCandidates, quarterBox, resolveFraction, typicalDigitWidth, type CandidateWord } from './fractions.js';
 
 export interface OcrResult {
   /** The text callers use: column-reflowed when side-by-side columns were detected. */
@@ -76,7 +76,16 @@ class TesseractEngine implements OcrEngine {
         // order — tesseract's flat `text` reads across side-by-side columns.
         const { data } = await worker.recognize(image, {}, { blocks: true, text: true });
         const rawText = data.text ?? '';
-        const fixed = await recoverFractions(worker, image, data as unknown as FractionPage);
+        // Best effort: a failure here must not throw away a good page read.
+        // Only a failed settings restore (RestoreError) fails the call, so the
+        // half-configured worker is dropped below.
+        let fixed: LineFix[] = [];
+        try {
+          fixed = await recoverFractions(worker, image, data as unknown as FractionPage);
+        } catch (err) {
+          if (err instanceof RestoreError) throw err;
+          console.error('fraction recovery failed:', err instanceof Error ? err.message : String(err));
+        }
         const lines = collectLines(data as unknown as TesseractData);
         const reflowed = reflowColumns(lines);
         return {
@@ -113,14 +122,18 @@ interface FractionPage {
 /** Line text before and after a fix, to patch Tesseract's flat text too. */
 interface LineFix { before: string; after: string }
 
+// Bounds on the fraction pass: each candidate costs two recognitions while it
+// holds the instance's only worker, so a page crafted with hundreds of "%"
+// lines must not run the request (and everyone queued behind it) out of time.
+const MAX_FRACTION_CANDIDATES = 24;
+const FRACTION_BUDGET_MS = 3000;
+
+/** The worker's page settings could not be put back; the worker must be dropped. */
+class RestoreError extends Error {}
+
 async function readDigit(worker: Worker, glyph: Buffer, size: { width: number; height: number }, left: number, top: number): Promise<string> {
   const part = await sharp(glyph)
-    .extract({
-      left: Math.round(size.width * left),
-      top: Math.round(size.height * top),
-      width: Math.max(2, Math.round(size.width * 0.58)),
-      height: Math.max(2, Math.round(size.height * 0.58)),
-    })
+    .extract(quarterBox(size, left, top))
     .resize({ height: 100 })
     .extend({ top: 40, bottom: 40, left: 40, right: 40, background: '#ffffff' })
     .png()
@@ -132,26 +145,30 @@ async function readDigit(worker: Worker, glyph: Buffer, size: { width: number; h
 async function recoverFractions(worker: Worker, image: Buffer, page: FractionPage): Promise<LineFix[]> {
   const lines = (page.blocks ?? []).flatMap((b) => (b.paragraphs ?? []).flatMap((p) => p.lines ?? []));
   const digitWidth = typicalDigitWidth(lines.flatMap((l) => l.words ?? []));
-  const work = lines.flatMap((line) =>
-    findFractionCandidates(line.words ?? [], digitWidth).map((candidate) => ({ line, candidate })),
-  );
+  const work = lines
+    .flatMap((line) => findFractionCandidates(line.words ?? [], digitWidth).map((candidate) => ({ line, candidate })))
+    .slice(0, MAX_FRACTION_CANDIDATES);
   if (work.length === 0) return [];
 
-  const meta = await sharp(image).metadata();
+  // Decode the page once; every crop is cut from the raw pixels
+  const { data: pixels, info } = await sharp(image, { failOn: 'none' }).raw().toBuffer({ resolveWithObject: true });
+  const raw = { raw: { width: info.width, height: info.height, channels: info.channels } };
+  const deadline = Date.now() + FRACTION_BUDGET_MS;
   const fixes: LineFix[] = [];
   // Single-digit reading for the glyph parts; the page settings are restored
   // before the worker is used for anything else
   await worker.setParameters({ tessedit_char_whitelist: '0123456789', tessedit_pageseg_mode: PSM.SINGLE_CHAR });
   try {
     for (const { line, candidate } of work) {
+      if (Date.now() > deadline) break;
       const words = line.words ?? [];
       const word = words[candidate.index];
       const { left, top } = candidate.region;
-      const width = Math.min(candidate.region.width, (meta.width ?? 0) - left);
-      const height = Math.min(candidate.region.height, (meta.height ?? 0) - top);
+      const width = Math.min(candidate.region.width, info.width - left);
+      const height = Math.min(candidate.region.height, info.height - top);
       if (width < 4 || height < 4) continue;
       // Two steps: sharp applies trim before extract within one pipeline
-      const crop = await sharp(image).extract({ left, top, width, height }).toBuffer();
+      const crop = await sharp(pixels, raw).extract({ left, top, width, height }).png().toBuffer();
       const glyph = await sharp(crop).trim({ threshold: 60 }).toBuffer({ resolveWithObject: true });
       if (glyph.info.width < 8 || glyph.info.height < 8) continue;
       const numerator = await readDigit(worker, glyph.data, glyph.info, 0, 0);
@@ -163,7 +180,12 @@ async function recoverFractions(worker: Worker, image: Buffer, page: FractionPag
       fixes.push({ before, after: words.map((w) => w.text).join(' ') });
     }
   } finally {
-    await worker.setParameters({ tessedit_char_whitelist: '', tessedit_pageseg_mode: PSM.SINGLE_BLOCK });
+    try {
+      await worker.setParameters({ tessedit_char_whitelist: '', tessedit_pageseg_mode: PSM.SINGLE_BLOCK });
+    } catch (err) {
+      // eslint-disable-next-line no-unsafe-finally -- the worker must be dropped
+      throw new RestoreError(err instanceof Error ? err.message : String(err));
+    }
   }
   return fixes;
 }
