@@ -29,6 +29,18 @@ Only the triage agent or a human changes a status. Entries are never deleted.
 
 ## Entries
 
+### 2026-11-14: OCR eval re-runs Tesseract on every change, so tuning reflow/parser is slow
+- **Status:** open
+- **Who:** agent (cloud session, OCR Phase 2 parser + multi-column reflow)
+- **Task:** improving `parseRecipeText` and `reflowColumns` against `npm run eval:ocr` (#223/#228)
+- **Friction:** each `eval:ocr` run OCRs every photo again (~1.5 min for 15 photos), although
+  the parser and reflow are pure functions of Tesseract's word boxes. Iterating needed a
+  hand-written scratch script that cached word boxes once and re-scored in seconds; dozens of
+  tuning rounds would otherwise have taken hours.
+- **Suggested fix:** give `eval:ocr` a `--cache <file>` option that stores each photo's
+  `collectLines` output and raw text on first run and reuses it when the image and
+  preprocessing variant are unchanged.
+
 ### 2026-11-12: vitest `globals: true` doesn't reach the project configs
 - **Status:** open
 - **Who:** agent (interactive, ship-feature)

@@ -112,12 +112,22 @@ export function isNutritionLine(text: string): boolean {
   return NUTRITION_RES.some((re) => re.test(text));
 }
 
-// A magazine-style numbered step: "2 Add the red pepper and cook…". Long, and the
-// word after the number is capitalised, so "2 Indian bay leaves" (short) and
-// "2 tbsp oil" (lowercase unit) are not taken for steps.
-const MAGAZINE_STEP_RE = /^\d{1,2}\s+[A-Z][a-z]+\b/;
+// A magazine-style numbered step: "2 Add the red pepper and cook…". The word
+// after the number is capitalised (so "2 tbsp oil" is not a step), and either
+// it is a cooking instruction verb or the line is long. "2 Indian bay leaves"
+// is short and opens with no verb, so it stays an ingredient.
+const MAGAZINE_STEP_RE = /^\d{1,2}\s+([A-Z][a-z]+)\b/;
+const STEP_VERBS = new Set([
+  'add', 'arrange', 'bake', 'beat', 'blend', 'blitz', 'boil', 'bring', 'brush', 'combine', 'cook', 'cover',
+  'cut', 'divide', 'drain', 'drizzle', 'fold', 'fry', 'grate', 'grill', 'heat', 'knead', 'leave', 'line',
+  'lower', 'make', 'meanwhile', 'melt', 'mix', 'pat', 'place', 'pour', 'preheat', 'put', 'reduce', 'remove',
+  'return', 'rinse', 'roast', 'scatter', 'season', 'serve', 'set', 'simmer', 'slice', 'spoon', 'spread',
+  'sprinkle', 'stir', 'taste', 'thread', 'tip', 'toss', 'transfer', 'whisk',
+]);
 export function isMagazineStep(text: string): boolean {
-  return text.length >= 35 && MAGAZINE_STEP_RE.test(text);
+  const m = text.match(MAGAZINE_STEP_RE);
+  if (!m) return false;
+  return text.length >= 35 || STEP_VERBS.has(m[1].toLowerCase());
 }
 
 /**

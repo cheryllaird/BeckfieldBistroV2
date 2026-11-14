@@ -320,6 +320,7 @@ function isTitleCandidate(text: string): boolean {
   return (
     text.length <= 70 &&
     !/^['"‘“]/.test(text) && // pull-quotes and intro text open with a quote mark
+    !/^\p{Ll}/u.test(text) && // titles never open in lower case; wrapped intro lines do
     !QUANTITY_START_RE.test(text) &&
     !isMetadataLine(text) &&
     !isNutritionLine(text) &&
@@ -344,7 +345,8 @@ function findTitle(lines: string[]): string {
   const next = lines[i + 1];
   if (
     next !== undefined &&
-    ((isAllCaps(title) && isAllCaps(next) && wordLikeRatio(next) >= 0.75 && !TITLE_LABEL_RE.test(next)) ||
+    // 0.6, not 0.75: a wrapped title line can open with "A" ("A COCONUT SAMBOL")
+    ((isAllCaps(title) && isAllCaps(next) && wordLikeRatio(next) >= 0.6 && !TITLE_LABEL_RE.test(next)) ||
       /^with\s/i.test(next))
   ) {
     title = `${title} ${next}`;
@@ -354,22 +356,52 @@ function findTitle(lines: string[]): string {
 
 // Joins wrapped ingredient lines ("1 cucumber, halved" + "lengthways") and keeps
 // section headers; drops everything else in the block (stray OCR fragments).
+// An ingredient wraps over a couple of lines at most; more lower-case lines
+// after it are a paragraph of method, not its continuation.
+const MAX_TAILS = 2;
+
+// How many lines from `start` read as continuations (lower case or "(", not
+// an ingredient or header) — a stretch longer than MAX_TAILS is a paragraph.
+function tailStretch(lines: OcrLine[], start: number, isIngredient: (l: OcrLine) => boolean): number {
+  let n = 0;
+  for (let i = start; i < lines.length; i++) {
+    const l = lines[i];
+    if (isIngredient(l) || looksLikeSectionHeader(l.text) || l.bulleted || !/^[\p{Ll}(]/u.test(l.text)) break;
+    n++;
+  }
+  return n;
+}
+
 function ingredientBlockLines(block: OcrLine[], isIngredient: (l: OcrLine) => boolean, bulletedList: boolean): string[] {
   const out: string[] = [];
   let prev: OcrLine | null = null;
-  for (const line of block) {
+  let tails = 0;
+  for (const [i, line] of block.entries()) {
     if (looksLikeSectionHeader(line.text)) {
       out.push(line.text);
       prev = null;
-    } else if (prev && continuesIngredient(prev, line, bulletedList)) {
+    } else if (
+      prev &&
+      tails < MAX_TAILS &&
+      (tails > 0 || tailStretch(block, i, isIngredient) <= MAX_TAILS) &&
+      continuesIngredient(prev, line, bulletedList)
+    ) {
       out[out.length - 1] = `${out[out.length - 1]} ${line.text}`;
       prev = { ...line, text: out[out.length - 1] };
+      tails++;
     } else if (isIngredient(line)) {
       out.push(line.text);
       prev = line;
+      tails = 0;
     }
   }
   return out;
+}
+
+// A short lower-case fragment ("chopped", "cut into cubes"): the wrapped tail
+// of an ingredient, never a method line of its own.
+function isShortTail(text: string): boolean {
+  return text.length <= 25 && /^\p{Ll}/u.test(text) && realWords(text).length <= 3 && !/[.!?]$/.test(text);
 }
 
 // A method line worth keeping: two real words at least, and not a
@@ -464,18 +496,32 @@ export function parseRecipeText(ocrText: string): ParsedRecipeText {
     const runs: { start: number; end: number; count: number }[] = [];
     let run: { start: number; end: number; count: number } | null = null;
     let gap = 0;
+    let tails = 0;
     content.forEach((l, i) => {
       if (isIngredient(l)) {
-        if (!run) run = { start: i, end: i, count: 0 };
+        // A section header right above the first ingredient belongs to the run
+        if (!run) run = { start: i > 0 && looksLikeSectionHeader(lines[i - 1]) ? i - 1 : i, end: i, count: 0 };
         run.count++;
         run.end = i;
         gap = 0;
+        tails = 0;
       } else if (run) {
         // A continuation must sit directly under the ingredient it continues —
         // never across a stray line, or wrapped method prose gets absorbed.
-        if (looksLikeSectionHeader(l.text) || (gap === 0 && continuesIngredient(content[i - 1], l, bulletedList))) {
+        if (looksLikeSectionHeader(l.text)) {
           run.end = i;
           gap = 0;
+        } else if (
+          gap === 0 &&
+          tails < MAX_TAILS &&
+          (tails > 0 || tailStretch(content, i, isIngredient) <= MAX_TAILS) &&
+          continuesIngredient(content[i - 1], l, bulletedList)
+        ) {
+          run.end = i;
+          tails++;
+        } else if (gap > 0 && (continuesIngredient(content[i - 1], l, bulletedList) || isShortTail(l.text))) {
+          // The wrapped tail of an ingredient after a stray line ("chopped"):
+          // neither extends the run nor counts as a further gap
         } else if (++gap > 1) {
           runs.push(run);
           run = null;
@@ -489,12 +535,26 @@ export function parseRecipeText(ocrText: string): ParsedRecipeText {
 
     if (chosen.length > 0) {
       const first = chosen[0].start;
-      const last = chosen[chosen.length - 1].end;
       ingredientLines = chosen.flatMap((r) =>
         ingredientBlockLines(content.slice(r.start, r.end + 1), isIngredient, bulletedList),
       );
-      if (first > 0 && looksLikeSectionHeader(lines[first - 1])) ingredientLines.unshift(lines[first - 1]);
-      stepLines = lines.slice(last + 1).filter(isStepText);
+      // The method is the prose after the ingredients start, outside ingredient
+      // blocks: a column of ingredients can be read after the method, so it is
+      // not simply "everything after the last block". Prose comes in stretches
+      // of consecutive lines; a lone prose line wedged among ingredients is a
+      // fragment of a neighbouring column, so stretches need two lines.
+      const inBlock = (i: number) => chosen.some((r) => i >= r.start && i <= r.end);
+      const stretches: string[][] = [];
+      lines.forEach((l, i) => {
+        const prose = i > first && !inBlock(i) && isStepText(l) && !isIngredient(content[i]);
+        if (!prose) stretches.push([]);
+        else if (stretches.length === 0) stretches.push([l]);
+        else stretches[stretches.length - 1].push(l);
+      });
+      // Two lines at least, and real prose: a stack of one-word fragments
+      // (a sliver of the facing page) is not a method
+      const method = stretches.filter((st) => st.length >= 2 && st.reduce((n, l) => n + realWords(l).length, 0) >= 8);
+      stepLines = (method.length > 0 ? method : stretches).flat();
       titleZoneEnd = first;
     } else {
       ingredientLines = [];
