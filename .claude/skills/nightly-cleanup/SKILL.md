@@ -10,7 +10,9 @@ nothing. Never merge.
 
 ## 1. Set up and survey
 ```bash
-git fetch origin main && git checkout -B claude/nightly-cleanup-$(date +%Y%m%d) origin/main
+# <branch>: the branch the session or routine prompt assigns you (cloud sessions may only
+# push there), otherwise claude/nightly-cleanup-$(date +%Y%m%d)
+git fetch origin main && git checkout -B <branch> origin/main
 npm run knip
 ```
 Also grep for `TODO|FIXME|HACK|deprecated|legacy` in `src/` and `api/`. Check open PRs labelled

@@ -47,7 +47,10 @@ Only the triage agent or a human changes a status. Entries are never deleted.
   designated `claude/<random>` branch. The agent has to pick one; it used the session branch.
 - **Suggested fix:** let the skill and routine prompt accept the session's designated branch
   (for example "use the session branch if one is assigned, otherwise claude/nightly-cleanup-YYYYMMDD").
-- **Status:** open
+- **Seen again:** 2026-11-16, friction-triage routine: the prompt names `claude/friction-triage-YYYYMMDD`
+  while the session is assigned a different `claude/<random>` branch.
+- **Status:** fixed in this PR (skills now prefer the assigned branch; the routine prompts live
+  outside the repo, so a human should align them)
 
 ### 2026-11-11: Subagent worktrees aren't gitignored, so `git add -A` commits them
 - **Who:** agent (build-ready, nightly)
