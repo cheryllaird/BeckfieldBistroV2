@@ -7,7 +7,9 @@ description: Weekly triage of docs/friction-log.md for Beckfield Bistro. Run by 
 
 You run unattended. Make at most one PR and never merge.
 
-1. `git fetch origin main && git checkout -B claude/friction-triage-$(date +%Y%m%d) origin/main`.
+1. `git fetch origin main && git checkout -B <branch> origin/main`, where `<branch>` is the
+   branch the session or routine prompt assigns you (cloud sessions may only push there), or
+   `claude/friction-triage-$(date +%Y%m%d)` if none is given.
 2. Read every `open` entry in `docs/friction-log.md`. Group duplicates; repeated friction is the
    priority.
 3. For each group, decide one:
