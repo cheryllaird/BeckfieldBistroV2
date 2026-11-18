@@ -47,8 +47,11 @@ as OCR text) — that would circumvent the filter.
 | Client wrapper | `src/lib/recipeExtraction.ts` | Resize image, attach auth token, POST to the API, surface errors |
 | Client UI | `src/pages/NewRecipe/index.tsx` | Capture/crop/URL entry, call the wrapper, populate the editable form |
 | API handler | `api/extract-recipe.ts` | Auth, key decryption, the full method ladders, analytics, response shaping |
-| OCR module | `api/_utils/ocr.ts` | Image preprocessing, Tesseract engine, **column reflow**, quality gate |
+| OCR module | `api/_utils/ocr.ts` | Image preprocessing, Tesseract engine, quality gate |
+| Column reflow | `api/_utils/columnReflow.ts` | Rebuilds reading order of side‑by‑side columns from word boxes |
+| Fraction recovery | `api/_utils/fractions.ts` | Finds misread fraction glyphs and decides what the re-read evidence adds up to |
 | Parsers | `api/_utils/recipeParsers.ts` | Deterministic ingredient/step parsing, `parseRecipeText`, JSON‑LD helpers' dependencies |
+| OCR line clean‑up | `api/_utils/ocrLines.ts` | Bullets, junk, nutrition boxes, unit misreads — line classification for `parseRecipeText` |
 | Crypto | `api/_utils/crypto.ts` | AES‑256‑GCM decrypt of the per‑user Gemini key |
 | Traineddata | `api/_tessdata/eng.traineddata.gz` | English Tesseract model, bundled into the function |
 | Function config | `vercel.json` | `maxDuration: 60` and `includeFiles` for the Tesseract runtime |
@@ -178,7 +181,7 @@ Behind the `OcrEngine` interface so a cloud OCR (e.g. Google Cloud Vision) can r
 Tesseract by adding one class and switching `getOcrEngine()` — callers never change.
 
 ```ts
-interface OcrResult { text: string; rawText: string; confidence: number; columnsReflowed: boolean; coldWorker?: boolean }
+interface OcrResult { text: string; rawText: string; confidence: number; columnsReflowed: boolean; fractionsRecovered?: number; coldWorker?: boolean }
 interface OcrEngine { readonly name: string; recognize(image: Buffer): Promise<OcrResult> }
 ```
 
@@ -193,20 +196,49 @@ interface OcrEngine { readonly name: string; recognize(image: Buffer): Promise<O
   for comparing variants in the offline eval; production passes none.
 - **`rawText`** — Tesseract's own text before column reflow. Production uses `text`;
   `rawText` lets the eval measure what the reflow adds.
-- **Column reflow — `reflowColumns` (the important part).** Tesseract merges
-  side‑by‑side columns (ingredients | method) into single lines, gluing ingredient
-  text to method text so the structuring step drops ingredients. The reflow rebuilds
-  reading order from **word bounding boxes**:
-  1. Detect wide inter‑word gaps; require enough of them clustered at a consistent x
-     (else it's single‑column → return `null`, pass through unchanged).
-  2. Fit the **method column's left edge** as a sloped line (least squares on gap
-     right‑edges) — the divider is the second column's start, which is stable even as
-     ingredient line lengths vary and the page tilts/curves in a hand‑held photo.
-  3. Classify each row by the vertical **two‑column band**: rows inside it are split at
-     the local edge (robust to OCR fusing an ingredient's last word with the method
-     word beside it); rows outside it (title/intro/note/footer) are kept whole.
-  4. Emit the left column top‑to‑bottom, then the right. `columnsReflowed` records
-     whether a reflow happened (also logged server‑side).
+- **Column reflow — `reflowColumns` in `api/_utils/columnReflow.ts` (the important
+  part).** Recipe pages set ingredients, method and side notes in two to four
+  side‑by‑side columns, and Tesseract often reads straight across them ("1 tbsp honey
+  (or brown rice syrup Place the soy sauce…"). No text parser can untangle that, so the
+  reflow rebuilds reading order from **word bounding boxes**:
+  1. Wide inter‑word gaps are gutter candidates.
+  2. Gutters are found as **density peaks** of where the next column starts — not by
+     chaining nearby candidates, which a mangled column full of wide gaps would merge
+     into one useless group. A gutter needs several rows, real text to its left (a
+     gap after a bullet glyph is not a gutter), and a band where its rows are close
+     together (gaps lining up by chance far apart do not make it live in between).
+     A gutter crossed by words on most rows of its band is rejected.
+  3. Each gutter is fitted as a sloped line (tilted photos). Lines are split where a
+     wide gap sits on a live gutter — step numbers may hang a little left of their
+     column — or, for columns set so tight that OCR fused them, at the first word
+     past the edge.
+  4. A narrow **sliver of the facing page** down the left edge ("bay", "ier", "tray")
+     is lifted off each line and emitted last, so it cannot glue onto ingredients.
+  5. Output: the heading block above the columns (title, subtitle, intro) in reading
+     order, then each column top to bottom, left to right, then full‑width footers.
+     A column that runs on below its neighbour stays in its column. No recurring
+     gutter → `null`, Tesseract's text passes through. `columnsReflowed` records
+     whether a reflow happened.
+- **Fraction recovery — `recoverFractions` (in `ocr.ts`, logic in `fractions.ts`).**
+  Tesseract almost never reads fraction glyphs on a photo: "1½" comes back as `1%`,
+  "½" as `¥`, `Ya` or a plain `2`, "¼" as `V4`, "⅓" as `5`. Its confidence does not
+  flag these (`1%` scores 96), so candidates are found by shape instead: an odd token
+  (`%`, `¥`, `V4`, `Ya`…) at the start of a line, after bullets, or after "of", or a
+  lone leading digit too wide to be a digit. Each glyph is cropped from the image
+  (between the whole‑number digit and the next word, then trimmed to the ink),
+  enlarged, and its top‑left and bottom‑right quarters are read as single digits.
+  `resolveFraction` accepts only a kitchen fraction (½ ⅓ ⅔ ¼ ¾ ⅛) read from the image,
+  ½ from a lone denominator of 2, or an unambiguous misread (`V4` → ¼) that the image
+  does not contradict. **Anything else leaves the OCR text unchanged** — `1%` is ½ or
+  ¼, so it is never guessed. Corrections go into `text`; `rawText` stays Tesseract's
+  own. The worker's page settings are restored after the pass. Adds well under a
+  second per photo.
+  The pass is **best effort and bounded**: at most 24 candidates and 3 s per page,
+  the page is decoded once, and any failure in it is logged (message only) and
+  skipped — the page read is kept. Only a failed settings restore fails the call, so
+  the half‑configured worker is dropped. The reflow likewise declines pages beyond
+  any real recipe (over 1,500 lines or 5,000 gap candidates) and keeps Tesseract's
+  text, so crafted input cannot make the gutter search expensive.
 - **Quality gate — `assessOcrQuality`.** All must hold: text ≥ **150** chars,
   confidence ≥ **60**, alpha ratio (`[A-Za-z]` / non‑whitespace) ≥ **0.55**, non‑empty
   lines ≥ **6**. Failing any one routes the photo back to `gemini-vision` (or `failed`).
@@ -235,9 +267,22 @@ JSON‑LD path.
   `HowToStep`/`HowToSection`/`ItemList` (or untyped) wrappers, stripping any HTML
   tags/entities embedded in step text.
 - `parseIsoDuration(iso)` — `PT15M` → "15 mins".
-- `parseRecipeText(ocrText)` — the OCR last‑resort structurer: rejoins hyphenation,
-  finds INGREDIENTS/METHOD headers (or bounds the contiguous amount‑led block when a
-  cookbook uses "For the …" sub‑headings), and groups steps.
+- `parseRecipeText(ocrText)` — the OCR last‑resort structurer. Lines are first cleaned
+  by `api/_utils/ocrLines.ts`: bullet glyphs Tesseract reads as `#`, `@`, `©`, `¢` are
+  stripped (and flag the line as an ingredient), a mid‑line bullet splits two fused
+  ingredient columns, junk lines, nutrition boxes and page numbers are dropped (after
+  servings and times are read), and unit misreads (`thsp`, `1tbsp`) are fixed. Then:
+  - INGREDIENTS/METHOD headers are used when present. Otherwise the ingredients are
+    **runs** of amount‑led or bulleted lines, with section headers and up to two
+    wrapped lines each; a stray single amount line cannot stretch the block.
+  - The method is the stretches of prose (two lines at least) after the ingredients
+    start, outside ingredient runs — a second ingredient column can follow the method
+    in reflowed text. Magazine numbering ("2 Add the…", or short with a cooking verb)
+    starts a step; unnumbered methods split into paragraphs where a line ends a
+    sentence well short of the column width, else into sentences.
+  - The title is the first capitals line above the ingredients (joined with its
+    wrapped line or a "with …" subtitle), skipping labels, pull‑quotes and lines
+    opening in lower case.
 
 JSON‑LD helpers live in `api/extract-recipe.ts`: `findJsonLdRecipe(html)` (scans
 `application/ld+json`, handles `@graph` and array `@type`) and `jsonLdToRecipe(ld,
@@ -438,13 +483,18 @@ layout tag, stage, edited vs unedited, and hand-checked vs full set.
 
 - **Silent OCR character errors.** Tesseract can be confidently wrong (`0/O`, `1/l`,
   `5/S`), corrupting quantities without failing the gate. The most insidious accuracy
-  risk. A per‑word‑confidence flag or an `originalText`‑appears‑in‑OCR check would catch
-  it (not yet implemented).
+  risk. Fraction glyphs are re‑read from the image (§6), but only when the evidence is
+  clear: a `%` whose glyph will not read stays wrong, and a fraction misread as an
+  ordinary‑width digit (`4 tsp` for "½ tsp") is not detected at all.
 - **Reflow false positive.** A tabular ingredient list (amounts aligned in one column,
   names in another) can look like two columns and get split, divorcing quantities from
   names.
 - **Reflow miss (`columnsReflowed=false` when it should be true).** Heavy page curvature,
-  columns closer than the min‑gutter, tilt beyond ~11°, or 3+ columns.
+  columns closer than the min‑gutter (~2.5% of page width) on most rows, or tilt beyond
+  ~11°.
+- **Parser heuristics are tuned on few photos.** The OCR fallback parser and reflow were
+  tuned against the owner's 15‑photo corpus (§11.1) and guarded by invented test cases.
+  Add a synthetic test for any new layout rather than tuning to one photo.
 - **Gate too strict / lenient.** Number‑dense recipes can dip below the 0.55 alpha ratio
   (false reject → routed to vision); non‑recipe pages that are merely readable pass and
   get structured into nonsense.
@@ -465,7 +515,7 @@ See git history / the PR discussion for the reasoning behind each threshold.
 - **Add a new method / metric** → call `recordExtractionMethod('<name>')` before the
   response; it auto‑creates the Firestore counter. Set `extractionMethod` on the payload.
 - **Tune OCR thresholds** → constants at the top of `assessOcrQuality` and the reflow
-  detection in `reflowColumns` (`api/_utils/ocr.ts`). Re‑run `test-ocr.ts` against all
+  detection in `reflowColumns` (`api/_utils/columnReflow.ts`). Re‑run `test-ocr.ts` against all
   fixtures after any change.
 
 ---
