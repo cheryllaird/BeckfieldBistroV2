@@ -4,6 +4,7 @@ import { WifiOff, Wifi } from 'lucide-react';
 import { Header } from './Header';
 import { BottomNav } from './BottomNav';
 import { BistroInviteBanner } from '../BistroInviteBanner';
+import { SupportPanelModal } from '../SupportPanelModal';
 import { useOnlineStatus } from '../../hooks/useOnlineStatus';
 
 function ScrollToTop() {
@@ -45,6 +46,7 @@ export function AppLayout() {
         <Outlet />
       </main>
       <BottomNav />
+      <SupportPanelModal />
     </div>
   );
 }

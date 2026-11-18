@@ -10,7 +10,9 @@ If nothing is stale, stop without opening a PR. A quiet night is a good outcome.
 
 ## 1. Find what changed
 ```bash
-git fetch origin main && git checkout -B claude/nightly-docs-$(date +%Y%m%d) origin/main
+# <branch>: the branch the session or routine prompt assigns you (cloud sessions may only
+# push there), otherwise claude/nightly-docs-$(date +%Y%m%d)
+git fetch origin main && git checkout -B <branch> origin/main
 git log --since="26 hours ago" --no-merges --format='%h %s' origin/main
 git diff --stat $(git rev-list -1 --before="26 hours ago" origin/main) origin/main
 ```

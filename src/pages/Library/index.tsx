@@ -5,6 +5,7 @@ import { useStore } from '../../store';
 import { RecipeCard } from './RecipeCard';
 import { IncomingShareCard } from './IncomingShareCard';
 import { BulkShareModal } from './BulkShareModal';
+import { TipThankYouCard } from './TipThankYouCard';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
 import { ModalPortal } from '../../components/ui/ModalPortal';
@@ -101,6 +102,8 @@ export function LibraryPage() {
           Add recipe
         </Button>
       </div>
+
+      <TipThankYouCard />
 
       {/* Search bar */}
       <div className="relative">
