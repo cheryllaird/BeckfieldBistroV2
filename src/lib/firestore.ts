@@ -67,6 +67,24 @@ function logFirestoreError(err: unknown): void {
   recoverIfSdkCrashed(err);
 }
 
+/**
+ * Runs a fire-and-forget write and routes *every* failure to logFirestoreError.
+ *
+ * `.catch()` alone is not enough: once the SDK's async queue has failed (see
+ * recoverIfSdkCrashed), setDoc/deleteDoc/commit throw synchronously
+ * ("INTERNAL ASSERTION FAILED … (ID: 47125)") instead of rejecting. That throw
+ * used to escape into the store action and the calling component — the
+ * Plan-a-meal modal stayed open, a second tap added a duplicate, and the crash
+ * recovery never fired, so nothing was saved until a manual restart.
+ */
+function fireAndForget(write: () => Promise<unknown>): void {
+  try {
+    write().catch(logFirestoreError);
+  } catch (err) {
+    logFirestoreError(err);
+  }
+}
+
 // How long an enableNetwork() call suppresses the next one. See
 // ensureFirestoreOnline for why throttling matters.
 const ENABLE_NETWORK_THROTTLE_MS = 10_000;
@@ -344,19 +362,19 @@ export function saveRecipe(bistroId: string, recipe: Recipe): Promise<void> {
 
 export function deleteRecipeDoc(bistroId: string, id: string): void {
   ensureFirestoreOnline();
-  deleteDoc(doc(recipesCol(bistroId), id)).catch(logFirestoreError);
+  fireAndForget(() => deleteDoc(doc(recipesCol(bistroId), id)));
 }
 
 // ── meal entries ──────────────────────────────────────────────────────────────
 
 export function saveMealEntry(bistroId: string, entry: MealEntry): void {
   ensureFirestoreOnline();
-  setDoc(doc(mealEntriesCol(bistroId), entry.id), stripUndefined(entry)).catch(logFirestoreError);
+  fireAndForget(() => setDoc(doc(mealEntriesCol(bistroId), entry.id), stripUndefined(entry)));
 }
 
 export function deleteMealEntryDoc(bistroId: string, id: string): void {
   ensureFirestoreOnline();
-  deleteDoc(doc(mealEntriesCol(bistroId), id)).catch(logFirestoreError);
+  fireAndForget(() => deleteDoc(doc(mealEntriesCol(bistroId), id)));
 }
 
 // ── shopping items ────────────────────────────────────────────────────────────
@@ -391,26 +409,26 @@ export function patchShoppingItems(bistroId: string, patches: ShoppingItemPatch[
       batch.set(doc(col, id), data, { merge: true });
       wrote = true;
     }
-    if (wrote) batch.commit().catch(logFirestoreError);
+    if (wrote) fireAndForget(() => batch.commit());
   }
 }
 
 /** Hard delete — only used to purge tombstones past their retention window. */
 export function deleteShoppingItemDoc(bistroId: string, id: string): void {
   ensureFirestoreOnline();
-  deleteDoc(doc(shoppingItemsCol(bistroId), id)).catch(logFirestoreError);
+  fireAndForget(() => deleteDoc(doc(shoppingItemsCol(bistroId), id)));
 }
 
 // ── pantry items ──────────────────────────────────────────────────────────────
 
 export function savePantryItem(bistroId: string, item: PantryItem): void {
   ensureFirestoreOnline();
-  setDoc(doc(pantryItemsCol(bistroId), item.id), stripUndefined(item)).catch(logFirestoreError);
+  fireAndForget(() => setDoc(doc(pantryItemsCol(bistroId), item.id), stripUndefined(item)));
 }
 
 export function deletePantryItemDoc(bistroId: string, id: string): void {
   ensureFirestoreOnline();
-  deleteDoc(doc(pantryItemsCol(bistroId), id)).catch(logFirestoreError);
+  fireAndForget(() => deleteDoc(doc(pantryItemsCol(bistroId), id)));
 }
 
 export function savePantryItems(bistroId: string, items: PantryItem[]): void {
@@ -420,7 +438,7 @@ export function savePantryItems(bistroId: string, items: PantryItem[]): void {
   items.forEach((item, index) =>
     batch.set(doc(col, item.id), stripUndefined({ ...item, order: index })),
   );
-  batch.commit().catch(logFirestoreError);
+  fireAndForget(() => batch.commit());
 }
 
 // ── category overrides ────────────────────────────────────────────────────────
@@ -435,41 +453,44 @@ const categoryOverrideDoc = (bistroId: string, ingredientKey: string) =>
 
 export function saveCategoryOverride(bistroId: string, override: CategoryOverride): void {
   ensureFirestoreOnline();
-  setDoc(categoryOverrideDoc(bistroId, override.ingredientKey), override).catch(logFirestoreError);
+  fireAndForget(() => setDoc(categoryOverrideDoc(bistroId, override.ingredientKey), override));
 }
 
 export function deleteCategoryOverride(bistroId: string, ingredientKey: string): void {
   ensureFirestoreOnline();
-  deleteDoc(categoryOverrideDoc(bistroId, ingredientKey)).catch(logFirestoreError);
+  fireAndForget(() => deleteDoc(categoryOverrideDoc(bistroId, ingredientKey)));
 }
 
 export function logCategoryOverride(bistroId: string, entry: Omit<CategoryOverrideLog, 'id'>): void {
   ensureFirestoreOnline();
-  addDoc(categoryOverrideLogsCol(bistroId), stripUndefined(entry)).catch(logFirestoreError);
+  fireAndForget(() => addDoc(categoryOverrideLogsCol(bistroId), stripUndefined(entry)));
 }
 
 // ── sources ───────────────────────────────────────────────────────────────────
 
 export function saveKnownSources(bistroId: string, sources: string[]): void {
   ensureFirestoreOnline();
-  setDoc(bistroProfileDoc(bistroId), { knownSources: sources }, { merge: true }).catch(logFirestoreError);
+  fireAndForget(() => setDoc(bistroProfileDoc(bistroId), { knownSources: sources }, { merge: true }));
 }
 
 /** Records that the user accepted this version of the Terms, and when. */
 export function saveTermsAcceptance(uid: string, version: string): void {
   ensureFirestoreOnline();
-  setDoc(
-    userProfileDoc(uid),
-    { termsAcceptedVersion: version, termsAcceptedAt: new Date().toISOString() },
-    { merge: true },
-  ).catch(logFirestoreError);
+  fireAndForget(() =>
+    setDoc(
+      userProfileDoc(uid),
+      { termsAcceptedVersion: version, termsAcceptedAt: new Date().toISOString() },
+      { merge: true },
+    ),
+  );
 }
 
 /** Personal preference: the bistro to open on launch, or null for the last one open. */
 export function saveDefaultBistro(uid: string, bistroId: string | null): void {
   ensureFirestoreOnline();
-  setDoc(userProfileDoc(uid), { defaultBistroId: bistroId ?? deleteField() }, { merge: true })
-    .catch(logFirestoreError);
+  fireAndForget(() =>
+    setDoc(userProfileDoc(uid), { defaultBistroId: bistroId ?? deleteField() }, { merge: true }),
+  );
 }
 
 // ── AI API key ────────────────────────────────────────────────────────────────
