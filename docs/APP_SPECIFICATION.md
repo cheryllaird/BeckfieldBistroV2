@@ -487,6 +487,9 @@ appears on another without manual refresh. The functional guarantees:
   too, so the library is complete offline.
 - Changes made offline are queued locally and reconciled when connectivity returns
   (per §10); the app signals offline and "back online — syncing" states.
+- If the sync engine crashes, the app reloads itself to recover. Meal-plan and store
+  cupboard changes made in the moment before the reload are kept on the device and
+  sent once it has restarted, so nothing added or removed is lost or brought back.
 - **Only** AI extraction (URL/photo), sharing, and managing bistro membership
   (inviting, joining, removing, leaving) require a connection; those are clearly
   gated when offline, while manual recipe entry stays available.
