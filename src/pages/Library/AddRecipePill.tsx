@@ -6,10 +6,10 @@ import { ModalPortal } from '../../components/ui/ModalPortal';
  * Portalled to <body> because <main> keeps a transform from its entrance
  * animation, which would otherwise break `position: fixed`.
  */
-export function AddRecipePill({ onClick, hidden = false }: { onClick: () => void; hidden?: boolean }) {
+export function AddRecipePill({ onClick }: { onClick: () => void }) {
   return (
     <ModalPortal>
-      <div className={`${hidden ? 'invisible ' : ''}fixed inset-x-0 bottom-[calc(4.5rem+env(safe-area-inset-bottom))] z-40 flex justify-center pointer-events-none`}>
+      <div className="fixed inset-x-0 bottom-[calc(4.5rem+env(safe-area-inset-bottom))] z-40 flex justify-center pointer-events-none">
         <button
           type="button"
           onClick={onClick}

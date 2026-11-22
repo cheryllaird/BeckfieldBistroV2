@@ -1,11 +1,11 @@
 import { useEffect, useRef, useState } from 'react';
 
 /** Scrolled less than this from the top: always shown. */
-export const SHOW_NEAR_TOP_PX = 120;
+const SHOW_NEAR_TOP_PX = 120;
 /** Downward movement needed (in one go) before hiding, so small jitters don't flicker it. */
-export const HIDE_AFTER_PX = 48;
+const HIDE_AFTER_PX = 48;
 /** Pages that can scroll less than this never hide anything. */
-export const MIN_SCROLLABLE_PX = 200;
+const MIN_SCROLLABLE_PX = 200;
 
 /**
  * Returns true while a bar should be hidden: after the user scrolls down, and false again

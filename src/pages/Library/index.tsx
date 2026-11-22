@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Plus } from 'lucide-react';
 import { useStore } from '../../store';
 import { RecipeCard } from './RecipeCard';
@@ -10,9 +11,9 @@ import { useLibraryRecipes } from './useLibraryRecipes';
 import { LibraryToolbar, type LibraryView } from './LibraryToolbar';
 import { SharedInbox } from './SharedInbox';
 import { AddRecipePill } from './AddRecipePill';
-import { AddRecipeSheet } from './AddRecipeSheet';
 
 export function LibraryPage() {
+  const navigate = useNavigate();
   const recipes = useStore((s) => s.recipes);
   const shareCount = useStore((s) => s.incomingShares.length);
   const [query, setQuery] = useState('');
@@ -21,8 +22,6 @@ export function LibraryPage() {
   const [view, setView] = useState<LibraryView>('all');
   // Saving or dismissing the last share (or it expiring) returns the page to All.
   if (shareCount === 0 && view !== 'all') setView('all');
-
-  const [addSheetOpen, setAddSheetOpen] = useState(false);
 
   const [selectMode, setSelectMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -81,7 +80,6 @@ export function LibraryPage() {
   };
 
   const selectedRecipes = recipes.filter((r) => selectedIds.has(r.id));
-  // Stays mounted (but hidden) under the sheet so focus can return to it when the sheet closes.
   const showPill = !selectMode && !bulkShareOpen;
 
   return (
@@ -137,7 +135,7 @@ export function LibraryPage() {
                 </p>
               </div>
               {!query && (
-                <Button onClick={() => setAddSheetOpen(true)}>
+                <Button onClick={() => navigate('/recipes/new')}>
                   <Plus size={15} />
                   Add your first recipe
                 </Button>
@@ -147,8 +145,7 @@ export function LibraryPage() {
         </>
       )}
 
-      {showPill && <AddRecipePill hidden={addSheetOpen} onClick={() => setAddSheetOpen(true)} />}
-      {addSheetOpen && <AddRecipeSheet onClose={() => setAddSheetOpen(false)} />}
+      {showPill && <AddRecipePill onClick={() => navigate('/recipes/new')} />}
 
       {selectMode && (
         <BulkSelectBar

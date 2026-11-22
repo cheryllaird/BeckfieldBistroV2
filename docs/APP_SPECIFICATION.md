@@ -176,10 +176,8 @@ Extraction runs on **each user's own Google Gemini API key**:
   added: URL, photo or manual; the extraction route; which of title, ingredients and steps were
   edited before the first save). Meal entries store `addedFrom` (plan, recipe detail or library).
   Neither is shown or shared; they feed the usage report (ADR 0017).
-- **Adding a recipe:** an **Add recipe** button floats centred above the bottom nav and opens a
-  sheet with three ways in: **Photo of a recipe**, **Paste a link** and **Type it in**. Each opens
-  New Recipe on that mode. Photo and Link need a connection, so they're disabled offline; New
-  Recipe opened on either of them while offline starts on Manual instead.
+- **Adding a recipe:** an **Add recipe** button floats centred above the bottom nav and opens
+  New Recipe, where the user picks URL, Photo or Manual.
 - **Search:** the library is filterable live by **title, source, or any ingredient
   name** — so "what can I make with aubergine?" is answerable. Search and sort sit in a bar at
   the top of the library that slides away while scrolling down and comes back on any scroll up

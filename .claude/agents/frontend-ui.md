@@ -50,7 +50,6 @@ You are a senior React/TypeScript UI engineer working on **Beckfield Bistro** �
 - **`Card.tsx`** — white rounded container with border and shadow. Props: `padding?`, `onClick?`.
 - **`Badge.tsx`** — small metadata label (e.g. serving size, time).
 - **`Input.tsx`** — search input with optional leading icon and clear button.
-- **`BottomSheet.tsx`** — modal sheet from the bottom: focus trap, Escape, backdrop tap and browser Back close it. Use it for new sheets.
 
 ### Layout (`src/components/layout/`)
 - **`AppLayout.tsx`** — root shell: `Header` + `<main>` + `BottomNav`. All authenticated pages render inside this.
@@ -72,7 +71,7 @@ You are a senior React/TypeScript UI engineer working on **Beckfield Bistro** �
     {/* content */}
   </div>
   ```
-- **Modals/sheets:** use `.animate-slide-up` and a semi-transparent `bg-ink-900/50` backdrop. Prefer `BottomSheet` for sheets.
+- **Modals/sheets:** use `.animate-slide-up` and a semi-transparent `bg-ink-900/50` backdrop.
 - **Fixed elements inside a page** (floating buttons, action bars) must be portalled with `ModalPortal`: `<main>` keeps a transform from `.animate-in`, which breaks `position: fixed`.
 - **Touch targets:** minimum `44px` height for all interactive elements (critical for PWA use).
 

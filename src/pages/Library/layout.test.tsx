@@ -1,18 +1,14 @@
-import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, fireEvent, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { LibraryPage } from './index';
 import { useStore } from '../../store';
-import { useOnlineStatus } from '../../hooks/useOnlineStatus';
 import { makeRecipe } from '../../test/factories';
 import type { SharedRecipe } from '../../types';
 
 vi.mock('../../lib/firestore');
 vi.mock('../../lib/idbStorage');
-vi.mock('../../hooks/useOnlineStatus', () => ({
-  useOnlineStatus: vi.fn(() => ({ isOnline: true, isSyncing: false })),
-}));
 
 const initialState = useStore.getState();
 
@@ -39,7 +35,6 @@ function makeShare(id: string, title: string): SharedRecipe {
 }
 
 beforeEach(() => {
-  vi.mocked(useOnlineStatus).mockReturnValue({ isOnline: true, isSyncing: false });
   useStore.setState(initialState, true);
   useStore.setState({
     recipes: [makeRecipe({ id: 'pasta', title: 'Pasta bake' }), makeRecipe({ id: 'dal', title: 'Dal' })],
@@ -65,42 +60,12 @@ describe('LibraryPage — layout', () => {
   });
 });
 
-describe('LibraryPage — Add recipe pill and sheet', () => {
-  it.each([
-    ['Photo of a recipe', 'upload'],
-    ['Paste a link', 'url'],
-    ['Type it in', 'manual'],
-  ])('"%s" opens New Recipe on mode %s', async (label, mode) => {
+describe('LibraryPage — Add recipe pill', () => {
+  it('goes straight to New Recipe', async () => {
     const user = userEvent.setup();
     renderPage();
     await user.click(screen.getByRole('button', { name: 'Add recipe' }));
-    const sheet = screen.getByRole('dialog', { name: 'Add a recipe' });
-    await user.click(within(sheet).getByRole('button', { name: new RegExp(label) }));
-    expect(screen.getByText(`At /recipes/new?mode=${mode}`)).toBeInTheDocument();
-  });
-
-  it('disables Photo and Link offline but keeps Type it in', async () => {
-    vi.mocked(useOnlineStatus).mockReturnValue({ isOnline: false, isSyncing: false });
-    const user = userEvent.setup();
-    renderPage();
-    await user.click(screen.getByRole('button', { name: 'Add recipe' }));
-    const sheet = screen.getByRole('dialog');
-    expect(within(sheet).getByRole('button', { name: /Photo of a recipe/ })).toBeDisabled();
-    expect(within(sheet).getByRole('button', { name: /Paste a link/ })).toBeDisabled();
-    expect(within(sheet).getAllByText('Needs a connection')).toHaveLength(2);
-    expect(within(sheet).getByRole('button', { name: /Type it in/ })).toBeEnabled();
-  });
-
-  it('hides the pill while the sheet is open and returns focus to it on close', async () => {
-    const user = userEvent.setup();
-    renderPage();
-    const pill = screen.getByRole('button', { name: 'Add recipe' });
-    await user.click(pill);
-    expect(pill.parentElement).toHaveClass('invisible');
-    await user.keyboard('{Escape}');
-    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
-    expect(pill.parentElement).not.toHaveClass('invisible');
-    expect(pill).toHaveFocus();
+    expect(screen.getByText('At /recipes/new')).toBeInTheDocument();
   });
 
   it('hides the pill in select mode', async () => {
@@ -111,12 +76,12 @@ describe('LibraryPage — Add recipe pill and sheet', () => {
     expect(screen.queryByRole('button', { name: 'Add recipe' })).not.toBeInTheDocument();
   });
 
-  it('opens the sheet from the empty library', async () => {
+  it('sends the empty library to New Recipe too', async () => {
     useStore.setState({ recipes: [] });
     const user = userEvent.setup();
     renderPage();
     await user.click(screen.getByRole('button', { name: 'Add your first recipe' }));
-    expect(screen.getByRole('dialog', { name: 'Add a recipe' })).toBeInTheDocument();
+    expect(screen.getByText('At /recipes/new')).toBeInTheDocument();
   });
 });
 
