@@ -15,6 +15,12 @@ import type { Recipe, MealEntry, ShoppingItem, PantryItem, SharedRecipe, Categor
 import type { ShoppingItemPatch } from './shoppingSync';
 import type { User } from 'firebase/auth';
 import { authedFetch } from './apiClient';
+import {
+  forgetUnsentWrite,
+  readUnsentWrites,
+  recordUnsentWrite,
+  type UnsentCollection,
+} from './unsentWrites';
 
 // ── helpers ──────────────────────────────────────────────────────────────────
 
@@ -65,6 +71,45 @@ export function recoverIfSdkCrashed(err: unknown): void {
 function logFirestoreError(err: unknown): void {
   console.error(err);
   recoverIfSdkCrashed(err);
+}
+
+/**
+ * Runs a fire-and-forget write and routes *every* failure to logFirestoreError.
+ *
+ * `.catch()` alone is not enough: once the SDK's async queue has failed (see
+ * recoverIfSdkCrashed), setDoc/deleteDoc/commit throw synchronously
+ * ("INTERNAL ASSERTION FAILED … (ID: 47125)") instead of rejecting. That throw
+ * used to escape into the store action and the calling component — the
+ * Plan-a-meal modal stayed open, a second tap added a duplicate, and the crash
+ * recovery never fired, so nothing was saved until a manual restart.
+ */
+function fireAndForget(write: () => Promise<unknown>, onUnsent?: () => void): void {
+  try {
+    write().catch(logFirestoreError);
+  } catch (err) {
+    // A synchronous throw means the write never reached the offline queue,
+    // so it won't replay on its own after the recovery reload.
+    onUnsent?.();
+    logFirestoreError(err);
+  }
+}
+
+/** Records a meal/pantry write the SDK refused, for replayUnsentWrites. */
+function keepUnsent(
+  bistroId: string,
+  collection: UnsentCollection,
+  op: { kind: 'set'; data: MealEntry | PantryItem } | { kind: 'delete'; id: string },
+): () => void {
+  return () => {
+    const uid = auth?.currentUser?.uid;
+    if (!uid) return;
+    const id = op.kind === 'set' ? op.data.id : op.id;
+    recordUnsentWrite(
+      op.kind === 'set'
+        ? { uid, bistroId, collection, id, kind: 'set', data: op.data }
+        : { uid, bistroId, collection, id, kind: 'delete' },
+    );
+  };
 }
 
 // How long an enableNetwork() call suppresses the next one. See
@@ -344,19 +389,25 @@ export function saveRecipe(bistroId: string, recipe: Recipe): Promise<void> {
 
 export function deleteRecipeDoc(bistroId: string, id: string): void {
   ensureFirestoreOnline();
-  deleteDoc(doc(recipesCol(bistroId), id)).catch(logFirestoreError);
+  fireAndForget(() => deleteDoc(doc(recipesCol(bistroId), id)));
 }
 
 // ── meal entries ──────────────────────────────────────────────────────────────
 
 export function saveMealEntry(bistroId: string, entry: MealEntry): void {
   ensureFirestoreOnline();
-  setDoc(doc(mealEntriesCol(bistroId), entry.id), stripUndefined(entry)).catch(logFirestoreError);
+  fireAndForget(
+    () => setDoc(doc(mealEntriesCol(bistroId), entry.id), stripUndefined(entry)),
+    keepUnsent(bistroId, 'mealEntries', { kind: 'set', data: entry }),
+  );
 }
 
 export function deleteMealEntryDoc(bistroId: string, id: string): void {
   ensureFirestoreOnline();
-  deleteDoc(doc(mealEntriesCol(bistroId), id)).catch(logFirestoreError);
+  fireAndForget(
+    () => deleteDoc(doc(mealEntriesCol(bistroId), id)),
+    keepUnsent(bistroId, 'mealEntries', { kind: 'delete', id }),
+  );
 }
 
 // ── shopping items ────────────────────────────────────────────────────────────
@@ -391,36 +442,78 @@ export function patchShoppingItems(bistroId: string, patches: ShoppingItemPatch[
       batch.set(doc(col, id), data, { merge: true });
       wrote = true;
     }
-    if (wrote) batch.commit().catch(logFirestoreError);
+    if (wrote) fireAndForget(() => batch.commit());
   }
 }
 
 /** Hard delete — only used to purge tombstones past their retention window. */
 export function deleteShoppingItemDoc(bistroId: string, id: string): void {
   ensureFirestoreOnline();
-  deleteDoc(doc(shoppingItemsCol(bistroId), id)).catch(logFirestoreError);
+  fireAndForget(() => deleteDoc(doc(shoppingItemsCol(bistroId), id)));
 }
 
 // ── pantry items ──────────────────────────────────────────────────────────────
 
 export function savePantryItem(bistroId: string, item: PantryItem): void {
   ensureFirestoreOnline();
-  setDoc(doc(pantryItemsCol(bistroId), item.id), stripUndefined(item)).catch(logFirestoreError);
+  fireAndForget(
+    () => setDoc(doc(pantryItemsCol(bistroId), item.id), stripUndefined(item)),
+    keepUnsent(bistroId, 'pantryItems', { kind: 'set', data: item }),
+  );
 }
 
 export function deletePantryItemDoc(bistroId: string, id: string): void {
   ensureFirestoreOnline();
-  deleteDoc(doc(pantryItemsCol(bistroId), id)).catch(logFirestoreError);
+  fireAndForget(
+    () => deleteDoc(doc(pantryItemsCol(bistroId), id)),
+    keepUnsent(bistroId, 'pantryItems', { kind: 'delete', id }),
+  );
 }
 
 export function savePantryItems(bistroId: string, items: PantryItem[]): void {
   ensureFirestoreOnline();
   const col = pantryItemsCol(bistroId);
   const batch = writeBatch(db!);
-  items.forEach((item, index) =>
-    batch.set(doc(col, item.id), stripUndefined({ ...item, order: index })),
+  const ordered = items.map((item, index) => ({ ...item, order: index }));
+  ordered.forEach((item) => batch.set(doc(col, item.id), stripUndefined(item)));
+  fireAndForget(
+    () => batch.commit(),
+    () => ordered.forEach((item) => keepUnsent(bistroId, 'pantryItems', { kind: 'set', data: item })()),
   );
-  batch.commit().catch(logFirestoreError);
+}
+
+/**
+ * Replays this user's writes to `bistroId` that the SDK refused before the
+ * last crash-recovery reload (see unsentWrites.ts). Call before attaching the
+ * bistro's listeners, so the first snapshot already includes the replayed
+ * writes as pending and the store's reconcile keeps them.
+ *
+ * A record is forgotten once its write is acknowledged (or rejected by the
+ * server, e.g. access removed — retrying could never succeed). If the app
+ * reloads before that, it is replayed again: the same idempotent write.
+ */
+export function replayUnsentWrites(bistroId: string, uid: string): void {
+  if (!db) return;
+  const pending = readUnsentWrites().filter((r) => r.uid === uid && r.bistroId === bistroId);
+  if (pending.length === 0) return;
+  ensureFirestoreOnline();
+  for (const record of pending) {
+    const ref = doc(
+      record.collection === 'mealEntries' ? mealEntriesCol(bistroId) : pantryItemsCol(bistroId),
+      record.id,
+    );
+    const forget = () => forgetUnsentWrite(record);
+    try {
+      const write = record.kind === 'set' ? setDoc(ref, stripUndefined(record.data)) : deleteDoc(ref);
+      write.then(forget, (err: unknown) => {
+        forget();
+        logFirestoreError(err);
+      });
+    } catch (err) {
+      // Still crashed: keep the record for the next recovery reload.
+      logFirestoreError(err);
+    }
+  }
 }
 
 // ── category overrides ────────────────────────────────────────────────────────
@@ -435,41 +528,44 @@ const categoryOverrideDoc = (bistroId: string, ingredientKey: string) =>
 
 export function saveCategoryOverride(bistroId: string, override: CategoryOverride): void {
   ensureFirestoreOnline();
-  setDoc(categoryOverrideDoc(bistroId, override.ingredientKey), override).catch(logFirestoreError);
+  fireAndForget(() => setDoc(categoryOverrideDoc(bistroId, override.ingredientKey), override));
 }
 
 export function deleteCategoryOverride(bistroId: string, ingredientKey: string): void {
   ensureFirestoreOnline();
-  deleteDoc(categoryOverrideDoc(bistroId, ingredientKey)).catch(logFirestoreError);
+  fireAndForget(() => deleteDoc(categoryOverrideDoc(bistroId, ingredientKey)));
 }
 
 export function logCategoryOverride(bistroId: string, entry: Omit<CategoryOverrideLog, 'id'>): void {
   ensureFirestoreOnline();
-  addDoc(categoryOverrideLogsCol(bistroId), stripUndefined(entry)).catch(logFirestoreError);
+  fireAndForget(() => addDoc(categoryOverrideLogsCol(bistroId), stripUndefined(entry)));
 }
 
 // ── sources ───────────────────────────────────────────────────────────────────
 
 export function saveKnownSources(bistroId: string, sources: string[]): void {
   ensureFirestoreOnline();
-  setDoc(bistroProfileDoc(bistroId), { knownSources: sources }, { merge: true }).catch(logFirestoreError);
+  fireAndForget(() => setDoc(bistroProfileDoc(bistroId), { knownSources: sources }, { merge: true }));
 }
 
 /** Records that the user accepted this version of the Terms, and when. */
 export function saveTermsAcceptance(uid: string, version: string): void {
   ensureFirestoreOnline();
-  setDoc(
-    userProfileDoc(uid),
-    { termsAcceptedVersion: version, termsAcceptedAt: new Date().toISOString() },
-    { merge: true },
-  ).catch(logFirestoreError);
+  fireAndForget(() =>
+    setDoc(
+      userProfileDoc(uid),
+      { termsAcceptedVersion: version, termsAcceptedAt: new Date().toISOString() },
+      { merge: true },
+    ),
+  );
 }
 
 /** Personal preference: the bistro to open on launch, or null for the last one open. */
 export function saveDefaultBistro(uid: string, bistroId: string | null): void {
   ensureFirestoreOnline();
-  setDoc(userProfileDoc(uid), { defaultBistroId: bistroId ?? deleteField() }, { merge: true })
-    .catch(logFirestoreError);
+  fireAndForget(() =>
+    setDoc(userProfileDoc(uid), { defaultBistroId: bistroId ?? deleteField() }, { merge: true }),
+  );
 }
 
 // ── AI API key ────────────────────────────────────────────────────────────────

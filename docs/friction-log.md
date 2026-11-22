@@ -35,6 +35,26 @@ Only the triage agent or a human changes a status. Entries are never deleted.
 - **Task:** diagnose "Could not fetch the recipe page" on a supermarket recipe link (#244)
 - **Friction:** URL fetch failures in `api/extract-recipe.ts` returned before `finish()`, so they never reached `analytics/extractionStats`. The only evidence was Vercel runtime logs, which keep 1 hour on the Hobby plan: `get_runtime_logs` with `since: 6h`/`24h` fails with "does not retain runtime logs for the requested time range", and the evidence would have been gone a little later. The URL path also had no handler tests at all (only the photo path), and reproducing the fetch needed a new cloud environment allowing the site's host. The missing analytics and tests are fixed in this PR.
 - **Suggested fix:** note the 1-hour log retention (use `since` ≤ 50m) in `docs/recipe-extraction.md` §11 "Testing & debugging", and have friction triage confirm every terminal branch now has a test.
+### 2026-11-22: No way to see a page without a signed-in Firebase session
+- **Status:** open
+- **Who:** agent (ship-feature, issue #240)
+- **Task:** checking the Library redesign at phone width (#240)
+- **Friction:** every page sits behind Firebase sign-in, so the app can't be run here to look at a UI change. I built a throwaway Vite entry that seeds the store and renders `AppLayout` + the page. Its first try rendered without Tailwind because Vite's root was the harness folder; serving it from the repo root fixed that. About 15 minutes, and the next UI task will redo it.
+- **Suggested fix:** commit a dev-only preview entry (e.g. `preview.html` + `src/dev/preview.tsx`, excluded from the build) that renders a chosen page with factory data, and mention it in the `run` notes in AGENTS.md.
+
+### 2026-11-22: frontend-ui guide said the Header hides on scroll
+- **Status:** fixed in this PR (#240)
+- **Who:** agent (ship-feature, issue #240)
+- **Task:** building a toolbar that hides on scroll (#240)
+- **Friction:** `.claude/agents/frontend-ui.md` said `Header` hides on scroll-down and reappears on scroll-up. It doesn't, and there was no hook for it, so I went looking for code to reuse that never existed.
+- **Suggested fix:** corrected the guide and pointed it to the new `useHideOnScroll` hook.
+
+### 2026-11-19: A `status:ready` issue that depends on an unmerged PR is re-checked every night
+- **Status:** open
+- **Who:** agent (build-ready nightly routine)
+- **Task:** nightly build; #212 skipped again (also on 2026-11-05) because it builds on #211's `shelfOf`, which is still only in open PR #220
+- **Friction:** `build-ready` has no rule for ready issues whose dependency hasn't merged, so each run re-reads the issue, re-checks `main` and decides again whether to skip or comment. It also takes one of the 3 nightly slots in the agent's attention while nothing can be built.
+- **Suggested fix:** add a line to `.claude/skills/build-ready/SKILL.md`: "If the issue names a dependency that isn't on `main`, skip it silently (comment once, not every night)"; or keep such issues at `status:todo` until the dependency merges.
 
 ### 2026-11-14: OCR eval re-runs Tesseract on every change, so tuning reflow/parser is slow
 - **Status:** open
@@ -158,6 +178,8 @@ Only the triage agent or a human changes a status. Entries are never deleted.
 - **Seen again:** 2026-11-01 and 2026-11-02, same items still reported by knip. 2026-11-02: also dropped the unused `StageName` export (`api/_utils/extractionTiming.ts`). 2026-11-13: same items still reported.
 - **Seen again:** 2026-11-11, same items still reported by knip; also dropped the unused `SLOW_AFTER_MS` export (`src/pages/NewRecipe/ExtractionProgress.tsx`).
 - **Seen again:** 2026-11-16, same items still reported. Added the root `test-*.ts` smoke scripts as knip entries, so they no longer show as unused files; the devDependency and `initFirebaseAdmin` remain for a human.
+- **Seen again:** 2026-11-21, same two items still reported by knip; nothing else left in its report. Removed the unused Vite template images in `src/assets/` instead (knip doesn't scan images).
+- **Seen again:** 2026-11-22, same two items still reported, nothing else in knip's report. Split `ShopItem`/`MealSourcesModal` out of `src/pages/ShoppingList/index.tsx` instead.
 
 ### 2026-11-09: Write-path wake was silently throttled away, and lib/firestore.ts had no tests
 - **Who:** agent (interactive)

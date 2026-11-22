@@ -9,6 +9,7 @@ import { shouldShowTipPrompt } from '../lib/tips';
 import { clearFirestoreCache, deleteAccountOnServer } from '../lib/account';
 import {
   subscribeToUserData,
+  replayUnsentWrites,
   saveRecipe,
   deleteRecipeDoc,
   saveMealEntry,
@@ -61,6 +62,7 @@ import {
   reconcileShoppingSnapshot,
 } from '../lib/shoppingSync';
 import { defaultCategory } from '../lib/ingredients';
+import { clearUnsentWrites } from '../lib/unsentWrites';
 import type {
   Recipe,
   MealEntry,
@@ -229,7 +231,9 @@ function clearPendingEmptyTimers() {
 //    replace-everything behaviour, so an item deleted on another device stays
 //    deleted rather than resurrecting. Genuinely unsynced local additions are
 //    still present in the snapshot because Firestore's persistent cache replays
-//    pending writes, so they are not lost here.
+//    pending writes, so they are not lost here. Writes a crashed SDK refused
+//    never reached that cache; replayUnsentWrites (lib/unsentWrites.ts, ADR
+//    0019) re-sends them before the listeners attach, so the same holds.
 //
 // `updatedAt` is compared as a number with missing treated as 0, so a stamped
 // local edit always beats an older un-stamped server copy.
@@ -362,6 +366,9 @@ type SetState = (partial: Partial<Store>) => void;
 // Attaches realtime Firestore listeners for one bistro's data, keeping the
 // store live-synced with edits made on every device and by every member.
 function attachDataListeners(bistroId: string, ownUid: string, set: SetState, get: () => Store) {
+  // Writes refused by a crashed SDK before the last recovery reload go first,
+  // so the first snapshot includes them and the reconcile below keeps them.
+  replayUnsentWrites(bistroId, ownUid);
   _unsubscribeUserData = subscribeToUserData(bistroId, ownUid, {
     onRecipes: (recipes) => {
       applyCollectionSnapshot('recipes', recipes, get().recipes.length, () => {
@@ -963,6 +970,7 @@ export const useStore = create<Store>()(
         // Tear down listeners before clearing state so no orphaned callbacks fire
         detachDataListeners();
         detachSessionListeners();
+        clearUnsentWrites();
         const { user, bistros } = get();
         if (user) {
           for (const id of Object.keys(bistros)) clearScopeCache(user.uid, id).catch(() => {});

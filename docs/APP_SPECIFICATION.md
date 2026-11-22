@@ -177,8 +177,18 @@ Extraction runs on **each user's own Google Gemini API key**:
   added: URL, photo or manual; the extraction route; which of title, ingredients and steps were
   edited before the first save). Meal entries store `addedFrom` (plan, recipe detail or library).
   Neither is shown or shared; they feed the usage report (ADR 0017).
+- **Adding a recipe:** an **Add recipe** button floats centred above the bottom nav and opens
+  New Recipe, where the user picks URL, Photo or Manual.
 - **Search:** the library is filterable live by **title, source, or any ingredient
-  name** — so "what can I make with aubergine?" is answerable.
+  name** — so "what can I make with aubergine?" is answerable. Search and sort sit in a bar at
+  the top of the library that slides away while scrolling down and comes back on any scroll up
+  (it stays put while the search box has focus or holds a query).
+- **Sort:** the library sorts by **Newest** (default) or **Most planned** — how many times a
+  recipe has been on this bistro's meal plan, past and future, by any member (custom and
+  dining-out entries don't count). Ties, including never-planned recipes, fall back to newest
+  first. The count is derived live from the meal plan, so it works offline and isn't stored or
+  shown. Sorting applies to search results too. The choice isn't remembered: each visit starts
+  on Newest.
 - **Serving-aware viewing:** on a recipe, a servings control rescales **every
   ingredient quantity live**, rendering results as friendly fractions (½, ¾, ⅓,
   etc.). The scaling ratio is applied from the recipe's base servings.
@@ -438,7 +448,8 @@ explicit list) belong to **Immediate**, so existing lists carry over unchanged.
 - **Guardrails:** the recipient email must be well-formed, and a user can't share
   with themselves.
 - **Receiving:** shares addressed to the signed-in user's email appear in a
-  "Shared with you" inbox. Each can be **saved** (copied into the bistro the
+  "Shared with you" inbox, a tab beside **All** in the library that appears only while shares
+  are waiting and shows how many. Each can be **saved** (copied into the bistro the
   recipient is currently viewing) or **dismissed**, individually or all at once.
 - Sharing is for people outside your bistros; members of a bistro already see all
   its recipes.
@@ -482,6 +493,9 @@ appears on another without manual refresh. The functional guarantees:
   too, so the library is complete offline.
 - Changes made offline are queued locally and reconciled when connectivity returns
   (per §10); the app signals offline and "back online — syncing" states.
+- If the sync engine crashes, the app reloads itself to recover. Meal-plan and store
+  cupboard changes made in the moment before the reload are kept on the device and
+  sent once it has restarted, so nothing added or removed is lost or brought back.
 - **Only** AI extraction (URL/photo), sharing, and managing bistro membership
   (inviting, joining, removing, leaving) require a connection; those are clearly
   gated when offline, while manual recipe entry stays available.
