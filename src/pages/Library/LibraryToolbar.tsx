@@ -40,26 +40,29 @@ export function LibraryToolbar(props: LibraryToolbarProps) {
         hidden ? '-translate-y-[calc(100%+1rem)]' : 'translate-y-0',
       ].join(' ')}
     >
-      <div className="relative" onFocus={() => setSearchFocused(true)} onBlur={() => setSearchFocused(false)}>
-        <Input
-          placeholder={recipeCount > 0 ? `Search ${recipeCount} recipes` : 'Search recipes'}
-          aria-label="Search recipes by title, ingredient or source"
-          value={query}
-          onChange={(e) => {
-            onQueryChange(e.target.value);
-            if (view !== 'all') onViewChange('all');
-          }}
-          icon={<Search size={15} />}
-        />
-        {query && (
-          <button
-            onClick={() => onQueryChange('')}
-            className="absolute right-1 top-1/2 -translate-y-1/2 w-10 h-10 flex items-center justify-center text-slate-400 hover:text-slate-600"
-            aria-label="Clear search"
-          >
-            <X size={15} />
-          </button>
-        )}
+      <div className="flex items-stretch gap-2">
+        <div className="relative flex-1 min-w-0" onFocus={() => setSearchFocused(true)} onBlur={() => setSearchFocused(false)}>
+          <Input
+            placeholder={recipeCount > 0 ? `Search ${recipeCount} recipes` : 'Search recipes'}
+            aria-label="Search recipes by title, ingredient or source"
+            value={query}
+            onChange={(e) => {
+              onQueryChange(e.target.value);
+              if (view !== 'all') onViewChange('all');
+            }}
+            icon={<Search size={15} />}
+          />
+          {query && (
+            <button
+              onClick={() => onQueryChange('')}
+              className="absolute right-1 top-1/2 -translate-y-1/2 w-10 h-10 flex items-center justify-center text-slate-400 hover:text-slate-600"
+              aria-label="Clear search"
+            >
+              <X size={15} />
+            </button>
+          )}
+        </div>
+        {showSort && view === 'all' && <SortControl value={sort} onChange={onSortChange} />}
       </div>
 
       {shareCount > 0 && (
@@ -91,7 +94,6 @@ export function LibraryToolbar(props: LibraryToolbarProps) {
         </div>
       )}
 
-      {showSort && view === 'all' && <SortControl value={sort} onChange={onSortChange} />}
     </div>
   );
 }

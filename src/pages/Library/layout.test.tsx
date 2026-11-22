@@ -54,11 +54,14 @@ describe('LibraryPage — layout', () => {
     expect(heading).toHaveClass('sr-only');
   });
 
-  it('puts search and sort in the toolbar', () => {
+  it('puts search and sort side by side in one row of the toolbar', () => {
     renderPage();
     const toolbar = screen.getByTestId('library-toolbar');
-    expect(within(toolbar).getByRole('textbox', { name: /search recipes/i })).toBeInTheDocument();
-    expect(within(toolbar).getByRole('group', { name: 'Sort recipes' })).toBeInTheDocument();
+    const search = within(toolbar).getByRole('textbox', { name: /search recipes/i });
+    const sort = within(toolbar).getByRole('combobox', { name: 'Sort recipes' });
+    const row = search.closest('.flex-1')?.parentElement;
+    expect(row).toContainElement(sort);
+    expect(sort.parentElement).toHaveTextContent(/^Newest/); // the pill shows the current order
   });
 });
 
@@ -136,7 +139,7 @@ describe('LibraryPage — Shared with you tab', () => {
     await user.click(sharedTab);
     expect(screen.getByText('Fish pie')).toBeInTheDocument();
     expect(screen.getByText('Trifle')).toBeInTheDocument();
-    expect(screen.queryByRole('group', { name: 'Sort recipes' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('combobox', { name: 'Sort recipes' })).not.toBeInTheDocument();
   });
 
   it('Save all calls the store', async () => {

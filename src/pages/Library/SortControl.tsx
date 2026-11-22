@@ -1,4 +1,4 @@
-import { ArrowUpDown } from 'lucide-react';
+import { ArrowUpDown, ChevronDown } from 'lucide-react';
 import type { LibrarySort } from '../../lib/librarySort';
 
 const OPTIONS: { value: LibrarySort; label: string }[] = [
@@ -11,31 +11,30 @@ interface SortControlProps {
   onChange: (value: LibrarySort) => void;
 }
 
-/** A quiet, text-only sort switch that sits right-aligned above the grid. */
+/**
+ * A compact pill that sits beside the search box and shows the current order.
+ * A transparent native <select> covers it, so a tap opens the phone's own picker.
+ * The select is 16px so iOS doesn't zoom in when it gets focus.
+ */
 export function SortControl({ value, onChange }: SortControlProps) {
+  const current = OPTIONS.find((o) => o.value === value) ?? OPTIONS[0];
   return (
-    <div
-      className="-my-3 flex items-center justify-end gap-1 text-xs text-slate-400"
-      role="group"
-      aria-label="Sort recipes"
-    >
-      <ArrowUpDown size={12} aria-hidden="true" />
-      {OPTIONS.map((option, i) => (
-        <span key={option.value} className="flex items-center gap-1">
-          {i > 0 && <span aria-hidden="true">·</span>}
-          <button
-            type="button"
-            aria-pressed={value === option.value}
-            onClick={() => onChange(option.value)}
-            className={[
-              'min-h-11 px-1 transition-colors',
-              value === option.value ? 'font-semibold text-amber-700' : 'text-slate-400',
-            ].join(' ')}
-          >
+    <div className="relative shrink-0 flex items-center gap-1 h-full min-h-11 pl-3 pr-2 rounded-xl border border-slate-200 bg-white text-xs font-semibold text-slate-700 has-[:focus-visible]:border-amber-500 has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-amber-soft">
+      <ArrowUpDown size={13} className="text-slate-400" aria-hidden />
+      <span aria-hidden className="whitespace-nowrap">{current.label}</span>
+      <ChevronDown size={13} className="text-slate-400" aria-hidden />
+      <select
+        aria-label="Sort recipes"
+        value={value}
+        onChange={(e) => onChange(e.target.value as LibrarySort)}
+        className="absolute inset-0 w-full h-full opacity-0 cursor-pointer text-base"
+      >
+        {OPTIONS.map((option) => (
+          <option key={option.value} value={option.value}>
             {option.label}
-          </button>
-        </span>
-      ))}
+          </option>
+        ))}
+      </select>
     </div>
   );
 }
