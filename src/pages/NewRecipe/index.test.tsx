@@ -44,3 +44,25 @@ describe('NewRecipePage extraction errors', () => {
     expect(screen.getByText(BLOCKED)).toBeInTheDocument();
   });
 });
+
+describe('NewRecipePage URL field', () => {
+  it('can be cleared, which also clears its error and refocuses the field', async () => {
+    const user = userEvent.setup();
+    render(<MemoryRouter><NewRecipePage /></MemoryRouter>);
+
+    await user.click(screen.getByRole('button', { name: 'URL' }));
+    const field = screen.getByPlaceholderText(/^https:/);
+    expect(screen.queryByRole('button', { name: 'Clear URL' })).not.toBeInTheDocument();
+
+    await user.type(field, 'https://recipes.example.com/soup');
+    await user.click(screen.getByRole('button', { name: /extract recipe/i }));
+    expect(await screen.findByText(BLOCKED)).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Clear URL' }));
+    expect(field).toHaveValue('');
+    expect(field).toHaveFocus();
+    expect(screen.queryByText(BLOCKED)).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Clear URL' })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /extract recipe/i })).toBeDisabled();
+  });
+});

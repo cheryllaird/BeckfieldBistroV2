@@ -1,6 +1,6 @@
 import { useMemo, useRef, useState } from 'react';
 import { useNavigate, useSearchParams, useParams } from 'react-router-dom';
-import { ArrowLeft, Camera, Upload, Link, Plus, Loader, WifiOff } from 'lucide-react';
+import { ArrowLeft, Camera, Upload, Link, Plus, Loader, WifiOff, X } from 'lucide-react';
 import { useStore } from '../../store';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
@@ -38,6 +38,7 @@ export function NewRecipePage() {
   const prefillTitle = searchParams.get('title') ?? '';
   const [mode, setMode] = useState<CaptureMode>(prefillTitle || isEditMode ? 'manual' : 'upload');
   const [urlInput, setUrlInput] = useState('');
+  const urlInputRef = useRef<HTMLInputElement>(null);
   const [isExtracting, setIsExtracting] = useState(false);
   const [stage, setStage] = useState<ImageExtractionStage>('preparing');
   const [extractError, setExtractError] = useState<ExtractError>(null);
@@ -245,6 +246,23 @@ export function NewRecipePage() {
             onChange={(e) => setUrlInput(e.target.value)}
             type="url"
             disabled={!isOnline}
+            inputRef={urlInputRef}
+            trailing={
+              urlInput && !isExtracting ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setUrlInput('');
+                    if (urlError) setExtractError(null);
+                    urlInputRef.current?.focus();
+                  }}
+                  className="w-10 h-10 flex items-center justify-center text-slate-400 hover:text-slate-600 transition-colors"
+                  aria-label="Clear URL"
+                >
+                  <X size={15} />
+                </button>
+              ) : undefined
+            }
           />
           {urlError && <p className="text-xs text-red-500">{urlError}</p>}
           <Button fullWidth onClick={handleUrlExtract} disabled={isExtracting || !urlInput.trim() || !isOnline}>
