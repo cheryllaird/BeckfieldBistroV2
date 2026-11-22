@@ -143,7 +143,8 @@ Extraction is tuned to mirror the source, not "improve" it:
 Each failure mode produces a distinct, actionable message rather than a generic
 error: AI **rate-limit / daily-quota exhausted**, AI **temporarily overloaded**,
 **copyright-recitation block** (content matches a copyrighted source too closely to
-copy), **unreadable photo**, and **unfetchable/invalid URL**. Transient overloads
+copy), **unreadable photo**, **site blocks automatic imports** (the page timed out
+or refused us; the user is pointed to Photo or Manual), and **unfetchable/invalid URL**. Transient overloads
 are retried automatically with backoff; a quota block on the primary model falls
 through to a secondary model on its own quota bucket. Manual entry is always
 offered as the ultimate fallback.
