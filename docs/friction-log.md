@@ -29,6 +29,20 @@ Only the triage agent or a human changes a status. Entries are never deleted.
 
 ## Entries
 
+### 2026-11-22: No way to see a page without a signed-in Firebase session
+- **Status:** open
+- **Who:** agent (ship-feature, issue #240)
+- **Task:** checking the Library redesign at phone width (#240)
+- **Friction:** every page sits behind Firebase sign-in, so the app can't be run here to look at a UI change. I built a throwaway Vite entry that seeds the store and renders `AppLayout` + the page. Its first try rendered without Tailwind because Vite's root was the harness folder; serving it from the repo root fixed that. About 15 minutes, and the next UI task will redo it.
+- **Suggested fix:** commit a dev-only preview entry (e.g. `preview.html` + `src/dev/preview.tsx`, excluded from the build) that renders a chosen page with factory data, and mention it in the `run` notes in AGENTS.md.
+
+### 2026-11-22: frontend-ui guide said the Header hides on scroll
+- **Status:** fixed in this PR (#240)
+- **Who:** agent (ship-feature, issue #240)
+- **Task:** building a toolbar that hides on scroll (#240)
+- **Friction:** `.claude/agents/frontend-ui.md` said `Header` hides on scroll-down and reappears on scroll-up. It doesn't, and there was no hook for it, so I went looking for code to reuse that never existed.
+- **Suggested fix:** corrected the guide and pointed it to the new `useHideOnScroll` hook.
+
 ### 2026-11-19: A `status:ready` issue that depends on an unmerged PR is re-checked every night
 - **Status:** open
 - **Who:** agent (build-ready nightly routine)
