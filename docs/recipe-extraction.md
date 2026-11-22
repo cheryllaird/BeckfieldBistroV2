@@ -1,13 +1,13 @@
 # Recipe Extraction Architecture
 
-How a photo or URL becomes a structured recipe in Beckfield Bistro. This document
+How a photo, URL or pasted text becomes a structured recipe in Beckfield Bistro. This document
 is the source of truth for the extraction pipeline — written for both humans
 (overview, rationale) and AI agents working in the code (exact paths, shapes,
 invariants, and where to change what).
 
 > **TL;DR** — Photos try Gemini vision first, then fall back to OCR + Gemini, then
 > a deterministic local parser. URLs try the page's own JSON‑LD structured data
-> first, then Gemini. Every path has a deterministic fallback so a readable input
+> first, then Gemini. Pasted text tries Gemini, then the local parser. Every path has a deterministic fallback so a readable input
 > almost always yields an editable recipe, and every outcome is counted so the
 > method order can be revisited from real data.
 
@@ -70,6 +70,7 @@ flowchart TD
     API --> AUTH{Verify token<br/>decrypt Gemini key}
     AUTH -->|photo| P1
     AUTH -->|url| U1
+    AUTH -->|text| T1
 
     subgraph PHOTO [Photo ladder — vision first]
         P1[gemini-vision<br/>image → Gemini] -->|ok| R1([return gemini-vision])
@@ -91,6 +92,13 @@ flowchart TD
         U3 -->|yes| R4
         U3 -->|no| FAILU([failed → error])
     end
+
+    subgraph TEXT [Pasted-text ladder — never fetches the link]
+        T1[text+gemini<br/>pasted text → Gemini] -->|ok| R6([return text+gemini])
+        T1 -->|RECITATION / error / bad JSON| T2[text+local<br/>stripWebClutter + parseRecipeText]
+        T2 -->|found ingredients or steps| R7([return text+local])
+        T2 -->|nothing| FAILT([failed → error])
+    end
 ```
 
 Every terminal node calls `recordExtractionMethod(...)` before responding (including
@@ -106,7 +114,10 @@ the `failed` nodes).
   `resizeImage(dataUrl, { maxDimension: 2048, quality: 0.9 })`, then POSTs
   `{ base64, mediaType }`.
 - **`extractRecipeFromUrl(url, hasApiKey)`** → POSTs `{ url }`.
-- Both attach `Authorization: Bearer <Firebase ID token>` and throw
+- **`extractRecipeFromText(text, hasApiKey, sourceUrl?)`** → POSTs `{ text }`, plus
+  `sourceUrl` when the user gave a link. `MAX_PASTED_TEXT_CHARS` (20,000) matches the
+  server's cap and is the textarea's `maxLength`.
+- All three attach `Authorization: Bearer <Firebase ID token>` and throw
   `RecipeExtractionError(message)` on non‑2xx, using the server's `error` string.
 
 `resizeImage(dataUrl, { maxDimension = 1568, quality = 0.85 })` is shared: the
@@ -118,12 +129,16 @@ uses 2048/0.9, which stays under the endpoint's 8 MB body limit.
 
 ## 5. Server: `api/extract-recipe.ts`
 
-### 5.1 Preamble (both inputs)
+### 5.1 Preamble (every input)
 1. `POST` only; verify the Firebase ID token → `uid`.
 2. Read `users/{uid}/meta/profile.geminiApiKeyEncrypted` and decrypt it
    (`decryptSecret`, `API_KEY_ENCRYPTION_SECRET`). **Keys are per‑user and billed to
    the user — there is no shared server key.** Missing key → 400 asking them to add one.
-3. Branch on `hasImage` (`base64` present) vs `hasUrl` (`url` present).
+3. Exactly one of `base64`, `url` or `text` must be present (none or several → 400).
+   Pasted text is checked before the key lookup: whitespace only → 400, over 20,000
+   characters after trimming → 413, a `sourceUrl` that isn't an `http(s)` URL with a
+   dotted hostname, at most 2,048 characters → 400.
+4. Branch on the input.
 
 ### 5.2 Photo ladder (vision first)
 1. **`gemini-vision`** — `callGeminiWithRetry(imageParts, SYSTEM_PROMPT)` where
@@ -149,7 +164,8 @@ uses 2048/0.9, which stays under the endpoint's 8 MB body limit.
    `api/_utils/fetchErrors.ts`:
    - **Blocked site** (timeout, refused or dropped connection, HTTP
      401/403/429/451/503) → **502** "This site doesn't allow automatic imports.
-     Take a screenshot and use Photo, or add it with Manual." Some sites' bot
+     Copy the recipe text and use Paste text, or take a screenshot and use Photo."
+     (§5.3a) Some sites' bot
      protection never answers an automated request, so it hangs until the
      timeout; a longer timeout doesn't help.
    - **Bad link** (blocked/invalid address, unknown host, HTTP 404/410) and
@@ -175,6 +191,27 @@ uses 2048/0.9, which stays under the endpoint's 8 MB body limit.
 > Note: the URL local parser `parseRecipeText` is **not** used here because
 > `stripHtml` collapses newlines and that parser is line‑based. JSON‑LD is the URL
 > path's deterministic rung instead.
+
+### 5.3a Pasted-text ladder (Gemini, then the local parser)
+For a recipe the user copied from a page in their own browser, usually a site that
+blocks automatic imports (§5.3).
+1. **`text+gemini`** — `callGeminiWithRetry([pastedTextUserPrompt(text, host)],
+   TEXT_SYSTEM_PROMPT)`. The text sits between markers and the prompt names it as
+   data, not instructions. Parseable → return.
+2. **`text+local`** — on RECITATION, any Gemini error or unparseable output:
+   `parseRecipeText(stripWebClutter(text))`. No model, so this is also the only path
+   after RECITATION (ADR 0010). `stripWebClutter` (`api/_utils/pastedText.ts`) drops
+   whole lines of page furniture ("Skip to content", "Add to trolley", ratings) so
+   they don't become the title or the last step. It works here because pasted text
+   keeps its line breaks.
+3. **`failed`** — the parser found no ingredients or steps: 422 "Couldn't find a
+   recipe in that text…", or `sendGeminiError` when Gemini was rate-limited or
+   overloaded. Neither suggests Photo or pasting.
+
+`source` is the `sourceUrl` hostname (without `www.`), else `"Pasted text"`; Gemini's
+own guess is ignored. **`sourceUrl` is never fetched** (no page, no cover image), so
+no `coverImage` is returned. Only `textLength` is logged: never the text or the model
+output. The text isn't echoed back (there is no `ocrText` equivalent).
 
 ### 5.4 Shared Gemini retry — `callGeminiWithRetry(genAI, parts, systemInstruction?)`
 - `PRIMARY = gemini-3.1-flash-lite`, `FALLBACK = gemini-3.5-flash`.
@@ -347,7 +384,9 @@ persists anything unexpected to Firestore.
 | `ocr+local` | photo | Tesseract transcribed; `parseRecipeText` structured it | no (no Gemini) |
 | `url+structured` | url | Page's own JSON‑LD recipe data | no |
 | `url+gemini` | url | Gemini structured the page text | no |
-| `failed` | either | No path produced a recipe | — |
+| `text+gemini` | text | Gemini structured text the user pasted | no |
+| `text+local` | text | `parseRecipeText` structured the pasted text | no (no Gemini) |
+| `failed` | any | No path produced a recipe | — |
 
 **Tracking** — `recordExtractionMethod(method)` (best‑effort; never fails the request):
 - logs `extract-recipe: extractionMethod=<method>`;
@@ -364,6 +403,7 @@ why each Gemini step that was tried didn't produce the recipe, keyed
 | `vision` | `recitation`, `rate-limit`, `overload`, `error`, `bad-json`, `forced` (`forceOcr`) |
 | `ocrGemini` | `recitation`, `rate-limit`, `overload`, `error`, `bad-json` |
 | `urlGemini` | `recitation`, `rate-limit`, `overload`, `error`, `bad-json` |
+| `textGemini` | `recitation`, `rate-limit`, `overload`, `error`, `bad-json` |
 | `urlFetch` | `timeout`, `refused`, `http401`/`403`/`429`/`451`/`503`/`404`/`410`, `http4xx`/`http5xx`/`httpother` (any other status), `bad-url`, `not-html`, `error` (the fetch itself failed; method is `failed`) |
 
 One request can add several (e.g. `vision-overload` then `ocrGemini-bad-json` →
@@ -373,11 +413,11 @@ Counters before this was added have no `fallbackReasons`.
 
 **Timing** — every request that gets past sign-in ends at one `finish()` call in
 `api/extract-recipe.ts`, which does both of the following:
-- logs exactly one line, `extract-recipe: timing kind=photo|url method=<method> total=<ms>`
+- logs exactly one line, `extract-recipe: timing kind=photo|url|text method=<method> total=<ms>`
   followed by the stages that ran (`auth`, `profile`, `vision`, `ocrPreprocess`, `ocr`,
-  `ocrGemini`, `local`, `analytics`), `ocrWorker=cold|warm` after `ocr`, and
-  `<vision|ocrGemini>Model` / `Attempts`. The line is built from an allow-list in
-  `api/_utils/extractionTiming.ts`: no uid, key, image, OCR text or model output.
+  `ocrGemini`, `textGemini`, `local`, `analytics`), `ocrWorker=cold|warm` after `ocr`, and
+  `<vision|ocrGemini|textGemini>Model` / `Attempts`. The line is built from an allow-list in
+  `api/_utils/extractionTiming.ts`: no uid, key, image, OCR or pasted text, or model output.
 - adds the total (measured up to the analytics write) to `durations.<method>.<bucket>` in both
   analytics docs, buckets `lt5s`, `5to10s`, `10to20s`, `20to40s`, `40sPlus`. Photo requests where
   OCR ran also add to `ocrCold` or `ocrWarm`. Percentiles read from the daily docs are approximate

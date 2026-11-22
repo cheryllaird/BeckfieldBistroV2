@@ -29,6 +29,13 @@ Only the triage agent or a human changes a status. Entries are never deleted.
 
 ## Entries
 
+### 2026-11-22: No quick way to see what `parseRecipeText` makes of a sample
+- **Status:** open
+- **Who:** agent (ship-feature, #245)
+- **Task:** check how the local parser handles text pasted from a recipe page (#245)
+- **Friction:** there is no script to run `parseRecipeText` on a text file. A throwaway vitest file run with `--root /` hung while scanning the whole filesystem until it was stopped. `console.log` output from a probe test inside the repo didn't show in the run output, so the result had to be written to a temp file. It took about 5 minutes for a one-line question.
+- **Suggested fix:** add `npm run parse:text -- <file>` (`scripts/parse-text.mjs`) that prints `parseRecipeText` output as JSON, like the OCR eval does for photos.
+
 ### 2026-11-22: URL-import failures left no trace beyond 1-hour runtime logs
 - **Status:** open
 - **Who:** agent (ship-feature, #244)

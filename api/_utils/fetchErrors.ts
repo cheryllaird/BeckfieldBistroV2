@@ -17,7 +17,7 @@ export interface FetchFailure {
 }
 
 export const BLOCKED_SITE_MESSAGE =
-  "This site doesn't allow automatic imports. Take a screenshot and use Photo, or add it with Manual.";
+  "This site doesn't allow automatic imports. Copy the recipe text and use Paste text, or take a screenshot and use Photo.";
 export const BAD_URL_MESSAGE = 'Could not fetch the recipe page. Check the URL and try again.';
 
 /** HTTP statuses a site uses to turn away automated requests. */

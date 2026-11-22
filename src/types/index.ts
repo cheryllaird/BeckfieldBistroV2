@@ -14,7 +14,7 @@ export type EditedField = 'title' | 'ingredients' | 'steps';
 
 /** Hidden usage metadata set once when a recipe is created from New Recipe. Never shown or shared. */
 export interface ImportMeta {
-  method: 'url' | 'photo' | 'manual';
+  method: 'url' | 'photo' | 'text' | 'manual';
   extractionMethod?: string; // which extraction route worked, e.g. 'gemini-vision'
   editedBeforeSave?: EditedField[]; // extracted drafts only; absent for manual recipes
 }

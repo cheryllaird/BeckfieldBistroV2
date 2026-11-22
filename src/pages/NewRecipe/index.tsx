@@ -1,23 +1,25 @@
 import { useMemo, useRef, useState } from 'react';
 import { useNavigate, useSearchParams, useParams } from 'react-router-dom';
-import { ArrowLeft, Camera, Upload, Link, Plus, Loader, WifiOff, X } from 'lucide-react';
+import { ArrowLeft, Camera, ClipboardPaste, Upload, Link, Plus, WifiOff } from 'lucide-react';
 import { useStore } from '../../store';
 import { Button } from '../../components/ui/Button';
-import { Input } from '../../components/ui/Input';
 import { generateId, sortSourcesByRecentUse } from '../../lib/utils';
 import { NetworkError } from '../../lib/apiClient';
 import { editedFields } from '../../lib/recipeEdits';
-import { extractRecipeFromImage, extractRecipeFromUrl, resizeImage, ORIGINAL_IMAGE_RESIZE, RecipeExtractionError, type ImageExtractionStage } from '../../lib/recipeExtraction';
+import { extractRecipeFromImage, extractRecipeFromText, extractRecipeFromUrl, resizeImage, ORIGINAL_IMAGE_RESIZE, RecipeExtractionError, type ImageExtractionStage } from '../../lib/recipeExtraction';
 import type { ImportMeta, Recipe } from '../../types';
 import { RecipeForm } from './RecipeForm';
 import { ExtractionProgress } from './ExtractionProgress';
+import { PasteTextInput } from './PasteTextInput';
+import { UrlInput } from './UrlInput';
 import { ImageCropper } from '../../components/ImageCropper';
 import { CameraCapture } from '../../components/CameraCapture';
 import { useOnlineStatus } from '../../hooks/useOnlineStatus';
 
-type CaptureMode = 'url' | 'upload' | 'manual';
+type CaptureMode = 'url' | 'text' | 'upload' | 'manual';
+type ExtractMode = Exclude<CaptureMode, 'manual'>;
 /** The tab an extraction error came from; it only shows on that tab. */
-type ExtractError = { mode: 'url' | 'upload'; message: string } | null;
+type ExtractError = { mode: ExtractMode; message: string } | null;
 
 export function NewRecipePage() {
   const navigate = useNavigate();
@@ -38,13 +40,14 @@ export function NewRecipePage() {
   const prefillTitle = searchParams.get('title') ?? '';
   const [mode, setMode] = useState<CaptureMode>(prefillTitle || isEditMode ? 'manual' : 'upload');
   const [urlInput, setUrlInput] = useState('');
-  const urlInputRef = useRef<HTMLInputElement>(null);
   const [isExtracting, setIsExtracting] = useState(false);
   const [stage, setStage] = useState<ImageExtractionStage>('preparing');
   const [extractError, setExtractError] = useState<ExtractError>(null);
-  const errorFor = (tab: 'url' | 'upload') => (extractError?.mode === tab ? extractError.message : '');
+  const errorFor = (tab: ExtractMode) => (extractError?.mode === tab ? extractError.message : '');
   const urlError = errorFor('url');
   const uploadError = errorFor('upload');
+  const [pasteText, setPasteText] = useState('');
+  const [pasteLink, setPasteLink] = useState('');
 
   const [isSaving, setIsSaving] = useState(false);
   const [saveError, setSaveError] = useState('');
@@ -67,30 +70,46 @@ export function NewRecipePage() {
 
   // Snapshot of the last successful extraction, kept to record on save how the
   // recipe was imported and what the user corrected. A new extraction replaces it.
-  const extractionRef = useRef<{ method: 'url' | 'photo'; extractionMethod?: string; draft: Partial<Recipe> } | null>(null);
+  const extractionRef = useRef<{ method: 'url' | 'photo' | 'text'; extractionMethod?: string; draft: Partial<Recipe> } | null>(null);
 
-  const handleUrlExtract = async () => {
-    if (!urlInput.trim()) return;
+  // Runs a URL or pasted-text extraction and opens the result in the form.
+  // `sourceUrl` is recorded on the recipe; an error stays on the tab it came from.
+  const extractToDraft = async (
+    tab: 'url' | 'text',
+    request: () => ReturnType<typeof extractRecipeFromUrl>,
+    sourceUrl: string,
+    fallbackMessage: string,
+  ) => {
     setIsExtracting(true);
     setExtractError(null);
     try {
-      const extracted = await extractRecipeFromUrl(urlInput.trim(), hasGeminiApiKey);
-      const { extractionMethod, ...fields } = extracted;
-      const next = { ...fields, sourceUrl: urlInput.trim() };
-      extractionRef.current = { method: 'url', extractionMethod, draft: next };
+      const { extractionMethod, ...fields } = await request();
+      const next = { ...fields, ...(sourceUrl ? { sourceUrl } : {}) };
+      extractionRef.current = { method: tab, extractionMethod, draft: next };
       setDraft((prev) => ({ ...prev, ...next }));
       setMode('manual');
     } catch (err) {
       setExtractError({
-        mode: 'url',
-        message:
-          err instanceof RecipeExtractionError || err instanceof NetworkError
-            ? err.message
-            : "Couldn't read a recipe from that link. Check it opens in your browser, or add the recipe manually.",
+        mode: tab,
+        message: err instanceof RecipeExtractionError || err instanceof NetworkError ? err.message : fallbackMessage,
       });
     } finally {
       setIsExtracting(false);
     }
+  };
+
+  const handleUrlExtract = () => {
+    const url = urlInput.trim();
+    if (!url) return;
+    return extractToDraft('url', () => extractRecipeFromUrl(url, hasGeminiApiKey), url,
+      "Couldn't read a recipe from that link. Check it opens in your browser, or add the recipe manually.");
+  };
+
+  const handleTextExtract = () => {
+    if (!pasteText.trim()) return;
+    const link = pasteLink.trim();
+    return extractToDraft('text', () => extractRecipeFromText(pasteText, hasGeminiApiKey, link || undefined), link,
+      "Couldn't read a recipe from that text. Check you copied the ingredients and method, or add the recipe manually.");
   };
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -193,6 +212,7 @@ export function NewRecipePage() {
         <div className="flex bg-slate-100 rounded-xl p-1 gap-0">
           {[
             { key: 'url', label: 'URL', icon: Link, requiresOnline: true },
+            { key: 'text', label: 'Paste text', icon: ClipboardPaste, requiresOnline: true },
             { key: 'upload', label: 'Photo', icon: Upload, requiresOnline: true },
             { key: 'manual', label: 'Manual', icon: Plus, requiresOnline: false },
           ].map(({ key, label, icon: Icon, requiresOnline }) => {
@@ -221,7 +241,7 @@ export function NewRecipePage() {
         </div>
       )}
 
-      {(mode === 'url' || mode === 'upload') && !hasGeminiApiKey && (
+      {mode !== 'manual' && !hasGeminiApiKey && (
         <div className="flex items-center justify-between gap-2 rounded-xl bg-amber-soft px-4 py-3 text-sm text-amber-800">
           <span>Add your Gemini API key to extract recipes.</span>
           <Button size="sm" variant="secondary" onClick={() => navigate('/settings')}>
@@ -232,51 +252,29 @@ export function NewRecipePage() {
 
       {/* URL mode */}
       {mode === 'url' && hasGeminiApiKey && (
-        <div className="flex flex-col gap-3 animate-in">
-          {!isOnline && (
-            <div className="flex items-center gap-2 rounded-xl bg-slate-100 px-4 py-3 text-sm text-slate-500">
-              <WifiOff size={15} className="shrink-0" />
-              Recipe extraction requires an internet connection. Switch to Manual to add a recipe offline.
-            </div>
-          )}
-          <Input
-            label="Recipe URL"
-            placeholder="https://cooking.nytimes.com/recipes/…"
-            value={urlInput}
-            onChange={(e) => setUrlInput(e.target.value)}
-            type="url"
-            disabled={!isOnline}
-            inputRef={urlInputRef}
-            trailing={
-              urlInput && !isExtracting ? (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setUrlInput('');
-                    if (urlError) setExtractError(null);
-                    urlInputRef.current?.focus();
-                  }}
-                  className="w-10 h-10 flex items-center justify-center text-slate-400 hover:text-slate-600 transition-colors"
-                  aria-label="Clear URL"
-                >
-                  <X size={15} />
-                </button>
-              ) : undefined
-            }
-          />
-          {urlError && <p className="text-xs text-red-500">{urlError}</p>}
-          <Button fullWidth onClick={handleUrlExtract} disabled={isExtracting || !urlInput.trim() || !isOnline}>
-            {isExtracting ? (
-              <>
-                <Loader size={14} className="animate-spin" /> Extracting…
-              </>
-            ) : (
-              <>
-                <Link size={14} /> Extract recipe
-              </>
-            )}
-          </Button>
-        </div>
+        <UrlInput
+          value={urlInput}
+          onChange={setUrlInput}
+          onClear={() => urlError && setExtractError(null)}
+          onExtract={handleUrlExtract}
+          isOnline={isOnline}
+          isExtracting={isExtracting}
+          error={urlError}
+        />
+      )}
+
+      {/* Paste text mode */}
+      {mode === 'text' && hasGeminiApiKey && (
+        <PasteTextInput
+          text={pasteText}
+          onTextChange={setPasteText}
+          link={pasteLink}
+          onLinkChange={setPasteLink}
+          onExtract={handleTextExtract}
+          isOnline={isOnline}
+          isExtracting={isExtracting}
+          error={errorFor('text')}
+        />
       )}
 
       {/* Upload mode */}

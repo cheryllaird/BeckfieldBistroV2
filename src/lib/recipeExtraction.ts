@@ -142,3 +142,26 @@ export async function extractRecipeFromUrl(
 
   return postExtraction(auth.currentUser, { url });
 }
+
+/** Same cap the server enforces on pasted text. */
+export const MAX_PASTED_TEXT_CHARS = 20_000;
+
+/**
+ * Structures recipe text the user copied from a page in their own browser,
+ * typically one that blocks automatic imports. `sourceUrl` is optional and is
+ * only recorded as the source: the server never fetches it.
+ */
+export async function extractRecipeFromText(
+  text: string,
+  hasApiKey: boolean,
+  sourceUrl?: string,
+): Promise<ExtractedRecipe> {
+  if (!auth?.currentUser) {
+    throw new RecipeExtractionError('You must be signed in to extract recipes.');
+  }
+  if (!hasApiKey) {
+    throw new RecipeExtractionError('Add your Gemini API key in Settings to extract recipes.');
+  }
+
+  return postExtraction(auth.currentUser, sourceUrl ? { text, sourceUrl } : { text });
+}
