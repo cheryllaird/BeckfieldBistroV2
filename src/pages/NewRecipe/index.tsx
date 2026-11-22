@@ -16,6 +16,8 @@ import { CameraCapture } from '../../components/CameraCapture';
 import { useOnlineStatus } from '../../hooks/useOnlineStatus';
 
 type CaptureMode = 'url' | 'upload' | 'manual';
+/** The tab an extraction error came from; it only shows on that tab. */
+type ExtractError = { mode: 'url' | 'upload'; message: string } | null;
 
 export function NewRecipePage() {
   const navigate = useNavigate();
@@ -38,7 +40,10 @@ export function NewRecipePage() {
   const [urlInput, setUrlInput] = useState('');
   const [isExtracting, setIsExtracting] = useState(false);
   const [stage, setStage] = useState<ImageExtractionStage>('preparing');
-  const [extractError, setExtractError] = useState('');
+  const [extractError, setExtractError] = useState<ExtractError>(null);
+  const errorFor = (tab: 'url' | 'upload') => (extractError?.mode === tab ? extractError.message : '');
+  const urlError = errorFor('url');
+  const uploadError = errorFor('upload');
 
   const [isSaving, setIsSaving] = useState(false);
   const [saveError, setSaveError] = useState('');
@@ -66,7 +71,7 @@ export function NewRecipePage() {
   const handleUrlExtract = async () => {
     if (!urlInput.trim()) return;
     setIsExtracting(true);
-    setExtractError('');
+    setExtractError(null);
     try {
       const extracted = await extractRecipeFromUrl(urlInput.trim(), hasGeminiApiKey);
       const { extractionMethod, ...fields } = extracted;
@@ -75,11 +80,13 @@ export function NewRecipePage() {
       setDraft((prev) => ({ ...prev, ...next }));
       setMode('manual');
     } catch (err) {
-      setExtractError(
-        err instanceof RecipeExtractionError || err instanceof NetworkError
-          ? err.message
-          : "Couldn't read a recipe from that link. Check it opens in your browser, or add the recipe manually."
-      );
+      setExtractError({
+        mode: 'url',
+        message:
+          err instanceof RecipeExtractionError || err instanceof NetworkError
+            ? err.message
+            : "Couldn't read a recipe from that link. Check it opens in your browser, or add the recipe manually.",
+      });
     } finally {
       setIsExtracting(false);
     }
@@ -98,7 +105,7 @@ export function NewRecipePage() {
     setCropSrc(null);
     setStage('preparing');
     setIsExtracting(true);
-    setExtractError('');
+    setExtractError(null);
     const startedAt = performance.now();
     try {
       const [extracted, resizedDataUrl, originalDataUrl] = await Promise.all([
@@ -114,11 +121,13 @@ export function NewRecipePage() {
       console.debug(`extract timing: total=${Math.round(performance.now() - startedAt)}ms (crop confirmed to draft set)`);
       setMode('manual');
     } catch (err) {
-      setExtractError(
-        err instanceof RecipeExtractionError || err instanceof NetworkError
-          ? err.message
-          : "Couldn't read a recipe from that photo. Check your API key in Settings, or try a clearer photo."
-      );
+      setExtractError({
+        mode: 'upload',
+        message:
+          err instanceof RecipeExtractionError || err instanceof NetworkError
+            ? err.message
+            : "Couldn't read a recipe from that photo. Check your API key in Settings, or try a clearer photo.",
+      });
     } finally {
       setIsExtracting(false);
     }
@@ -237,7 +246,7 @@ export function NewRecipePage() {
             type="url"
             disabled={!isOnline}
           />
-          {extractError && <p className="text-xs text-red-500">{extractError}</p>}
+          {urlError && <p className="text-xs text-red-500">{urlError}</p>}
           <Button fullWidth onClick={handleUrlExtract} disabled={isExtracting || !urlInput.trim() || !isOnline}>
             {isExtracting ? (
               <>
@@ -314,7 +323,7 @@ export function NewRecipePage() {
               )}
             </div>
           ))}
-          {extractError && <p className="text-xs text-red-500">{extractError}</p>}
+          {uploadError && <p className="text-xs text-red-500">{uploadError}</p>}
         </div>
       )}
 
