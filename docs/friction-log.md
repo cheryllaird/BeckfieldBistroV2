@@ -29,6 +29,13 @@ Only the triage agent or a human changes a status. Entries are never deleted.
 
 ## Entries
 
+### 2026-11-19: A `status:ready` issue that depends on an unmerged PR is re-checked every night
+- **Status:** open
+- **Who:** agent (build-ready nightly routine)
+- **Task:** nightly build; #212 skipped again (also on 2026-11-05) because it builds on #211's `shelfOf`, which is still only in open PR #220
+- **Friction:** `build-ready` has no rule for ready issues whose dependency hasn't merged, so each run re-reads the issue, re-checks `main` and decides again whether to skip or comment. It also takes one of the 3 nightly slots in the agent's attention while nothing can be built.
+- **Suggested fix:** add a line to `.claude/skills/build-ready/SKILL.md`: "If the issue names a dependency that isn't on `main`, skip it silently (comment once, not every night)"; or keep such issues at `status:todo` until the dependency merges.
+
 ### 2026-11-14: OCR eval re-runs Tesseract on every change, so tuning reflow/parser is slow
 - **Status:** open
 - **Who:** agent (cloud session, OCR Phase 2 parser + multi-column reflow)

@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Search, Plus, X, Share2 } from 'lucide-react';
 import { useStore } from '../../store';
@@ -9,12 +9,15 @@ import { TipThankYouCard } from './TipThankYouCard';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
 import { ModalPortal } from '../../components/ui/ModalPortal';
+import { SortControl } from './SortControl';
+import { useLibraryRecipes } from './useLibraryRecipes';
 
 export function LibraryPage() {
   const navigate = useNavigate();
   const recipes = useStore((s) => s.recipes);
   const incomingShares = useStore((s) => s.incomingShares);
   const [query, setQuery] = useState('');
+  const { filtered, sort, setSort } = useLibraryRecipes(query);
 
   const acceptAllShares = useStore((s) => s.acceptAllShares);
   const dismissAllShares = useStore((s) => s.dismissAllShares);
@@ -48,18 +51,6 @@ export function LibraryPage() {
     window.addEventListener('popstate', onPopstate);
     return () => window.removeEventListener('popstate', onPopstate);
   }, []);
-
-  const filtered = useMemo(() => {
-    const list = query.trim()
-      ? recipes.filter(
-          (r) =>
-            r.title.toLowerCase().includes(query.toLowerCase()) ||
-            r.source.toLowerCase().includes(query.toLowerCase()) ||
-            r.ingredients.some((i) => i.name.toLowerCase().includes(query.toLowerCase()))
-        )
-      : [...recipes];
-    return list.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
-  }, [recipes, query]);
 
   const handleLongPress = (recipeId: string) => {
     // Push a dummy history entry so the back button can be intercepted
@@ -123,6 +114,8 @@ export function LibraryPage() {
           </button>
         )}
       </div>
+
+      {recipes.length > 0 && <SortControl value={sort} onChange={setSort} />}
 
       {/* Incoming shares inbox */}
       {incomingShares.length > 0 && (

@@ -178,6 +178,12 @@ Extraction runs on **each user's own Google Gemini API key**:
   Neither is shown or shared; they feed the usage report (ADR 0017).
 - **Search:** the library is filterable live by **title, source, or any ingredient
   name** — so "what can I make with aubergine?" is answerable.
+- **Sort:** the library sorts by **Newest** (default) or **Most planned** — how many times a
+  recipe has been on this bistro's meal plan, past and future, by any member (custom and
+  dining-out entries don't count). Ties, including never-planned recipes, fall back to newest
+  first. The count is derived live from the meal plan, so it works offline and isn't stored or
+  shown. Sorting applies to search results too. The choice isn't remembered: each visit starts
+  on Newest.
 - **Serving-aware viewing:** on a recipe, a servings control rescales **every
   ingredient quantity live**, rendering results as friendly fractions (½, ¾, ⅓,
   etc.). The scaling ratio is applied from the recipe's base servings.
