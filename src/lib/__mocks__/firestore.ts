@@ -4,6 +4,7 @@ import { vi } from 'vitest';
 // Every export the store uses is a spy, so tests can assert what would have
 // been written without touching Firebase.
 export const subscribeToUserData = vi.fn(() => () => {});
+export const replayUnsentWrites = vi.fn();
 export const subscribeToIncomingShares = vi.fn(() => () => {});
 export const saveRecipe = vi.fn(async () => {});
 export const deleteRecipeDoc = vi.fn();

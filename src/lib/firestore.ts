@@ -15,6 +15,12 @@ import type { Recipe, MealEntry, ShoppingItem, PantryItem, SharedRecipe, Categor
 import type { ShoppingItemPatch } from './shoppingSync';
 import type { User } from 'firebase/auth';
 import { authedFetch } from './apiClient';
+import {
+  forgetUnsentWrite,
+  readUnsentWrites,
+  recordUnsentWrite,
+  type UnsentCollection,
+} from './unsentWrites';
 
 // ── helpers ──────────────────────────────────────────────────────────────────
 
@@ -77,12 +83,33 @@ function logFirestoreError(err: unknown): void {
  * Plan-a-meal modal stayed open, a second tap added a duplicate, and the crash
  * recovery never fired, so nothing was saved until a manual restart.
  */
-function fireAndForget(write: () => Promise<unknown>): void {
+function fireAndForget(write: () => Promise<unknown>, onUnsent?: () => void): void {
   try {
     write().catch(logFirestoreError);
   } catch (err) {
+    // A synchronous throw means the write never reached the offline queue,
+    // so it won't replay on its own after the recovery reload.
+    onUnsent?.();
     logFirestoreError(err);
   }
+}
+
+/** Records a meal/pantry write the SDK refused, for replayUnsentWrites. */
+function keepUnsent(
+  bistroId: string,
+  collection: UnsentCollection,
+  op: { kind: 'set'; data: MealEntry | PantryItem } | { kind: 'delete'; id: string },
+): () => void {
+  return () => {
+    const uid = auth?.currentUser?.uid;
+    if (!uid) return;
+    const id = op.kind === 'set' ? op.data.id : op.id;
+    recordUnsentWrite(
+      op.kind === 'set'
+        ? { uid, bistroId, collection, id, kind: 'set', data: op.data }
+        : { uid, bistroId, collection, id, kind: 'delete' },
+    );
+  };
 }
 
 // How long an enableNetwork() call suppresses the next one. See
@@ -369,12 +396,18 @@ export function deleteRecipeDoc(bistroId: string, id: string): void {
 
 export function saveMealEntry(bistroId: string, entry: MealEntry): void {
   ensureFirestoreOnline();
-  fireAndForget(() => setDoc(doc(mealEntriesCol(bistroId), entry.id), stripUndefined(entry)));
+  fireAndForget(
+    () => setDoc(doc(mealEntriesCol(bistroId), entry.id), stripUndefined(entry)),
+    keepUnsent(bistroId, 'mealEntries', { kind: 'set', data: entry }),
+  );
 }
 
 export function deleteMealEntryDoc(bistroId: string, id: string): void {
   ensureFirestoreOnline();
-  fireAndForget(() => deleteDoc(doc(mealEntriesCol(bistroId), id)));
+  fireAndForget(
+    () => deleteDoc(doc(mealEntriesCol(bistroId), id)),
+    keepUnsent(bistroId, 'mealEntries', { kind: 'delete', id }),
+  );
 }
 
 // ── shopping items ────────────────────────────────────────────────────────────
@@ -423,22 +456,64 @@ export function deleteShoppingItemDoc(bistroId: string, id: string): void {
 
 export function savePantryItem(bistroId: string, item: PantryItem): void {
   ensureFirestoreOnline();
-  fireAndForget(() => setDoc(doc(pantryItemsCol(bistroId), item.id), stripUndefined(item)));
+  fireAndForget(
+    () => setDoc(doc(pantryItemsCol(bistroId), item.id), stripUndefined(item)),
+    keepUnsent(bistroId, 'pantryItems', { kind: 'set', data: item }),
+  );
 }
 
 export function deletePantryItemDoc(bistroId: string, id: string): void {
   ensureFirestoreOnline();
-  fireAndForget(() => deleteDoc(doc(pantryItemsCol(bistroId), id)));
+  fireAndForget(
+    () => deleteDoc(doc(pantryItemsCol(bistroId), id)),
+    keepUnsent(bistroId, 'pantryItems', { kind: 'delete', id }),
+  );
 }
 
 export function savePantryItems(bistroId: string, items: PantryItem[]): void {
   ensureFirestoreOnline();
   const col = pantryItemsCol(bistroId);
   const batch = writeBatch(db!);
-  items.forEach((item, index) =>
-    batch.set(doc(col, item.id), stripUndefined({ ...item, order: index })),
+  const ordered = items.map((item, index) => ({ ...item, order: index }));
+  ordered.forEach((item) => batch.set(doc(col, item.id), stripUndefined(item)));
+  fireAndForget(
+    () => batch.commit(),
+    () => ordered.forEach((item) => keepUnsent(bistroId, 'pantryItems', { kind: 'set', data: item })()),
   );
-  fireAndForget(() => batch.commit());
+}
+
+/**
+ * Replays this user's writes to `bistroId` that the SDK refused before the
+ * last crash-recovery reload (see unsentWrites.ts). Call before attaching the
+ * bistro's listeners, so the first snapshot already includes the replayed
+ * writes as pending and the store's reconcile keeps them.
+ *
+ * A record is forgotten once its write is acknowledged (or rejected by the
+ * server, e.g. access removed — retrying could never succeed). If the app
+ * reloads before that, it is replayed again: the same idempotent write.
+ */
+export function replayUnsentWrites(bistroId: string, uid: string): void {
+  if (!db) return;
+  const pending = readUnsentWrites().filter((r) => r.uid === uid && r.bistroId === bistroId);
+  if (pending.length === 0) return;
+  ensureFirestoreOnline();
+  for (const record of pending) {
+    const ref = doc(
+      record.collection === 'mealEntries' ? mealEntriesCol(bistroId) : pantryItemsCol(bistroId),
+      record.id,
+    );
+    const forget = () => forgetUnsentWrite(record);
+    try {
+      const write = record.kind === 'set' ? setDoc(ref, stripUndefined(record.data)) : deleteDoc(ref);
+      write.then(forget, (err: unknown) => {
+        forget();
+        logFirestoreError(err);
+      });
+    } catch (err) {
+      // Still crashed: keep the record for the next recovery reload.
+      logFirestoreError(err);
+    }
+  }
 }
 
 // ── category overrides ────────────────────────────────────────────────────────
