@@ -29,6 +29,13 @@ Only the triage agent or a human changes a status. Entries are never deleted.
 
 ## Entries
 
+### 2026-11-22: URL-import failures left no trace beyond 1-hour runtime logs
+- **Status:** open
+- **Who:** agent (ship-feature, #244)
+- **Task:** diagnose "Could not fetch the recipe page" on a supermarket recipe link (#244)
+- **Friction:** URL fetch failures in `api/extract-recipe.ts` returned before `finish()`, so they never reached `analytics/extractionStats`. The only evidence was Vercel runtime logs, which keep 1 hour on the Hobby plan: `get_runtime_logs` with `since: 6h`/`24h` fails with "does not retain runtime logs for the requested time range", and the evidence would have been gone a little later. The URL path also had no handler tests at all (only the photo path), and reproducing the fetch needed a new cloud environment allowing the site's host. The missing analytics and tests are fixed in this PR.
+- **Suggested fix:** note the 1-hour log retention (use `since` ≤ 50m) in `docs/recipe-extraction.md` §11 "Testing & debugging", and have friction triage confirm every terminal branch now has a test.
+
 ### 2026-11-14: OCR eval re-runs Tesseract on every change, so tuning reflow/parser is slow
 - **Status:** open
 - **Who:** agent (cloud session, OCR Phase 2 parser + multi-column reflow)
