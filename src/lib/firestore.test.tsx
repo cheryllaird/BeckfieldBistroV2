@@ -91,3 +91,68 @@ describe('ensureFirestoreOnline', () => {
     expect(enableNetwork).toHaveBeenCalled();
   });
 });
+
+describe('writes after the SDK has crashed', () => {
+  // Once the SDK's async queue has failed, write calls throw synchronously
+  // instead of rejecting. Those throws must neither escape to the caller (the
+  // Plan-a-meal modal stayed open and a second tap added a duplicate) nor
+  // bypass the crash recovery.
+  const crash = () => {
+    throw new Error('FIRESTORE (12.0.0) INTERNAL ASSERTION FAILED: Unexpected state (ID: 47125)');
+  };
+  let reload: ReturnType<typeof vi.fn>;
+
+  beforeEach(async () => {
+    const sdk = await import('firebase/firestore');
+    vi.mocked(sdk.setDoc).mockImplementation(crash);
+    vi.mocked(sdk.deleteDoc).mockImplementation(crash);
+    vi.mocked(sdk.addDoc).mockImplementation(crash);
+    vi.mocked(sdk.writeBatch).mockImplementation(
+      () => ({ set: vi.fn(), commit: crash }) as never,
+    );
+    reload = vi.fn();
+    vi.stubGlobal('location', { ...window.location, reload });
+    sessionStorage.clear();
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+  });
+
+  afterEach(async () => {
+    const sdk = await import('firebase/firestore');
+    vi.mocked(sdk.setDoc).mockImplementation(async () => {});
+    vi.mocked(sdk.deleteDoc).mockImplementation(async () => {});
+    vi.mocked(sdk.addDoc).mockImplementation(async () => ({}) as never);
+    vi.mocked(sdk.writeBatch).mockImplementation(
+      () => ({ set: vi.fn(), commit: vi.fn(async () => {}) }) as never,
+    );
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+  });
+
+  it('saveMealEntry does not throw and triggers the crash recovery reload', async () => {
+    const fs = await load();
+    expect(() => fs.saveMealEntry('b', { id: 'm1' } as never)).not.toThrow();
+    vi.advanceTimersByTime(1_000);
+    expect(reload).toHaveBeenCalledTimes(1);
+  });
+
+  it('no fire-and-forget writer lets a synchronous throw escape', async () => {
+    const fs = await load();
+    const writes: Array<() => void> = [
+      () => fs.saveMealEntry('b', { id: 'm1' } as never),
+      () => fs.deleteMealEntryDoc('b', 'm1'),
+      () => fs.deleteRecipeDoc('b', 'r1'),
+      () => fs.patchShoppingItems('b', [{ id: 's1', checked: true } as never]),
+      () => fs.deleteShoppingItemDoc('b', 's1'),
+      () => fs.savePantryItem('b', { id: 'p1' } as never),
+      () => fs.deletePantryItemDoc('b', 'p1'),
+      () => fs.savePantryItems('b', [{ id: 'p1' } as never]),
+      () => fs.saveCategoryOverride('b', { ingredientKey: 'salt' } as never),
+      () => fs.deleteCategoryOverride('b', 'salt'),
+      () => fs.logCategoryOverride('b', { ingredientKey: 'salt' } as never),
+      () => fs.saveKnownSources('b', ['Book']),
+      () => fs.saveTermsAcceptance('u', '1'),
+      () => fs.saveDefaultBistro('u', 'b'),
+    ];
+    for (const write of writes) expect(write).not.toThrow();
+  });
+});
