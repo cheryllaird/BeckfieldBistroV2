@@ -46,3 +46,4 @@ Not needed for: bug fixes, UI tweaks, refactors that keep behaviour and structur
 | [0016](0016-pantry-in-stock-flag.md) | Track whether a store cupboard item is in stock | Accepted |
 | [0017](0017-hidden-import-and-plan-metadata.md) | Record hidden import and meal-planning metadata for the usage report | Accepted |
 | [0018](0018-ko-fi-donation-panel.md) | Embed Ko-fi's donation panel, loaded only on request | Proposed |
+| [0019](0019-keep-agent-prs-mergeable.md) | Nudge watching agents when main moves, with a nightly sweep as backstop | Proposed |

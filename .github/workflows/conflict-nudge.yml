@@ -1,0 +1,91 @@
+name: Conflict nudge
+
+# When main moves, comment on each open agent PR (claude/* branch) that now has merge
+# conflicts. The comment is a PR event, so the Claude session watching that PR wakes up and
+# resolves the conflict (steward skill). PRs with no live watcher are picked up by the nightly
+# pr-sweep Routine. See ADR 0019.
+#
+# Safe by construction: it runs on pushes to main only, checks out no code, and never puts PR
+# text into a script or command. It only reads PRs and writes comments.
+
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+  pull-requests: write
+  issues: write
+
+concurrency:
+  group: conflict-nudge
+  cancel-in-progress: false
+
+jobs:
+  nudge:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Comment on conflicted agent PRs
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const { owner, repo } = context.repo;
+            const mainSha = context.sha;
+            const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+            const pulls = await github.paginate(github.rest.pulls.list, {
+              owner, repo, state: 'open', base: 'main', per_page: 100,
+            });
+            const agentPulls = pulls.filter(
+              (pr) => pr.head.ref.startsWith('claude/') && pr.head.repo?.full_name === `${owner}/${repo}`,
+            );
+            core.info(`${agentPulls.length} open agent PR(s) to check against ${mainSha.slice(0, 7)}`);
+
+            // GitHub computes mergeability in the background after main moves: mergeable is
+            // null until it has an answer, so poll for a while.
+            async function mergeability(number) {
+              for (let attempt = 0; attempt < 10; attempt++) {
+                const { data } = await github.rest.pulls.get({ owner, repo, pull_number: number });
+                if (data.mergeable !== null) return data;
+                await sleep(6000);
+              }
+              return null;
+            }
+
+            for (const pr of agentPulls) {
+              const data = await mergeability(pr.number);
+              if (!data) {
+                core.warning(`#${pr.number}: mergeability still unknown; the nightly sweep will check it`);
+                continue;
+              }
+              if (data.mergeable !== false) {
+                core.info(`#${pr.number}: merges cleanly`);
+                continue;
+              }
+
+              // One nudge per head commit: if the watcher hasn't pushed since the last nudge,
+              // another one would only add noise.
+              const marker = `<!-- conflict-nudge head=${data.head.sha} -->`;
+              const comments = await github.paginate(github.rest.issues.listComments, {
+                owner, repo, issue_number: pr.number, per_page: 100,
+              });
+              if (comments.some((c) => c.body?.includes(marker))) {
+                core.info(`#${pr.number}: already nudged for ${data.head.sha.slice(0, 7)}`);
+                continue;
+              }
+
+              await github.rest.issues.createComment({
+                owner, repo, issue_number: pr.number,
+                body: [
+                  marker,
+                  `\`main\` moved to ${mainSha.slice(0, 7)} and this branch now has merge conflicts with it.`,
+                  '',
+                  'Agent watching this PR: merge `origin/main` into the branch and resolve, following the `steward` skill. ' +
+                    'If nobody is watching, the nightly `pr-sweep` run will pick it up.',
+                  '',
+                  '_Posted automatically by the conflict-nudge workflow._',
+                ].join('\n'),
+              });
+              core.info(`#${pr.number}: conflicted, nudged`);
+            }
