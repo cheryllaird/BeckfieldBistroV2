@@ -14,8 +14,7 @@ import { ExtractionProgress } from './ExtractionProgress';
 import { ImageCropper } from '../../components/ImageCropper';
 import { CameraCapture } from '../../components/CameraCapture';
 import { useOnlineStatus } from '../../hooks/useOnlineStatus';
-
-type CaptureMode = 'url' | 'upload' | 'manual';
+import { initialCaptureMode, type CaptureMode } from './captureMode';
 
 export function NewRecipePage() {
   const navigate = useNavigate();
@@ -34,7 +33,13 @@ export function NewRecipePage() {
   const { isOnline } = useOnlineStatus();
 
   const prefillTitle = searchParams.get('title') ?? '';
-  const [mode, setMode] = useState<CaptureMode>(prefillTitle || isEditMode ? 'manual' : 'upload');
+  const [mode, setMode] = useState<CaptureMode>(() =>
+    initialCaptureMode({
+      modeParam: searchParams.get('mode'),
+      forceManual: !!prefillTitle || isEditMode,
+      isOnline,
+    }),
+  );
   const [urlInput, setUrlInput] = useState('');
   const [isExtracting, setIsExtracting] = useState(false);
   const [stage, setStage] = useState<ImageExtractionStage>('preparing');
