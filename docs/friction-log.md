@@ -180,6 +180,7 @@ Only the triage agent or a human changes a status. Entries are never deleted.
 - **Seen again:** 2026-11-16, same items still reported. Added the root `test-*.ts` smoke scripts as knip entries, so they no longer show as unused files; the devDependency and `initFirebaseAdmin` remain for a human.
 - **Seen again:** 2026-11-21, same two items still reported by knip; nothing else left in its report. Removed the unused Vite template images in `src/assets/` instead (knip doesn't scan images).
 - **Seen again:** 2026-11-22, same two items still reported, nothing else in knip's report. Split `ShopItem`/`MealSourcesModal` out of `src/pages/ShoppingList/index.tsx` instead.
+- **Seen again:** 2026-11-23, same two items still reported. Dropped the unused `FetchFailureKind` type export (`api/_utils/fetchErrors.ts`) instead.
 
 ### 2026-11-09: Write-path wake was silently throttled away, and lib/firestore.ts had no tests
 - **Who:** agent (interactive)

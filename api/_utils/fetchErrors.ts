@@ -9,7 +9,7 @@ import { UnsafeUrlError } from './safeFetch.js';
 // `reason` is the analytics fallback reason (`urlFetch-<class>`); it carries no
 // URL, hostname or other request data.
 
-export type FetchFailureKind = 'blocked' | 'bad-url' | 'error';
+type FetchFailureKind = 'blocked' | 'bad-url' | 'error';
 
 export interface FetchFailure {
   kind: FetchFailureKind;
