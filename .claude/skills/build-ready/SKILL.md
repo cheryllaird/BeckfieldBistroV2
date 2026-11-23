@@ -24,6 +24,9 @@ Exactly one `status:*` label per issue. The issue closes itself when its PR merg
 - Open issues labelled `status:ready`, oldest first. On request, just the issue you were given
   (it must still carry `status:ready`).
 - Skip any that already have an open PR referencing them.
+- Skip any whose dependency (an issue or PR it builds on) isn't on `main` yet. Comment that once,
+  not every night: if the issue already has your "waiting on #n" comment, skip it silently. It
+  doesn't use one of the 3 slots.
 - Unattended runs: at most **3** issues, one PR each. Swap `status:ready` → `status:in-progress`
   before starting each one.
 

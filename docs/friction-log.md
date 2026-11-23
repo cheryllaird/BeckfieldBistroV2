@@ -30,13 +30,13 @@ Only the triage agent or a human changes a status. Entries are never deleted.
 ## Entries
 
 ### 2026-11-22: URL-import failures left no trace beyond 1-hour runtime logs
-- **Status:** open
+- **Status:** fixed in this PR (log-retention note in `docs/recipe-extraction.md` §11; tests added for the URL `url+structured`, `url+gemini` and `urlGemini-bad-json` outcomes)
 - **Who:** agent (ship-feature, #244)
 - **Task:** diagnose "Could not fetch the recipe page" on a supermarket recipe link (#244)
 - **Friction:** URL fetch failures in `api/extract-recipe.ts` returned before `finish()`, so they never reached `analytics/extractionStats`. The only evidence was Vercel runtime logs, which keep 1 hour on the Hobby plan: `get_runtime_logs` with `since: 6h`/`24h` fails with "does not retain runtime logs for the requested time range", and the evidence would have been gone a little later. The URL path also had no handler tests at all (only the photo path), and reproducing the fetch needed a new cloud environment allowing the site's host. The missing analytics and tests are fixed in this PR.
 - **Suggested fix:** note the 1-hour log retention (use `since` ≤ 50m) in `docs/recipe-extraction.md` §11 "Testing & debugging", and have friction triage confirm every terminal branch now has a test.
 ### 2026-11-22: No way to see a page without a signed-in Firebase session
-- **Status:** open
+- **Status:** issue https://github.com/cheryllaird/BeckfieldBistroV2/issues/253
 - **Who:** agent (ship-feature, issue #240)
 - **Task:** checking the Library redesign at phone width (#240)
 - **Friction:** every page sits behind Firebase sign-in, so the app can't be run here to look at a UI change. I built a throwaway Vite entry that seeds the store and renders `AppLayout` + the page. Its first try rendered without Tailwind because Vite's root was the harness folder; serving it from the repo root fixed that. About 15 minutes, and the next UI task will redo it.
@@ -50,14 +50,14 @@ Only the triage agent or a human changes a status. Entries are never deleted.
 - **Suggested fix:** corrected the guide and pointed it to the new `useHideOnScroll` hook.
 
 ### 2026-11-19: A `status:ready` issue that depends on an unmerged PR is re-checked every night
-- **Status:** open
+- **Status:** fixed in this PR (`build-ready` now skips issues whose dependency isn't on `main` and comments only once)
 - **Who:** agent (build-ready nightly routine)
 - **Task:** nightly build; #212 skipped again (also on 2026-11-05) because it builds on #211's `shelfOf`, which is still only in open PR #220
 - **Friction:** `build-ready` has no rule for ready issues whose dependency hasn't merged, so each run re-reads the issue, re-checks `main` and decides again whether to skip or comment. It also takes one of the 3 nightly slots in the agent's attention while nothing can be built.
 - **Suggested fix:** add a line to `.claude/skills/build-ready/SKILL.md`: "If the issue names a dependency that isn't on `main`, skip it silently (comment once, not every night)"; or keep such issues at `status:todo` until the dependency merges.
 
 ### 2026-11-14: OCR eval re-runs Tesseract on every change, so tuning reflow/parser is slow
-- **Status:** open
+- **Status:** issue https://github.com/cheryllaird/BeckfieldBistroV2/issues/254
 - **Who:** agent (cloud session, OCR Phase 2 parser + multi-column reflow)
 - **Task:** improving `parseRecipeText` and `reflowColumns` against `npm run eval:ocr` (#223/#228)
 - **Friction:** each `eval:ocr` run OCRs every photo again (~1.5 min for 15 photos), although
@@ -69,7 +69,7 @@ Only the triage agent or a human changes a status. Entries are never deleted.
   preprocessing variant are unchanged.
 
 ### 2026-11-12: vitest `globals: true` doesn't reach the project configs
-- **Status:** open
+- **Status:** fixed in this PR (dropped `globals: true` and the `vitest/globals` type; tests import from `vitest` explicitly)
 - **Who:** agent (interactive, ship-feature)
 - **Task:** OCR-only eval, https://github.com/cheryllaird/BeckfieldBistroV2/issues/223
 - **Friction:** `vitest.config.ts` sets `globals: true` at the root, but the `unit`/`dom` projects

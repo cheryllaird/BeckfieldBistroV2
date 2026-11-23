@@ -9,7 +9,7 @@ process.env.TZ = 'UTC';
 // during tests.
 export default defineConfig({
   test: {
-    globals: true,
+    // No `globals`: every test imports describe/it/expect from 'vitest' explicitly.
     coverage: {
       provider: 'v8',
       include: ['src/**/*.{ts,tsx}', 'api/**/*.ts'],
