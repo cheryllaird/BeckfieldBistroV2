@@ -1,17 +1,7 @@
 import { useState, useRef, useEffect, useLayoutEffect, useCallback } from 'react';
 import { useSwipeNavigate } from '../../hooks/useSwipeNavigate';
 import { useNavigate } from 'react-router-dom';
-import {
-  ShoppingCart,
-  Plus,
-  Undo2,
-  ArrowUpDown,
-  Zap,
-  ShoppingBag,
-  Pencil,
-  ChevronRight,
-  Package,
-} from 'lucide-react';
+import { Undo2, ArrowUpDown, ShoppingBag, Pencil, ChevronRight } from 'lucide-react';
 import { useStore } from '../../store';
 import { Button } from '../../components/ui/Button';
 import { generateId } from '../../lib/utils';
@@ -23,6 +13,8 @@ import { ItemSheet } from './ItemSheet';
 import { UndoToast } from './UndoToast';
 import { CATEGORY_ORDER } from './categoryOrder';
 import { ShopItem } from './ShopItem';
+import { EmptyListState } from './EmptyListState';
+import { ManualAddInput } from './ManualAddInput';
 
 type Mode = 'shop' | 'edit';
 
@@ -310,40 +302,8 @@ export function ShoppingListPage() {
       <div ref={listBodyRef} className="flex-1 flex flex-col gap-4">
       {listItems.length === 0 ? (
         <div className="flex flex-col gap-5">
-          <div className="flex flex-col items-center gap-4 py-10 text-center animate-fade">
-            {activeList === 'immediate' ? (
-              <ShoppingCart size={48} className="text-slate-200" />
-            ) : (
-              <Package size={48} className="text-slate-200" />
-            )}
-            <div>
-              <p className="text-base font-semibold text-slate-700">
-                Your {activeList === 'immediate' ? 'Immediate' : 'Stock up'} list is empty
-              </p>
-              <p className="text-sm text-slate-400 mt-1">
-                {activeList === 'immediate'
-                  ? 'Generate from your meal plan or add items manually'
-                  : 'Add items you want to keep topped up'}
-              </p>
-            </div>
-            {activeList === 'immediate' && (
-              <Button onClick={() => setGenerateOpen(true)}>
-                <Zap size={14} /> Generate from plan
-              </Button>
-            )}
-          </div>
-          <div className="flex gap-2">
-            <input
-              value={manualItem}
-              onChange={(e) => setManualItem(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && handleAddManual()}
-              placeholder="Add item manually…"
-              className="flex-1 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-800 placeholder-slate-400 outline-none focus:border-amber-400 focus:ring-2 focus:ring-amber-100 transition-colors"
-            />
-            <Button size="sm" onClick={handleAddManual} disabled={!manualItem.trim()} aria-label="Add">
-              <Plus size={14} />
-            </Button>
-          </div>
+          <EmptyListState list={activeList} onGenerate={() => setGenerateOpen(true)} />
+          <ManualAddInput value={manualItem} onChange={setManualItem} onAdd={handleAddManual} />
         </div>
       ) : (
       <>
@@ -364,20 +324,7 @@ export function ShoppingListPage() {
 
       {/* Manual add (edit mode only) */}
       {mode === 'edit' && (
-        <>
-          <div className="flex gap-2">
-            <input
-              value={manualItem}
-              onChange={(e) => setManualItem(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && handleAddManual()}
-              placeholder="Add item manually…"
-              className="flex-1 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-800 placeholder-slate-400 outline-none focus:border-amber-400 focus:ring-2 focus:ring-amber-100 transition-colors"
-            />
-            <Button size="sm" onClick={handleAddManual} disabled={!manualItem.trim()} aria-label="Add">
-              <Plus size={14} />
-            </Button>
-          </div>
-        </>
+        <ManualAddInput value={manualItem} onChange={setManualItem} onAdd={handleAddManual} />
       )}
 
       {/* Unchecked items */}

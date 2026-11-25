@@ -93,3 +93,52 @@ describe('ShoppingListPage — item sheet in edit mode', () => {
     expect(screen.getByRole('status')).toHaveTextContent('Removed milk');
   });
 });
+
+describe('ShoppingListPage — empty state and manual add', () => {
+  it('shows the Immediate empty state with Generate and adds a typed item to that list', async () => {
+    useStore.setState({ shoppingItems: [] });
+    const user = userEvent.setup();
+    renderPage();
+
+    expect(screen.getByText('Your Immediate list is empty')).toBeInTheDocument();
+    expect(screen.getByText('Generate from your meal plan or add items manually')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Generate from plan/ })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Add' })).toBeDisabled();
+
+    await user.type(screen.getByPlaceholderText('Add item manually…'), '  eggs  {Enter}');
+
+    expect(useStore.getState().shoppingItems).toEqual([
+      expect.objectContaining({ name: 'eggs', listType: 'immediate', checked: false, manual: true }),
+    ]);
+    expect(screen.queryByText('Your Immediate list is empty')).not.toBeInTheDocument();
+  });
+
+  it('shows the Stock up empty state without Generate', async () => {
+    useStore.setState({ shoppingItems: [] });
+    const user = userEvent.setup();
+    renderPage();
+
+    await user.click(screen.getByRole('button', { name: 'Stock up' }));
+
+    expect(screen.getByText('Your Stock up list is empty')).toBeInTheDocument();
+    expect(screen.getByText('Add items you want to keep topped up')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Generate from plan/ })).not.toBeInTheDocument();
+  });
+
+  it('adds a manual item from edit mode with the Add button and clears the input', async () => {
+    const user = userEvent.setup();
+    renderPage();
+    await user.click(screen.getByRole('button', { name: /Edit$/ }));
+
+    const input = screen.getByPlaceholderText('Add item manually…');
+    await user.type(input, 'bread');
+    await user.click(screen.getByRole('button', { name: 'Add' }));
+
+    expect(useStore.getState().shoppingItems[0]).toMatchObject({
+      name: 'bread',
+      listType: 'immediate',
+      manual: true,
+    });
+    expect(input).toHaveValue('');
+  });
+});
