@@ -56,4 +56,17 @@ describe('formatTimingLine', () => {
     });
     expect(line).toBe('extract-recipe: timing kind=photo method=failed total=10ms vision=5ms');
   });
+
+  it('reports the pasted-text Gemini stage with its model and attempts', () => {
+    const line = formatTimingLine({
+      kind: 'text',
+      method: 'text+gemini',
+      totalMs: 2400,
+      stagesMs: { auth: 10, profile: 40, textGemini: 2300, analytics: 50 },
+      gemini: { textGemini: { model: 'gemini-3.1-flash-lite', attempts: 1 } },
+    });
+    expect(line).toBe(
+      'extract-recipe: timing kind=text method=text+gemini total=2400ms auth=10ms profile=40ms textGemini=2300ms textGeminiModel=gemini-3.1-flash-lite textGeminiAttempts=1 analytics=50ms',
+    );
+  });
 });

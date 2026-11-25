@@ -3,7 +3,7 @@
 // single log line from an allow-list of fields, and maps the total to a coarse
 // bucket for the aggregate counters in analytics/extractionStats*.
 //
-// Nothing here ever sees a uid, API key, image, OCR text or model output: only
+// Nothing here ever sees a uid, API key, image, OCR or pasted text, or model output: only
 // stage names, durations, a model name, an attempt count and a cold/warm flag.
 
 type StageName =
@@ -13,6 +13,7 @@ type StageName =
   | 'ocrPreprocess'
   | 'ocr'
   | 'ocrGemini'
+  | 'textGemini'
   | 'local'
   | 'analytics';
 
@@ -23,10 +24,12 @@ export interface GeminiCallInfo {
   attempts: number;
 }
 
-type GeminiStage = 'vision' | 'ocrGemini';
+type GeminiStage = 'vision' | 'ocrGemini' | 'textGemini';
+
+export type ExtractionKind = 'photo' | 'url' | 'text';
 
 export interface TimingSnapshot {
-  kind: 'photo' | 'url';
+  kind: ExtractionKind;
   method: string;
   totalMs: number;
   stagesMs: Partial<Record<StageName, number>>;
@@ -50,7 +53,7 @@ export interface Timer {
   gemini(stage: GeminiStage, info: GeminiCallInfo): void;
   ocrCold(cold: boolean): void;
   elapsed(): number;
-  snapshot(kind: 'photo' | 'url', method: string): TimingSnapshot;
+  snapshot(kind: ExtractionKind, method: string): TimingSnapshot;
 }
 
 export function createTimer(now: () => number = Date.now): Timer {
@@ -80,7 +83,7 @@ export function createTimer(now: () => number = Date.now): Timer {
   };
 }
 
-const STAGE_ORDER: StageName[] = ['auth', 'profile', 'vision', 'ocrPreprocess', 'ocr', 'ocrGemini', 'local', 'analytics'];
+const STAGE_ORDER: StageName[] = ['auth', 'profile', 'vision', 'ocrPreprocess', 'ocr', 'ocrGemini', 'textGemini', 'local', 'analytics'];
 const MODEL_RE = /^[a-z0-9.-]{1,60}$/i;
 
 /**
@@ -94,7 +97,7 @@ export function formatTimingLine(s: TimingSnapshot): string {
     if (ms === undefined) continue;
     parts.push(`${name}=${Math.round(ms)}ms`);
     if (name === 'ocr' && s.ocrCold !== undefined) parts.push(`ocrWorker=${s.ocrCold ? 'cold' : 'warm'}`);
-    if (name === 'vision' || name === 'ocrGemini') {
+    if (name === 'vision' || name === 'ocrGemini' || name === 'textGemini') {
       const g = s.gemini[name];
       if (g && MODEL_RE.test(g.model)) parts.push(`${name}Model=${g.model}`, `${name}Attempts=${Math.max(0, Math.floor(g.attempts))}`);
     }

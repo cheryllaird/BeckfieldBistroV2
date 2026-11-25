@@ -75,9 +75,9 @@ bistro. Whether a **Gemini API key** is on file is personal and never shared.
 ## 3. AI recipe extraction
 
 Extraction is the app's headline capability. The user can create a recipe by
-pointing at a **URL**, supplying a **photo** (camera or gallery), or typing it in
-manually. The URL and photo paths use AI and require the user's Gemini key and a
-connection; manual entry always works.
+pointing at a **URL**, **pasting the recipe's text**, supplying a **photo** (camera
+or gallery), or typing it in manually. The URL, paste and photo paths use AI and
+require the user's Gemini key and a connection; manual entry always works.
 
 The design principle throughout: **prefer the most faithful source available, and
 degrade gracefully so a legible input almost always yields a usable recipe.**
@@ -99,6 +99,22 @@ Given a recipe web address, the app fetches the page and tries, in order:
 In all cases the app also pulls the page's lead image (from structured data,
 `og:image`, or `twitter:image`) to use as the cover, and retains the source URL so
 the recipe can link back to the original.
+
+### 3.1a Pasted text — for sites that block automatic imports
+Some sites refuse the app's automatic page fetch. The user can instead copy the
+recipe from the page in their own browser and paste it in, optionally with a link
+to the original. The app tries, in order:
+
+1. **AI structuring of the pasted text**, with the same faithfulness rules (§3.3)
+   and an instruction to ignore page clutter (navigation, shopping buttons,
+   reviews, nutrition tables).
+2. **The local text parser** — no AI; also the only path when the AI declines the
+   content for copyright. Lines of page clutter are dropped first.
+3. **A clear failure** if no ingredients or method can be found.
+
+The link is only recorded as the recipe's source (its website name, or "Pasted
+text" when none is given). The app never opens it. The pasted text itself is not
+stored or logged; only the recipe the user saves is kept.
 
 ### 3.2 Photo extraction — strategy ladder
 Given a photo (of a cookbook page, recipe card, screenshot, or printout), the app
@@ -144,7 +160,7 @@ Each failure mode produces a distinct, actionable message rather than a generic
 error: AI **rate-limit / daily-quota exhausted**, AI **temporarily overloaded**,
 **copyright-recitation block** (content matches a copyrighted source too closely to
 copy), **unreadable photo**, **site blocks automatic imports** (the page timed out
-or refused us; the user is pointed to Photo or Manual), and **unfetchable/invalid URL**. Transient overloads
+or refused us; the user is pointed to Paste text or Photo), and **unfetchable/invalid URL**. Transient overloads
 are retried automatically with backoff; a quota block on the primary model falls
 through to a secondary model on its own quota bucket. Manual entry is always
 offered as the ultimate fallback.
@@ -496,7 +512,7 @@ appears on another without manual refresh. The functional guarantees:
 - If the sync engine crashes, the app reloads itself to recover. Meal-plan and store
   cupboard changes made in the moment before the reload are kept on the device and
   sent once it has restarted, so nothing added or removed is lost or brought back.
-- **Only** AI extraction (URL/photo), sharing, and managing bistro membership
+- **Only** AI extraction (URL, pasted text or photo), sharing, and managing bistro membership
   (inviting, joining, removing, leaving) require a connection; those are clearly
   gated when offline, while manual recipe entry stays available.
 - **Switching bistros works offline:** each bistro the user has opened keeps a
@@ -569,6 +585,7 @@ appears on another without manual refresh. The functional guarantees:
 | Capability | What it does |
 |---|---|
 | AI URL extraction | Structured-data-first, AI-fallback recipe import from a web link, with cover image |
+| Pasted-text extraction | AI-then-local-parse import of recipe text copied from a site that blocks automatic imports |
 | AI photo extraction | Vision → OCR+AI → local-parse ladder from a camera/gallery photo |
 | Faithful extraction | Preserves step granularity, ingredient wording, and section grouping |
 | BYO Gemini key | Per-user, encrypted, self-billed AI usage |

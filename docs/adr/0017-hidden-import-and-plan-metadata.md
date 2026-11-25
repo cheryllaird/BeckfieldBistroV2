@@ -4,6 +4,7 @@
 - **Date:** 2026-11-02
 - **Deciders:** Cheryl Laird
 - **PR:** see issue #198
+- **Amended by:** [0020](0020-pasted-text-extraction.md) (`method` gains `'text'`)
 
 ## Context
 
