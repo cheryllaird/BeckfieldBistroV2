@@ -213,6 +213,53 @@ describe('extract-recipe URL path', () => {
     expect(lifetimeStats().fallbackReasons).toEqual({ 'urlFetch-not-html': { inc: 1 } });
   });
 
+  const ldPage = (recipe: Record<string, unknown>) =>
+    page(
+      `<html><head><script type="application/ld+json">${JSON.stringify({ '@type': 'Recipe', ...recipe })}</script></head>` +
+        '<body><p>Soup. 1 onion. Boil.</p></body></html>',
+    );
+  const LD_RECIPE = { name: 'Soup', recipeIngredient: ['1 onion'], recipeInstructions: ['Boil the onion'] };
+
+  it('JSON-LD with a method returns url+structured without calling Gemini', async () => {
+    safeFetchText.mockResolvedValue(ldPage(LD_RECIPE));
+    const res = await callUrl();
+
+    expect(res.status).toHaveBeenCalledWith(200);
+    expect(res.json.mock.calls[0][0]).toMatchObject({ extractionMethod: 'url+structured' });
+    expect(lifetimeStats().counts).toEqual({ 'url+structured': { inc: 1 } });
+    expect(generateContent).not.toHaveBeenCalled();
+  });
+
+  it('no JSON-LD: Gemini structures the page text (url+gemini)', async () => {
+    safeFetchText.mockResolvedValue(page('<html><body><p>Soup. 1 onion. Boil.</p></body></html>'));
+    generateContent.mockResolvedValue(geminiText(RECIPE_JSON));
+    const res = await callUrl();
+
+    expect(res.status).toHaveBeenCalledWith(200);
+    expect(res.json.mock.calls[0][0]).toMatchObject({ extractionMethod: 'url+gemini' });
+    expect(lifetimeStats().counts).toEqual({ 'url+gemini': { inc: 1 } });
+  });
+
+  it('JSON-LD without a method and unparseable Gemini output keeps the partial recipe', async () => {
+    safeFetchText.mockResolvedValue(ldPage({ ...LD_RECIPE, recipeInstructions: [] }));
+    generateContent.mockResolvedValue(geminiText('not json'));
+    const res = await callUrl();
+
+    expect(res.status).toHaveBeenCalledWith(200);
+    expect(res.json.mock.calls[0][0]).toMatchObject({ extractionMethod: 'url+structured' });
+    expect(lifetimeStats().fallbackReasons).toEqual({ 'urlGemini-bad-json': { inc: 1 } });
+  });
+
+  it('no JSON-LD and unparseable Gemini output is a counted failure', async () => {
+    safeFetchText.mockResolvedValue(page('<html><body><p>Soup. 1 onion. Boil.</p></body></html>'));
+    generateContent.mockResolvedValue(geminiText('not json'));
+    const res = await callUrl();
+
+    expect(res.status).toHaveBeenCalledWith(422);
+    expect(lifetimeStats().counts).toEqual({ failed: { inc: 1 } });
+    expect(lifetimeStats().fallbackReasons).toEqual({ 'urlGemini-bad-json': { inc: 1 } });
+  });
+
   it('a RECITATION block never suggests another route to the same content (ADR 0010)', async () => {
     safeFetchText.mockResolvedValue(page('<html><body><p>Soup. 1 onion. Boil.</p></body></html>'));
     generateContent.mockRejectedValue(new Error('Candidate was blocked due to RECITATION'));

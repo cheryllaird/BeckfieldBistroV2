@@ -422,7 +422,12 @@ trace through Tesseract's dynamic `require`. **Removing that glob breaks OCR at 
 - **`forceOcr: true`** in the request body skips vision — use it to exercise/verify the
   OCR path directly.
 - **Server logs** carry `extractionMethod=…`, `ocr confidence=… chars=…
-  columnsReflowed=…`, and gate‑fail reasons.
+  columnsReflowed=…`, and gate‑fail reasons. Vercel keeps runtime logs for **1 hour** on
+  this plan: query them with `since` of 50 minutes or less (`6h`/`24h` fail with "does not
+  retain runtime logs for the requested time range"), and read them soon after a report.
+  Older failures are only visible as counts and `fallbackReasons` in `analytics/extractionStats`
+  (§9). Every URL-path outcome (fetch failures, `url+structured`, `url+gemini`, Gemini
+  failures) has a handler test in `api/extract-recipe.test.ts`.
 - **Response fields** `extractionMethod` and `ocrText` tell you which path ran and what
   the OCR actually read.
 - Tesseract bundling can only be fully verified on a **Vercel preview deploy** — a local
