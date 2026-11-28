@@ -29,6 +29,15 @@ Only the triage agent or a human changes a status. Entries are never deleted.
 
 ## Entries
 
+### 2026-11-22: No local way to run a workflow's github-script
+- **Status:** open
+- **Who:** agent (conflict-nudge / pr-sweep session)
+- **Task:** adding `.github/workflows/conflict-nudge.yml`
+- **Friction:** no `actionlint` or `act`, so the inline script could only be checked by hand
+  against a mocked `github` client. Also unclear whether bot comments wake a session subscribed
+  to the PR; only a real conflict will tell.
+- **Suggested fix:** move non-trivial workflow scripts into `scripts/*.cjs` with a vitest test,
+  and add `actionlint` to CI.
 ### 2026-11-22: URL-import failures left no trace beyond 1-hour runtime logs
 - **Status:** fixed in this PR (log-retention note in `docs/recipe-extraction.md` §11; tests added for the URL `url+structured`, `url+gemini` and `urlGemini-bad-json` outcomes)
 - **Who:** agent (ship-feature, #244)

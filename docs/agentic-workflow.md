@@ -16,7 +16,10 @@ The decision behind it is [ADR 0008](adr/0008-agentic-delivery-workflow.md).
    entry if something got in its way. It uses the `security-reviewer` subagent when it touches
    `api/`, auth or `firestore.rules`.
 3. **PR.** The agent pushes a `claude/*` branch and opens a PR from the template. It watches CI
-   and review comments and fixes them (the `steward` skill).
+   and review comments and fixes them (the `steward` skill). When `main` moves and the PR
+   stops merging cleanly, the `conflict-nudge` workflow comments on it, which wakes the
+   watching agent to merge `main` in; the nightly `pr-sweep` catches PRs nobody is watching
+   ([ADR 0020](adr/0020-keep-agent-prs-mergeable.md)).
 4. **Review.** CI must be green. You read the diff. Agent PRs are opened under your GitHub
    account, so GitHub won't let you "approve" them; **your merge click is the approval**, and
    agents are blocked from merging (see Guardrails). Look hardest at PRs the template marks as
@@ -63,6 +66,7 @@ labelled `agent:nightly`, and never merges. If there's nothing worth doing, it d
 
 | Routine | Skill | When (UK time) | What it does |
 |---|---|---|---|
+| PR sweep | `pr-sweep` | 00:47 daily | Merges `main` into up to 5 conflicted or mechanically broken `claude/*` PRs and pushes; flags the rest `status:needs-attention`. Opens no PR |
 | Nightly docs | `nightly-docs` | 01:47 daily | Checks the last day's merges against the docs, ADR index and `AGENTS.md`; fixes drift in a docs-only PR |
 | Nightly cleanup | `nightly-cleanup` | 02:47 daily | Picks one small, behaviour-preserving cleanup from the `knip` report or legacy/TODO markers |
 | Friction triage | `friction-triage` | Mondays 07:47 | Fixes cheap open friction entries; files issues for the rest |
@@ -79,6 +83,7 @@ any session to list, pause or update them.
 | Permissions | Deny reading `.env*`, deploying, pushing to `main`, force-push, merging PRs; ask before editing rules, workflows, `vercel.json`, `package.json`, auth/crypto/safeFetch | `.claude/settings.json` |
 | No deploy credentials | Agents never get Vercel or Firebase deploy tokens; Routines have no connectors | Routine/environment config |
 | CI | Lint, typecheck, tests, build, secret scan; `npm audit` and `knip` reports | `.github/workflows/ci.yml` |
+| Conflict nudge | Comments on agent PRs that `main` has made unmergeable; read PRs and write comments only | `.github/workflows/conflict-nudge.yml` |
 | PR template | Every PR states its ADR, friction entry, sensitive paths touched and test evidence | `.github/pull_request_template.md` |
 | Branch ruleset | The hard stop: nothing reaches `main` without a PR, green checks and your approval | GitHub settings (below) |
 
