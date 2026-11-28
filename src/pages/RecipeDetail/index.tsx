@@ -4,8 +4,6 @@ import {
   ArrowLeft,
   Clock,
   Users,
-  Minus,
-  Plus,
   CalendarPlus,
   Trash2,
   Edit,
@@ -18,11 +16,12 @@ import {
 import { useStore } from '../../store';
 import { useSwipeNavigate } from '../../hooks/useSwipeNavigate';
 import { Button } from '../../components/ui/Button';
-import { scaleIngredient, recipeSourceLabel } from '../../lib/utils';
-import { formatQuantity } from '../../lib/ingredients';
+import { recipeSourceLabel } from '../../lib/utils';
 import { PlanDateModal } from './PlanDateModal';
 import { ShareModal } from './ShareModal';
 import { ImageViewerModal } from './ImageViewerModal';
+import { IngredientsTab } from './IngredientsTab';
+import { MethodSteps } from './MethodSteps';
 
 type Tab = 'ingredients' | 'method';
 
@@ -74,10 +73,6 @@ export function RecipeDetailPage() {
       </div>
     );
   }
-
-  const sectionsToDisplay = recipe.ingredientSections?.length
-    ? recipe.ingredientSections
-    : [{ title: '', ingredients: recipe.ingredients }];
 
   const handleDelete = () => {
     setMenuOpen(false);
@@ -229,72 +224,10 @@ export function RecipeDetailPage() {
       {/* No per-panel fade: the horizontal slide is the tab transition, the
           same as every other swipeable surface. */}
       {tab === 'ingredients' && (
-        <div>
-          {/* Serving adjuster */}
-          <div className="flex items-center justify-between bg-amber-50 border border-amber-100 rounded-xl px-4 py-3 mb-4">
-            <span className="text-sm font-medium text-slate-700">Adjust servings</span>
-            <div className="flex items-center gap-3">
-              <button
-                onClick={() => setServings((s) => Math.max(1, s - 1))}
-                className="w-7 h-7 rounded-full bg-white border border-slate-200 flex items-center justify-center text-slate-600 hover:bg-slate-50 shadow-sm"
-                aria-label="Decrease servings"
-              >
-                <Minus size={13} />
-              </button>
-              <span className="text-base font-bold text-amber-700 w-6 text-center">
-                {servings}
-              </span>
-              <button
-                onClick={() => setServings((s) => s + 1)}
-                className="w-7 h-7 rounded-full bg-white border border-slate-200 flex items-center justify-center text-slate-600 hover:bg-slate-50 shadow-sm"
-                aria-label="Increase servings"
-              >
-                <Plus size={13} />
-              </button>
-            </div>
-          </div>
-
-          {/* Ingredient sections */}
-          <div className="flex flex-col gap-4">
-            {sectionsToDisplay.map((section, sIdx) => (
-              <div key={sIdx}>
-                {section.title && (
-                  <h4 className="text-xs font-semibold text-amber-700 uppercase tracking-wide mb-1">
-                    {section.title}
-                  </h4>
-                )}
-                <ul className="flex flex-col divide-y divide-slate-100">
-                  {section.ingredients.map((ing, index) => {
-                    const scaled = scaleIngredient(ing, recipe.servings, servings);
-                    return (
-                      <li key={index} className="flex items-baseline justify-between py-2.5">
-                        <span className="text-sm text-slate-700">{scaled.name}</span>
-                        <span className="text-sm font-medium text-slate-900 ml-4 shrink-0">
-                          {scaled.quantity > 0 ? formatQuantity(scaled.quantity) : ''}{' '}
-                          {scaled.unit}
-                        </span>
-                      </li>
-                    );
-                  })}
-                </ul>
-              </div>
-            ))}
-          </div>
-        </div>
+        <IngredientsTab recipe={recipe} servings={servings} setServings={setServings} />
       )}
 
-      {tab === 'method' && (
-        <ol className="flex flex-col gap-4">
-          {recipe.steps.map((step, i) => (
-            <li key={i} className="flex gap-3">
-              <span className="shrink-0 w-6 h-6 rounded-full bg-amber-500 text-white text-xs font-bold flex items-center justify-center mt-0.5">
-                {i + 1}
-              </span>
-              <p className="text-sm text-slate-700 leading-relaxed">{step}</p>
-            </li>
-          ))}
-        </ol>
-      )}
+      {tab === 'method' && <MethodSteps steps={recipe.steps} />}
       </div>
       </div>
 

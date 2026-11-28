@@ -190,6 +190,7 @@ Only the triage agent or a human changes a status. Entries are never deleted.
 - **Seen again:** 2026-11-21, same two items still reported by knip; nothing else left in its report. Removed the unused Vite template images in `src/assets/` instead (knip doesn't scan images).
 - **Seen again:** 2026-11-22, same two items still reported, nothing else in knip's report. Split `ShopItem`/`MealSourcesModal` out of `src/pages/ShoppingList/index.tsx` instead.
 - **Seen again:** 2026-11-23, same two items still reported. Dropped the unused `FetchFailureKind` type export (`api/_utils/fetchErrors.ts`) instead.
+- **Seen again:** 2026-11-27, same two items still reported, nothing else in knip's report. Split the ingredients and method tabs out of `src/pages/RecipeDetail/index.tsx` instead (with new characterisation tests).
 
 ### 2026-11-09: Write-path wake was silently throttled away, and lib/firestore.ts had no tests
 - **Who:** agent (interactive)
