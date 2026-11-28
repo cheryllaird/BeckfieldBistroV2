@@ -8,6 +8,9 @@ description: Conventions for an agent driving its own Beckfield Bistro pull requ
 - **You never merge, approve, enable auto-merge or close-and-reopen.** The human merges.
 - **Merge conflicts:** merge `origin/main` into the branch (no rebase or force-push on shared
   branches). Resolve, then regenerate `package-lock.json` with `npm install`, never by hand.
+  A `conflict-nudge` comment ("`main` moved … merge conflicts") means exactly this; confirm the
+  conflict yourself with the merge, don't take the comment's word for it. Anything a watcher
+  misses is picked up by the nightly `pr-sweep` run.
 - **CI red:** reproduce locally with the same command (`npm run lint`, `typecheck`, `test`,
   `build`), find the root cause, fix and push. "Flaky" is not a root cause. Never skip, delete or
   `.only`/`.skip` a test to get green.
