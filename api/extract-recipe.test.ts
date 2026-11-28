@@ -32,7 +32,15 @@ vi.mock('./_utils/ocr.js', () => ({
   assessOcrQuality: () => ({ ok: true, reason: 'ok' }),
 }));
 
+const safeFetchText = vi.fn();
+vi.mock('./_utils/safeFetch.js', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('./_utils/safeFetch')>()),
+  safeFetchText: (...args: unknown[]) => safeFetchText(...args),
+}));
+
 import handler from './extract-recipe';
+import { UnsafeUrlError } from './_utils/safeFetch';
+import { BAD_URL_MESSAGE, BLOCKED_SITE_MESSAGE } from './_utils/fetchErrors';
 
 function makeRes() {
   const res = { status: vi.fn(), json: vi.fn() };
@@ -110,5 +118,157 @@ describe('extract-recipe photo path', () => {
     expect(res.status).toHaveBeenCalledWith(200);
     expect(res.json.mock.calls[0][0].title).toBe('Soup');
     expect(timingLines(log)).toHaveLength(1);
+  });
+});
+
+function callUrl(url = 'https://recipes.example.com/soup') {
+  const res = makeRes();
+  const req = {
+    method: 'POST',
+    headers: { authorization: 'Bearer good' },
+    body: { url },
+  } as unknown as VercelRequest;
+  return handler(req, res as unknown as VercelResponse).then(() => res);
+}
+
+const page = (html: string, status = 200, contentType = 'text/html; charset=utf-8') => ({
+  status,
+  contentType,
+  text: html,
+  url: 'https://recipes.example.com/soup',
+});
+
+const abortError = () =>
+  Object.assign(new Error('The operation was aborted'), { name: 'AbortError', code: 'ABORT_ERR' });
+
+describe('extract-recipe URL path', () => {
+  let log: ReturnType<typeof vi.spyOn>;
+  beforeEach(() => {
+    getUser.mockReset().mockResolvedValue({ uid: 'secret-uid-1', email: '', name: 'x' });
+    setDoc.mockReset().mockResolvedValue(undefined);
+    generateContent.mockReset();
+    safeFetchText.mockReset();
+    log = vi.spyOn(console, 'log').mockImplementation(() => undefined);
+    vi.spyOn(console, 'error').mockImplementation(() => undefined);
+  });
+  afterEach(() => vi.restoreAllMocks());
+
+  const lifetimeStats = () => setDoc.mock.calls[0][1];
+
+  it('a site that never answers (timeout) gets the blocked-site message and is counted', async () => {
+    safeFetchText.mockRejectedValue(abortError());
+    const res = await callUrl();
+
+    expect(res.status).toHaveBeenCalledWith(502);
+    expect(res.json).toHaveBeenCalledWith({ error: BLOCKED_SITE_MESSAGE });
+    expect(lifetimeStats().counts).toEqual({ failed: { inc: 1 } });
+    expect(lifetimeStats().fallbackReasons).toEqual({ 'urlFetch-timeout': { inc: 1 } });
+    expect(timingLines(log)).toHaveLength(1);
+    expect(timingLines(log)[0]).toMatch(/kind=url method=failed/);
+    expect(generateContent).not.toHaveBeenCalled();
+  });
+
+  it('a dropped connection gets the blocked-site message', async () => {
+    safeFetchText.mockRejectedValue(Object.assign(new Error('socket hang up'), { code: 'ECONNRESET' }));
+    const res = await callUrl();
+
+    expect(res.status).toHaveBeenCalledWith(502);
+    expect(res.json).toHaveBeenCalledWith({ error: BLOCKED_SITE_MESSAGE });
+    expect(lifetimeStats().fallbackReasons).toEqual({ 'urlFetch-refused': { inc: 1 } });
+  });
+
+  it.each([401, 403, 429, 451, 503])('HTTP %i gets the blocked-site message', async (status) => {
+    safeFetchText.mockResolvedValue(page('', status));
+    const res = await callUrl();
+
+    expect(res.status).toHaveBeenCalledWith(502);
+    expect(res.json).toHaveBeenCalledWith({ error: BLOCKED_SITE_MESSAGE });
+    expect(lifetimeStats().fallbackReasons).toEqual({ [`urlFetch-http${status}`]: { inc: 1 } });
+  });
+
+  it.each([404, 410])('HTTP %i keeps "check the URL"', async (status) => {
+    safeFetchText.mockResolvedValue(page('', status));
+    const res = await callUrl();
+
+    expect(res.status).toHaveBeenCalledWith(400);
+    expect(res.json).toHaveBeenCalledWith({ error: BAD_URL_MESSAGE });
+    expect(lifetimeStats().fallbackReasons).toEqual({ [`urlFetch-http${status}`]: { inc: 1 } });
+  });
+
+  it('a blocked or invalid address keeps "check the URL"', async () => {
+    safeFetchText.mockRejectedValue(new UnsafeUrlError('That address is not allowed'));
+    const res = await callUrl('http://127.0.0.1/');
+
+    expect(res.status).toHaveBeenCalledWith(400);
+    expect(res.json).toHaveBeenCalledWith({ error: BAD_URL_MESSAGE });
+    expect(lifetimeStats().fallbackReasons).toEqual({ 'urlFetch-bad-url': { inc: 1 } });
+  });
+
+  it('a non-HTML response is counted as a failure', async () => {
+    safeFetchText.mockResolvedValue(page('%PDF', 200, 'application/pdf'));
+    const res = await callUrl();
+
+    expect(res.status).toHaveBeenCalledWith(400);
+    expect(res.json).toHaveBeenCalledWith({ error: 'URL does not point to an HTML page' });
+    expect(lifetimeStats().fallbackReasons).toEqual({ 'urlFetch-not-html': { inc: 1 } });
+  });
+
+  const ldPage = (recipe: Record<string, unknown>) =>
+    page(
+      `<html><head><script type="application/ld+json">${JSON.stringify({ '@type': 'Recipe', ...recipe })}</script></head>` +
+        '<body><p>Soup. 1 onion. Boil.</p></body></html>',
+    );
+  const LD_RECIPE = { name: 'Soup', recipeIngredient: ['1 onion'], recipeInstructions: ['Boil the onion'] };
+
+  it('JSON-LD with a method returns url+structured without calling Gemini', async () => {
+    safeFetchText.mockResolvedValue(ldPage(LD_RECIPE));
+    const res = await callUrl();
+
+    expect(res.status).toHaveBeenCalledWith(200);
+    expect(res.json.mock.calls[0][0]).toMatchObject({ extractionMethod: 'url+structured' });
+    expect(lifetimeStats().counts).toEqual({ 'url+structured': { inc: 1 } });
+    expect(generateContent).not.toHaveBeenCalled();
+  });
+
+  it('no JSON-LD: Gemini structures the page text (url+gemini)', async () => {
+    safeFetchText.mockResolvedValue(page('<html><body><p>Soup. 1 onion. Boil.</p></body></html>'));
+    generateContent.mockResolvedValue(geminiText(RECIPE_JSON));
+    const res = await callUrl();
+
+    expect(res.status).toHaveBeenCalledWith(200);
+    expect(res.json.mock.calls[0][0]).toMatchObject({ extractionMethod: 'url+gemini' });
+    expect(lifetimeStats().counts).toEqual({ 'url+gemini': { inc: 1 } });
+  });
+
+  it('JSON-LD without a method and unparseable Gemini output keeps the partial recipe', async () => {
+    safeFetchText.mockResolvedValue(ldPage({ ...LD_RECIPE, recipeInstructions: [] }));
+    generateContent.mockResolvedValue(geminiText('not json'));
+    const res = await callUrl();
+
+    expect(res.status).toHaveBeenCalledWith(200);
+    expect(res.json.mock.calls[0][0]).toMatchObject({ extractionMethod: 'url+structured' });
+    expect(lifetimeStats().fallbackReasons).toEqual({ 'urlGemini-bad-json': { inc: 1 } });
+  });
+
+  it('no JSON-LD and unparseable Gemini output is a counted failure', async () => {
+    safeFetchText.mockResolvedValue(page('<html><body><p>Soup. 1 onion. Boil.</p></body></html>'));
+    generateContent.mockResolvedValue(geminiText('not json'));
+    const res = await callUrl();
+
+    expect(res.status).toHaveBeenCalledWith(422);
+    expect(lifetimeStats().counts).toEqual({ failed: { inc: 1 } });
+    expect(lifetimeStats().fallbackReasons).toEqual({ 'urlGemini-bad-json': { inc: 1 } });
+  });
+
+  it('a RECITATION block never suggests another route to the same content (ADR 0010)', async () => {
+    safeFetchText.mockResolvedValue(page('<html><body><p>Soup. 1 onion. Boil.</p></body></html>'));
+    generateContent.mockRejectedValue(new Error('Candidate was blocked due to RECITATION'));
+    const res = await callUrl();
+
+    expect(generateContent).toHaveBeenCalledTimes(1);
+    expect(res.status).toHaveBeenCalledWith(422);
+    const { error } = res.json.mock.calls[0][0] as { error: string };
+    expect(error).not.toMatch(/photo|screenshot|paste/i);
+    expect(lifetimeStats().fallbackReasons).toEqual({ 'urlGemini-recitation': { inc: 1 } });
   });
 });

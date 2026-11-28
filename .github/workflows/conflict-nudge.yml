@@ -3,7 +3,7 @@ name: Conflict nudge
 # When main moves, comment on each open agent PR (claude/* branch) that now has merge
 # conflicts. The comment is a PR event, so the Claude session watching that PR wakes up and
 # resolves the conflict (steward skill). PRs with no live watcher are picked up by the nightly
-# pr-sweep Routine. See ADR 0019.
+# pr-sweep Routine. See ADR 0020.
 #
 # Safe by construction: it runs on pushes to main only, checks out no code, and never puts PR
 # text into a script or command. It only reads PRs and writes comments.

@@ -52,6 +52,7 @@ as OCR text) — that would circumvent the filter.
 | Fraction recovery | `api/_utils/fractions.ts` | Finds misread fraction glyphs and decides what the re-read evidence adds up to |
 | Parsers | `api/_utils/recipeParsers.ts` | Deterministic ingredient/step parsing, `parseRecipeText`, JSON‑LD helpers' dependencies |
 | OCR line clean‑up | `api/_utils/ocrLines.ts` | Bullets, junk, nutrition boxes, unit misreads — line classification for `parseRecipeText` |
+| Fetch errors | `api/_utils/fetchErrors.ts` | Sorts a failed page fetch into blocked site / bad link, with the user message and `urlFetch-*` reason |
 | Crypto | `api/_utils/crypto.ts` | AES‑256‑GCM decrypt of the per‑user Gemini key |
 | Traineddata | `api/_tessdata/eng.traineddata.gz` | English Tesseract model, bundled into the function |
 | Function config | `vercel.json` | `maxDuration: 60` and `includeFiles` for the Tesseract runtime |
@@ -144,6 +145,20 @@ uses 2048/0.9, which stays under the endpoint's 8 MB body limit.
 ### 5.3 URL ladder (JSON‑LD first)
 1. Fetch the page (5 s timeout, must be `text/html`); derive `coverImage`
    (`extractPageImage`) and `pageText` (`stripHtml`, newline‑collapsing).
+   A failed fetch ends as **`failed`** with a `urlFetch-*` reason, sorted by
+   `api/_utils/fetchErrors.ts`:
+   - **Blocked site** (timeout, refused or dropped connection, HTTP
+     401/403/429/451/503) → **502** "This site doesn't allow automatic imports.
+     Take a screenshot and use Photo, or add it with Manual." Some sites' bot
+     protection never answers an automated request, so it hangs until the
+     timeout; a longer timeout doesn't help.
+   - **Bad link** (blocked/invalid address, unknown host, HTTP 404/410) and
+     anything else → **400** "Could not fetch the recipe page. Check the URL and
+     try again."
+   - Not `text/html` → 400 "URL does not point to an HTML page".
+
+   The blocked-site hint is only for fetch failures. A RECITATION message never
+   suggests Photo, screenshots or pasting (ADR 0010).
 2. **`url+structured`** — `findJsonLdRecipe(html)` + `jsonLdToRecipe(ld, hostname)`.
    A `schema.org/Recipe` node (exact to source, free, RECITATION‑proof) → return —
    **but only when it actually carries a method.** A page that publishes a Recipe
@@ -349,6 +364,7 @@ why each Gemini step that was tried didn't produce the recipe, keyed
 | `vision` | `recitation`, `rate-limit`, `overload`, `error`, `bad-json`, `forced` (`forceOcr`) |
 | `ocrGemini` | `recitation`, `rate-limit`, `overload`, `error`, `bad-json` |
 | `urlGemini` | `recitation`, `rate-limit`, `overload`, `error`, `bad-json` |
+| `urlFetch` | `timeout`, `refused`, `http401`/`403`/`429`/`451`/`503`/`404`/`410`, `http4xx`/`http5xx`/`httpother` (any other status), `bad-url`, `not-html`, `error` (the fetch itself failed; method is `failed`) |
 
 One request can add several (e.g. `vision-overload` then `ocrGemini-bad-json` →
 `ocr+local`). `vision-recitation` counts the cookbook photos Gemini declined;
@@ -406,7 +422,12 @@ trace through Tesseract's dynamic `require`. **Removing that glob breaks OCR at 
 - **`forceOcr: true`** in the request body skips vision — use it to exercise/verify the
   OCR path directly.
 - **Server logs** carry `extractionMethod=…`, `ocr confidence=… chars=…
-  columnsReflowed=…`, and gate‑fail reasons.
+  columnsReflowed=…`, and gate‑fail reasons. Vercel keeps runtime logs for **1 hour** on
+  this plan: query them with `since` of 50 minutes or less (`6h`/`24h` fail with "does not
+  retain runtime logs for the requested time range"), and read them soon after a report.
+  Older failures are only visible as counts and `fallbackReasons` in `analytics/extractionStats`
+  (§9). Every URL-path outcome (fetch failures, `url+structured`, `url+gemini`, Gemini
+  failures) has a handler test in `api/extract-recipe.test.ts`.
 - **Response fields** `extractionMethod` and `ocrText` tell you which path ran and what
   the OCR actually read.
 - Tesseract bundling can only be fully verified on a **Vercel preview deploy** — a local

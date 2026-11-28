@@ -6,7 +6,7 @@ description: Nightly sweep of open Beckfield Bistro agent PRs. Run by a schedule
 # Nightly PR sweep
 
 You run unattended. You are the backstop for agent PRs whose own watcher is gone or missed a
-change on `main` (the `conflict-nudge` workflow wakes live watchers; ADR 0019). Your job is to
+change on `main` (the `conflict-nudge` workflow wakes live watchers; ADR 0020). Your job is to
 keep open agent PRs **mergeable and green**, not to change what they do. You never merge.
 
 ## 1. Find candidates

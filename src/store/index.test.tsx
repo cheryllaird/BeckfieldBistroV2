@@ -375,3 +375,62 @@ describe('setPantryItemStock', () => {
     expect(firestore.savePantryItem).not.toHaveBeenCalled();
   });
 });
+
+describe('writes lost to an SDK crash (#242)', () => {
+  type Callbacks = {
+    onMealEntries: (e: unknown[]) => void;
+    onPantryItems: (p: unknown[]) => void;
+  };
+  const launch = () => {
+    signedIn();
+    useStore.getState().resubscribe();
+    return vi.mocked(firestore.subscribeToUserData).mock.calls.at(-1)![2] as unknown as Callbacks;
+  };
+  const meal = (id: string) => ({ id, date: '2026-11-21', type: 'custom' as const, servings: 2, updatedAt: NOW });
+
+  afterEach(async () => {
+    await useStore.getState().signOut();
+    localStorage.clear();
+  });
+
+  it('replays unsent writes before the first snapshot can arrive', () => {
+    launch();
+    expect(firestore.replayUnsentWrites).toHaveBeenCalledWith('user-1', 'user-1');
+    expect(vi.mocked(firestore.replayUnsentWrites).mock.invocationCallOrder[0]).toBeLessThan(
+      vi.mocked(firestore.subscribeToUserData).mock.invocationCallOrder[0],
+    );
+  });
+
+  it('keeps a replayed add, drops a replayed delete, and still honours deletes from other devices', () => {
+    // m1: added after the crash (replayed, so the snapshot includes it as pending).
+    // m2: deleted after the crash (replayed delete, so the snapshot omits it).
+    // m3: deleted on another device; nothing replays it.
+    useStore.setState({ mealEntries: [meal('m1'), meal('m3'), meal('m4')] });
+    const callbacks = launch();
+
+    callbacks.onMealEntries([meal('m1'), meal('m4')]);
+
+    expect(useStore.getState().mealEntries.map((e) => e.id)).toEqual(['m1', 'm4']);
+  });
+
+  it('applies the same rules to pantry items', () => {
+    useStore.setState({ pantryItems: [makePantryItem({ id: 'p1' }), makePantryItem({ id: 'p3' })] });
+    const callbacks = launch();
+
+    callbacks.onPantryItems([makePantryItem({ id: 'p1' })]);
+
+    expect(useStore.getState().pantryItems.map((p) => p.id)).toEqual(['p1']);
+  });
+
+  it('clears the outbox on sign-out', async () => {
+    const { recordUnsentWrite, readUnsentWrites } = await vi.importActual<typeof import('../lib/unsentWrites')>(
+      '../lib/unsentWrites',
+    );
+    signedIn();
+    recordUnsentWrite({ uid: 'user-1', bistroId: 'user-1', collection: 'mealEntries', id: 'm1', kind: 'delete' });
+
+    await useStore.getState().signOut();
+
+    expect(readUnsentWrites()).toEqual([]);
+  });
+});

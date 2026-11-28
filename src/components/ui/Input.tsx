@@ -5,10 +5,12 @@ interface Props extends InputHTMLAttributes<HTMLInputElement> {
   error?: string;
   icon?: ReactNode;
   hint?: string;
+  /** A control shown inside the field on the right, e.g. a clear button. */
+  trailing?: ReactNode;
   inputRef?: Ref<HTMLInputElement>;
 }
 
-export function Input({ label, error, icon, hint, className = '', inputRef, ...props }: Props) {
+export function Input({ label, error, icon, hint, trailing, className = '', inputRef, ...props }: Props) {
   return (
     <div className="flex flex-col gap-1">
       {label && (
@@ -31,11 +33,15 @@ export function Input({ label, error, icon, hint, className = '', inputRef, ...p
             'focus:border-amber-500 focus:ring-2 focus:ring-amber-soft',
             error ? 'border-red-300' : 'border-slate-200',
             icon ? 'pl-9' : '',
+            trailing ? 'pr-11' : '',
             className,
           ]
             .filter(Boolean)
             .join(' ')}
         />
+        {trailing && (
+          <span className="absolute right-1 top-1/2 -translate-y-1/2 flex items-center">{trailing}</span>
+        )}
       </div>
       {hint && !error && <p className="text-xs text-slate-400">{hint}</p>}
       {error && <p className="text-xs text-red-500">{error}</p>}

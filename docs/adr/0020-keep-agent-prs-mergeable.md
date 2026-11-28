@@ -1,4 +1,4 @@
-# 0019. Nudge watching agents when main moves, with a nightly sweep as backstop
+# 0020. Nudge watching agents when main moves, with a nightly sweep as backstop
 
 - **Status:** Proposed
 - **Date:** 2026-11-22

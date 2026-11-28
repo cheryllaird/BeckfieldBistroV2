@@ -12,6 +12,13 @@ import {
 } from './_utils/recipeParsers.js';
 import { safeFetchText } from './_utils/safeFetch.js';
 import {
+  BAD_URL_MESSAGE,
+  BLOCKED_SITE_MESSAGE,
+  classifyFetchError,
+  classifyFetchStatus,
+  type FetchFailure,
+} from './_utils/fetchErrors.js';
+import {
   createTimer,
   durationBucket,
   formatTimingLine,
@@ -608,6 +615,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   let coverImage = '';
   let html = '';
   let pageText: string;
+  // A failed fetch ends here, counted like any other failure. A site that
+  // times out or turns us away gets a message pointing at Photo and Manual:
+  // the link is fine, the site just blocks automatic imports.
+  const failFetch = async (failure: FetchFailure) => {
+    await finish('failed', [failure.reason]);
+    return failure.kind === 'blocked'
+      ? res.status(502).json({ error: BLOCKED_SITE_MESSAGE })
+      : res.status(400).json({ error: BAD_URL_MESSAGE });
+  };
   try {
     // safeFetchText refuses private/internal addresses (on every redirect hop)
     // and caps the body, so a user-supplied URL can't probe internal services.
@@ -615,8 +631,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       headers: { 'User-Agent': 'Mozilla/5.0 (compatible; BistroBot/1.0)' },
       timeoutMs: 5000,
     });
-    if (resp.status < 200 || resp.status >= 300) throw new Error(`HTTP ${resp.status}`);
+    if (resp.status < 200 || resp.status >= 300) {
+      console.error(`URL fetch error: HTTP ${resp.status}`);
+      return failFetch(classifyFetchStatus(resp.status));
+    }
     if (!resp.contentType.includes('text/html')) {
+      await finish('failed', ['urlFetch-not-html']);
       return res.status(400).json({ error: 'URL does not point to an HTML page' });
     }
     html = resp.text;
@@ -625,9 +645,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     console.error(`URL fetch error: ${msg}`);
-    return res.status(400).json({
-      error: 'Could not fetch the recipe page. Check the URL and try again.',
-    });
+    return failFetch(classifyFetchError(err));
   }
 
   const hostname = new URL(url).hostname.replace('www.', '');

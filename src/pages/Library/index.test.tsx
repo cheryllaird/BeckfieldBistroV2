@@ -19,6 +19,8 @@ const renderPage = () =>
   );
 
 // Recipe cards title themselves with an h3; no shares are pending, so no other h3s render.
+const sortControl = () => screen.getByRole('combobox', { name: 'Sort recipes' });
+
 const cardTitles = () => screen.getAllByRole('heading', { level: 3 }).map((h) => h.textContent);
 
 beforeEach(() => {
@@ -42,19 +44,19 @@ describe('LibraryPage — sort control', () => {
     const user = userEvent.setup();
     renderPage();
 
-    expect(screen.getByRole('button', { name: 'Newest' })).toHaveAttribute('aria-pressed', 'true');
+    expect(sortControl()).toHaveValue('newest');
     expect(cardTitles()).toEqual(['Pasta bake', 'Fish pie', 'Dal']);
 
-    await user.click(screen.getByRole('button', { name: 'Most planned' }));
+    await user.selectOptions(sortControl(), 'Most planned');
 
-    expect(screen.getByRole('button', { name: 'Most planned' })).toHaveAttribute('aria-pressed', 'true');
+    expect(sortControl()).toHaveValue('most-planned');
     expect(cardTitles()).toEqual(['Dal', 'Fish pie', 'Pasta bake']);
   });
 
   it('updates the order live when a meal is planned', async () => {
     const user = userEvent.setup();
     renderPage();
-    await user.click(screen.getByRole('button', { name: 'Most planned' }));
+    await user.selectOptions(sortControl(), 'Most planned');
 
     act(() => {
       useStore.setState((s) => ({
@@ -71,11 +73,11 @@ describe('LibraryPage — sort control', () => {
   it('resets to Newest on each visit', async () => {
     const user = userEvent.setup();
     const { unmount } = renderPage();
-    await user.click(screen.getByRole('button', { name: 'Most planned' }));
+    await user.selectOptions(sortControl(), 'Most planned');
     unmount();
 
     renderPage();
-    expect(screen.getByRole('button', { name: 'Newest' })).toHaveAttribute('aria-pressed', 'true');
+    expect(sortControl()).toHaveValue('newest');
     expect(cardTitles()).toEqual(['Pasta bake', 'Fish pie', 'Dal']);
   });
 });

@@ -19,7 +19,7 @@ The decision behind it is [ADR 0008](adr/0008-agentic-delivery-workflow.md).
    and review comments and fixes them (the `steward` skill). When `main` moves and the PR
    stops merging cleanly, the `conflict-nudge` workflow comments on it, which wakes the
    watching agent to merge `main` in; the nightly `pr-sweep` catches PRs nobody is watching
-   ([ADR 0019](adr/0019-keep-agent-prs-mergeable.md)).
+   ([ADR 0020](adr/0020-keep-agent-prs-mergeable.md)).
 4. **Review.** CI must be green. You read the diff. Agent PRs are opened under your GitHub
    account, so GitHub won't let you "approve" them; **your merge click is the approval**, and
    agents are blocked from merging (see Guardrails). Look hardest at PRs the template marks as
